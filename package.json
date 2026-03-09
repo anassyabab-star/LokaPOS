@@ -1,0 +1,36 @@
+{
+  "name": "coffee-pos",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "check:duplicates": "node scripts/check-duplicates.mjs",
+    "predev": "npm run check:duplicates",
+    "prebuild": "npm run check:duplicates",
+    "prelint": "npm run check:duplicates",
+    "dev": "NEXT_DISABLE_WEBPACK_CACHE=1 next dev",
+    "dev:reset": "rm -rf .next && NEXT_DISABLE_WEBPACK_CACHE=1 next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.1",
+    "clsx": "^2.1.1",
+    "next": "^15.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^3.8.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.22.0",
+    "eslint-config-next": "^15.2.0",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.2"
+  }
+}
