@@ -92,3 +92,43 @@ Required setup:
 ```sql
 -- file: sql/customers.sql
 ```
+
+## Core Schema v1 (Recommended Baseline)
+For a clean project setup (auth role + customer consent + loyalty + CRM foundation), run:
+```sql
+-- file: sql/schema_v1_core.sql
+```
+
+This file is idempotent (safe to re-run) and includes:
+- `profiles` + auto sync trigger from `auth.users`
+- `signup_requests` enhancement fields
+- `customers` + consent fields/indexes
+- `loyalty_ledger` + balance views
+- `crm_campaigns`, `crm_campaign_recipients`, and `crm_customer_segments` view
+
+## Backend Readiness Sprint (Before Customer Order Webapp)
+Apply additional hardening:
+```sql
+-- file: sql/backend_readiness_hardening.sql
+```
+
+What this adds:
+- RLS baseline policies (least-privilege) for core tables
+- Compatibility + freeze columns for order flow (`orders.customer_id`, `order_items.sugar_level`)
+- Defensive indexes for orders, customers, loyalty, and campaign queries
+
+Supporting docs:
+- `docs/backend-readiness-sprint.md`
+- `docs/customer-app-api-contract-v1.md`
+
+## Murpati WhatsApp (Campaign v1 send)
+Set these env vars in `.env.local`:
+- `MURPATI_BASE_URL` (default: `https://api.murpati.com`)
+- `MURPATI_API_KEY`
+- `MURPATI_SESSION_ID`
+- `MURPATI_BATCH_LIMIT` (optional, default `50`)
+
+Current v1 behavior:
+- Queue recipients by segment in `/dashboard/campaigns`
+- Send WhatsApp in batches (`Send WhatsApp Batch`)
+- Email channel stays queued (email provider integration is next phase)

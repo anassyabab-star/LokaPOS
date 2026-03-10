@@ -50,6 +50,8 @@ type CartItem = {
   variant_id: string | null;
   addon_ids: string[];
   addon_names: string[];
+  sugar_level: SugarLevel | null;
+  supports_sugar: boolean;
 };
 
 type ReceiptData = {
@@ -62,6 +64,14 @@ type ReceiptData = {
   total: number;
   payment_method: "cash" | "qr" | "card";
   created_at: string;
+};
+
+type SugarQuickPickPayload = {
+  product_id: string;
+  product_name: string;
+  variant_id?: string;
+  addon_ids?: string[];
+  feedback_label?: string;
 };
 
 type MemberLookup = {
@@ -81,10 +91,52 @@ type MemberLookup = {
 const DISCOUNT_TYPES: Array<"percent" | "fixed" | "none"> = ["percent", "fixed", "none"];
 const PAYMENT_METHODS: Array<"cash" | "qr" | "card"> = ["cash", "qr", "card"];
 type MarketingConsentMode = "none" | "whatsapp" | "email" | "both";
+type SugarLevel = "normal" | "less" | "half" | "none";
 const LOYALTY_REDEEM_RM_PER_POINT = 0.05;
 const LOYALTY_REDEEM_MIN_POINTS = 100;
 const LOYALTY_REDEEM_MAX_RATIO = 0.3;
 const POS_AUTO_PRINT_KEY = "pos_auto_print_enabled";
+const DEFAULT_SUGAR_LEVEL: SugarLevel = "normal";
+const SUGAR_LEVEL_OPTIONS: Array<{ value: SugarLevel; label: string }> = [
+  { value: "normal", label: "Normal Sugar" },
+  { value: "less", label: "Less Sugar" },
+  { value: "half", label: "Half Sugar" },
+  { value: "none", label: "No Sugar" },
+];
+
+function buildCartKey(
+  productId: string,
+  variantId?: string,
+  addonIds?: string[],
+  sugarLevel?: SugarLevel | null
+) {
+  const normalizedAddonIds =
+    addonIds && addonIds.length > 0 ? [...addonIds].sort().join(",") : "noaddon";
+  const sugarKey = sugarLevel || DEFAULT_SUGAR_LEVEL;
+  return `${productId}__${variantId || "base"}__${normalizedAddonIds}__${sugarKey}`;
+}
+
+function isSugarSupportedCategory(category?: string | null) {
+  const key = String(category || "").trim().toLowerCase();
+  if (!key) return false;
+  return (
+    key.includes("coffee") ||
+    key.includes("kopi") ||
+    key.includes("drink") ||
+    key.includes("minuman") ||
+    key.includes("beverage") ||
+    key.includes("tea") ||
+    key.includes("matcha")
+  );
+}
+
+function sugarLabel(level: SugarLevel | null | undefined) {
+  const normalized = (level || DEFAULT_SUGAR_LEVEL) as SugarLevel;
+  return (
+    SUGAR_LEVEL_OPTIONS.find(option => option.value === normalized)?.label ||
+    SUGAR_LEVEL_OPTIONS[0].label
+  );
+}
 
 export default function POSPage() {
   const registerId = "main";
@@ -100,6 +152,10 @@ export default function POSPage() {
   const [addedToast, setAddedToast] = useState<string | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showSugarQuickPick, setShowSugarQuickPick] = useState(false);
+  const [sugarQuickPickPayload, setSugarQuickPickPayload] = useState<SugarQuickPickPayload | null>(
+    null
+  );
 
   const [shiftLoading, setShiftLoading] = useState(true);
   const [shiftError, setShiftError] = useState<string | null>(null);
@@ -238,12 +294,11 @@ export default function POSPage() {
     productId: string,
     variantId?: string,
     addonIds?: string[],
+    sugarLevel?: SugarLevel | null,
     feedbackLabel?: string,
     silent = false
   ) {
-    const normalizedAddonIds =
-      addonIds && addonIds.length > 0 ? [...addonIds].sort().join(",") : "noaddon";
-    const key = `${productId}__${variantId || "base"}__${normalizedAddonIds}`;
+    const key = buildCartKey(productId, variantId, addonIds, sugarLevel);
 
     setCart(prev => ({
       ...prev,
@@ -266,6 +321,70 @@ export default function POSPage() {
     });
   }
 
+  function promptQuickSugar(payload: SugarQuickPickPayload) {
+    setSugarQuickPickPayload(payload);
+    setShowSugarQuickPick(true);
+  }
+
+  function closeQuickSugarPrompt() {
+    setShowSugarQuickPick(false);
+    setSugarQuickPickPayload(null);
+  }
+
+  function addProductWithQuickSugar(options: {
+    product: Product;
+    variantId?: string;
+    addonIds?: string[];
+    feedbackLabel?: string;
+  }) {
+    const { product, variantId, addonIds, feedbackLabel } = options;
+    if (!isSugarSupportedCategory(product.category)) {
+      addToCart(product.id, variantId, addonIds, null, feedbackLabel);
+      return;
+    }
+
+    promptQuickSugar({
+      product_id: product.id,
+      product_name: product.name,
+      variant_id: variantId,
+      addon_ids: addonIds,
+      feedback_label: feedbackLabel,
+    });
+  }
+
+  function submitQuickSugar(level: SugarLevel) {
+    if (!sugarQuickPickPayload) return;
+
+    addToCart(
+      sugarQuickPickPayload.product_id,
+      sugarQuickPickPayload.variant_id,
+      sugarQuickPickPayload.addon_ids,
+      level,
+      sugarQuickPickPayload.feedback_label
+    );
+    closeQuickSugarPrompt();
+  }
+
+  function updateItemSugar(item: CartItem, nextSugarLevel: SugarLevel) {
+    const nextKey = buildCartKey(
+      item.product_id,
+      item.variant_id || undefined,
+      item.addon_ids,
+      nextSugarLevel
+    );
+    if (nextKey === item.id) return;
+
+    setCart(prev => {
+      const qty = prev[item.id] || 0;
+      if (!qty) return prev;
+
+      const next = { ...prev };
+      delete next[item.id];
+      next[nextKey] = (next[nextKey] || 0) + qty;
+      return next;
+    });
+  }
+
   const filteredProducts =
     category === "All" ? products : products.filter(p => p.category === category);
 
@@ -276,7 +395,8 @@ export default function POSPage() {
 
   const items = Object.entries(cart)
     .map(([key, qty]) => {
-      const [productId, variantId = "base", addonKey = "noaddon"] = key.split("__");
+      const [productId, variantId = "base", addonKey = "noaddon", sugarKey = DEFAULT_SUGAR_LEVEL] =
+        key.split("__");
       const product = products.find(p => p.id === productId);
       if (!product) return null;
 
@@ -304,6 +424,9 @@ export default function POSPage() {
         });
       }
 
+      const supportsSugar = isSugarSupportedCategory(product.category);
+      const parsedSugar = (sugarKey || DEFAULT_SUGAR_LEVEL) as SugarLevel;
+
       return {
         id: key,
         product_id: productId,
@@ -315,6 +438,8 @@ export default function POSPage() {
         variant_id: variantId !== "base" ? variantId : null,
         addon_ids: addonIds,
         addon_names: addonNames,
+        sugar_level: supportsSugar ? parsedSugar : null,
+        supports_sugar: supportsSugar,
       };
     })
     .filter((item): item is CartItem => item !== null);
@@ -612,7 +737,9 @@ export default function POSPage() {
       discount: data.discount,
       total: data.total,
       items: data.items.map(item => ({
-        name: item.name,
+        name:
+          item.name +
+          (item.supports_sugar ? ` • Sugar: ${sugarLabel(item.sugar_level || DEFAULT_SUGAR_LEVEL)}` : ""),
         qty: item.qty,
         unitPrice: item.price,
         lineTotal: item.price * item.qty,
@@ -742,6 +869,44 @@ export default function POSPage() {
                 Yes, Sign out
               </a>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showSugarQuickPick && sugarQuickPickPayload ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-gray-900">Sugar Level</h3>
+            <p className="mt-1 text-sm text-gray-500">{sugarQuickPickPayload.product_name}</p>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => submitQuickSugar("normal")}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800"
+              >
+                Normal
+              </button>
+              <button
+                type="button"
+                onClick={() => submitQuickSugar("less")}
+                className="rounded-lg bg-[#7F1D1D] px-3 py-2 text-sm font-medium text-white"
+              >
+                Less Sugar
+              </button>
+            </div>
+
+            <p className="mt-2 text-xs text-gray-500">
+              Half / No Sugar boleh ubah di checkout.
+            </p>
+
+            <button
+              type="button"
+              onClick={closeQuickSugarPrompt}
+              className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       ) : null}
@@ -881,7 +1046,10 @@ export default function POSPage() {
                 setSelectedAddons([]);
                 setShowAddonModal(true);
               } else {
-                addToCart(product.id, undefined, undefined, `${product.name} added`);
+                addProductWithQuickSugar({
+                  product,
+                  feedbackLabel: `${product.name} added`,
+                });
               }
             }}
             className={`rounded-2xl border p-4 text-left shadow-sm transition ${
@@ -918,12 +1086,11 @@ export default function POSPage() {
                     setSelectedVariant(variant.id);
                     setShowAddonModal(true);
                   } else {
-                    addToCart(
-                      selectedProduct.id,
-                      variant.id,
-                      undefined,
-                      `${selectedProduct.name} (${variant.name}) added`
-                    );
+                    addProductWithQuickSugar({
+                      product: selectedProduct,
+                      variantId: variant.id,
+                      feedbackLabel: `${selectedProduct.name} (${variant.name}) added`,
+                    });
                     setSelectedProduct(null);
                     setSelectedVariant(null);
                     setSelectedAddons([]);
@@ -938,7 +1105,9 @@ export default function POSPage() {
             {!selectedProduct.variants?.length ? (
               <button
                 onClick={() => {
-                  addToCart(selectedProduct.id);
+                  addProductWithQuickSugar({
+                    product: selectedProduct,
+                  });
                   setSelectedProduct(null);
                   setSelectedVariant(null);
                   setSelectedAddons([]);
@@ -988,12 +1157,12 @@ export default function POSPage() {
 
             <button
               onClick={() => {
-                addToCart(
-                  selectedProduct.id,
-                  selectedVariant || undefined,
-                  selectedAddons,
-                  `${selectedProduct.name} added`
-                );
+                addProductWithQuickSugar({
+                  product: selectedProduct,
+                  variantId: selectedVariant || undefined,
+                  addonIds: selectedAddons,
+                  feedbackLabel: `${selectedProduct.name} added`,
+                });
                 setSelectedProduct(null);
                 setSelectedVariant(null);
                 setSelectedAddons([]);
@@ -1068,6 +1237,21 @@ export default function POSPage() {
                   <div key={item.id} className="flex items-center justify-between">
                     <div className="min-w-0 pr-2">
                       <div className="truncate text-[13px] leading-tight">{item.name}</div>
+                      {item.supports_sugar ? (
+                        <div className="mt-1">
+                          <select
+                            value={(item.sugar_level || DEFAULT_SUGAR_LEVEL) as SugarLevel}
+                            onChange={e => updateItemSugar(item, e.target.value as SugarLevel)}
+                            className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700"
+                          >
+                            {SUGAR_LEVEL_OPTIONS.map(option => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null}
                       {item.addon_names?.length > 0 ? (
                         <div className="truncate text-xs text-[#7F1D1D]">
                           Addon: {item.addon_names.join(", ")}
@@ -1086,7 +1270,14 @@ export default function POSPage() {
                       <span className="text-sm">{item.qty}</span>
                       <button
                         onClick={() =>
-                          addToCart(item.product_id, item.variant_id || undefined, item.addon_ids, undefined, true)
+                          addToCart(
+                            item.product_id,
+                            item.variant_id || undefined,
+                            item.addon_ids,
+                            item.sugar_level,
+                            undefined,
+                            true
+                          )
                         }
                         className="h-6 w-6 rounded bg-gray-200 text-sm"
                       >
@@ -1351,6 +1542,11 @@ export default function POSPage() {
                   </div>
                   {item.addon_names?.length > 0 ? (
                     <div className="text-xs text-[#7F1D1D]">Addon: {item.addon_names.join(", ")}</div>
+                  ) : null}
+                  {item.supports_sugar ? (
+                    <div className="text-xs text-gray-500">
+                      Sugar: {sugarLabel(item.sugar_level || DEFAULT_SUGAR_LEVEL)}
+                    </div>
                   ) : null}
                 </div>
                 <span>RM {(item.price * item.qty).toFixed(2)}</span>

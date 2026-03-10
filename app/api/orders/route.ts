@@ -83,6 +83,61 @@ function isMissingRelationError(message: string | null | undefined) {
   );
 }
 
+function isMissingColumnError(message: string | null | undefined, column: string) {
+  const m = String(message || "").toLowerCase();
+  const col = column.toLowerCase();
+  return (
+    (m.includes("could not find") && m.includes(col)) ||
+    (m.includes("column") && m.includes(col) && m.includes("does not exist"))
+  );
+}
+
+async function insertOrderItemAddons(
+  orderItemId: string,
+  addonSnapshots: Array<{ id: string; name: string; price: number }>
+) {
+  if (!addonSnapshots.length) return;
+
+  const payloadVariants = [
+    addonSnapshots.map(addon => ({
+      order_item_id: orderItemId,
+      addon_id: addon.id,
+      addon_name_snapshot: addon.name,
+      addon_price_snapshot: addon.price,
+    })),
+    addonSnapshots.map(addon => ({
+      order_item_id: orderItemId,
+      addon_id: addon.id,
+    })),
+    addonSnapshots.map(addon => ({
+      order_item: orderItemId,
+      addon_id: addon.id,
+      addon_name_snapshot: addon.name,
+      addon_price_snapshot: addon.price,
+    })),
+    addonSnapshots.map(addon => ({
+      order_item: orderItemId,
+      addon_id: addon.id,
+    })),
+    addonSnapshots.map(addon => ({
+      order_items_id: orderItemId,
+      addon_id: addon.id,
+    })),
+  ];
+
+  let lastError: { message?: string | null } | null = null;
+  for (const payload of payloadVariants) {
+    const { error } = await supabase.from("order_item_addons").insert(payload);
+    if (!error) return;
+    lastError = error;
+    if (!isMissingRelationError(error.message)) break;
+  }
+
+  if (lastError) {
+    console.warn("Failed to insert order item addons:", lastError.message || "Unknown error");
+  }
+}
+
 async function getLoyaltyPointsBalance(customerId: string) {
   const cutoffIso = new Date(
     Date.now() - LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000
@@ -304,26 +359,41 @@ export async function POST(req: Request) {
       }
     }
 
-    const { data: order, error } = await supabase
+    const orderInsertBasePayload = {
+      receipt_number: receiptNumber,
+      date_key: dateKey,
+      customer_name: body.customer_name,
+      subtotal: 0,
+      discount_type: body.discount_type,
+      discount_value: body.discount_value,
+      total: 0,
+      payment_method: body.payment_method,
+      cash_received: body.cash_received,
+      balance: 0,
+      status: "completed",
+      payment_status: "paid",
+    };
+
+    let orderInsert = await supabase
       .from("orders")
       .insert([
         {
-          receipt_number: receiptNumber,
-          date_key: dateKey,
-          customer_name: body.customer_name,
-          subtotal: 0,
-          discount_type: body.discount_type,
-          discount_value: body.discount_value,
-          total: 0,
-          payment_method: body.payment_method,
-          cash_received: body.cash_received,
-          balance: 0,
-          status: "completed",
-          payment_status: "paid",
+          ...orderInsertBasePayload,
+          order_source: "pos",
         },
       ])
       .select()
       .single();
+
+    if (orderInsert.error && isMissingColumnError(orderInsert.error.message, "order_source")) {
+      orderInsert = await supabase
+        .from("orders")
+        .insert([orderInsertBasePayload])
+        .select()
+        .single();
+    }
+
+    const { data: order, error } = orderInsert;
 
     if (error || !order) {
       return NextResponse.json({ success: false, error });
@@ -381,28 +451,40 @@ export async function POST(req: Request) {
       const lineTotal = price * Number(item.qty);
       subtotal += lineTotal;
 
-      const { data: orderItem } = await supabase.from("order_items").insert([
-        {
-          order_id: order.id,
-          product_id: productId,
-          product_name_snapshot: snapshotName || product.name,
-          variant_id: variantId || null,
-          sugar_level: item.sugar_level || null,
-          price,
-          qty: item.qty,
-          line_total: lineTotal,
-        },
-      ]).select("id").single();
+      const orderItemPayload = {
+        order_id: order.id,
+        product_id: productId,
+        product_name_snapshot: snapshotName || product.name,
+        variant_id: variantId || null,
+        sugar_level: item.sugar_level || null,
+        price,
+        qty: item.qty,
+        line_total: lineTotal,
+      };
+
+      let orderItemResult = await supabase
+        .from("order_items")
+        .insert([orderItemPayload])
+        .select("id")
+        .single();
+
+      if (orderItemResult.error && isMissingRelationError(orderItemResult.error.message)) {
+        const { sugar_level: omittedSugarLevel, ...legacyPayload } = orderItemPayload;
+        void omittedSugarLevel;
+        orderItemResult = await supabase
+          .from("order_items")
+          .insert([legacyPayload])
+          .select("id")
+          .single();
+      }
+
+      if (orderItemResult.error) {
+        throw orderItemResult.error;
+      }
+      const orderItem = orderItemResult.data;
 
       if (orderItem && addonSnapshots.length > 0) {
-        await supabase.from("order_item_addons").insert(
-          addonSnapshots.map(addon => ({
-            order_item_id: orderItem.id,
-            addon_id: addon.id,
-            addon_name_snapshot: addon.name,
-            addon_price_snapshot: addon.price,
-          }))
-        );
+        await insertOrderItemAddons(orderItem.id, addonSnapshots);
       }
 
       await supabase
@@ -463,6 +545,17 @@ export async function POST(req: Request) {
       .eq("id", order.id);
 
     const linkedCustomerId = await upsertCustomerAndTrackOrder(body.customer, total);
+
+    if (linkedCustomerId) {
+      const { error: linkCustomerError } = await supabase
+        .from("orders")
+        .update({ customer_id: linkedCustomerId })
+        .eq("id", order.id);
+
+      if (linkCustomerError && !isMissingRelationError(linkCustomerError.message)) {
+        throw linkCustomerError;
+      }
+    }
 
     if (linkedCustomerId) {
       const earnPoints = Math.max(0, Math.floor(Number(total || 0) * LOYALTY_EARN_PER_RM));

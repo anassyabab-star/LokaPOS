@@ -18,6 +18,7 @@ type OrderItemRow = {
   id: string;
   product_name_snapshot: string | null;
   variant_id: string | null;
+  sugar_level: string | null;
   price: number | null;
   qty: number | null;
   line_total: number | null;
@@ -32,10 +33,21 @@ type ItemAddonRow = {
   order_item_id?: string | null;
   order_item?: string | null;
   order_items_id?: string | null;
+  addon_id?: string | null;
   addon_name_snapshot?: string | null;
   addon_name?: string | null;
   name?: string | null;
 };
+
+function formatSugarLevel(value: string | null | undefined) {
+  const key = String(value || "").toLowerCase();
+  if (!key) return "";
+  if (key === "normal") return "Normal Sugar";
+  if (key === "less") return "Less Sugar";
+  if (key === "half") return "Half Sugar";
+  if (key === "none") return "No Sugar";
+  return key;
+}
 
 function toLineName(
   item: OrderItemRow,
@@ -48,9 +60,11 @@ function toLineName(
   const lowerBase = baseName.toLowerCase();
   const hasVariantInBase = !!variantName && lowerBase.includes(`(${variantName.toLowerCase()})`);
   const missingAddons = addonNames.filter(addon => !lowerBase.includes(addon.toLowerCase()));
+  const sugarText = formatSugarLevel(item.sugar_level);
   return (
     `${baseName}${variantName && !hasVariantInBase ? ` (${variantName})` : ""}` +
-    `${missingAddons.length > 0 ? ` + ${missingAddons.join(", ")}` : ""}`
+    `${missingAddons.length > 0 ? ` + ${missingAddons.join(", ")}` : ""}` +
+    `${sugarText ? ` • Sugar: ${sugarText}` : ""}`
   );
 }
 
@@ -94,7 +108,7 @@ export async function GET(
     const orderRow = order as OrderRow;
     const { data: itemRows, error: itemsError } = await supabase
       .from("order_items")
-      .select("id,product_name_snapshot,variant_id,price,qty,line_total")
+      .select("id,product_name_snapshot,variant_id,sugar_level,price,qty,line_total")
       .eq("order_id", orderId);
 
     if (itemsError) {
@@ -131,11 +145,40 @@ export async function GET(
           .select("*")
           .in("order_item", itemIds);
         if (fallbackError) {
-          return NextResponse.json({ error: primaryError.message }, { status: 500 });
+          const { data: thirdRows, error: thirdError } = await supabase
+            .from("order_item_addons")
+            .select("*")
+            .in("order_items_id", itemIds);
+          if (thirdError) {
+            return NextResponse.json({ error: primaryError.message }, { status: 500 });
+          }
+          addonRows = (thirdRows || []) as ItemAddonRow[];
+        } else {
+          addonRows = (fallbackRows || []) as ItemAddonRow[];
         }
-        addonRows = (fallbackRows || []) as ItemAddonRow[];
       } else {
         addonRows = (primaryRows || []) as ItemAddonRow[];
+      }
+    }
+
+    const missingAddonNameIds = Array.from(
+      new Set(
+        addonRows
+          .filter(row => !pickAddonName(row))
+          .map(row => String(row.addon_id || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    const addonNameById = new Map<string, string>();
+    if (missingAddonNameIds.length > 0) {
+      const { data: addonNameRows } = await supabase
+        .from("product_addons")
+        .select("id,name")
+        .in("id", missingAddonNameIds);
+
+      for (const row of addonNameRows || []) {
+        addonNameById.set(String(row.id), String(row.name || ""));
       }
     }
 
@@ -144,7 +187,8 @@ export async function GET(
       const orderItemId = pickAddonItemId(row);
       if (!orderItemId) continue;
       const list = addonsByItemId.get(orderItemId) || [];
-      const name = pickAddonName(row);
+      const fallbackName = addonNameById.get(String(row.addon_id || "").trim()) || "";
+      const name = pickAddonName(row) || fallbackName;
       if (name) list.push(name);
       addonsByItemId.set(orderItemId, list);
     }

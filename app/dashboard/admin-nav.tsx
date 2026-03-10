@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/orders", label: "Orders" },
   { href: "/dashboard/shifts", label: "Shifts" },
   { href: "/dashboard/customers", label: "Customers" },
+  { href: "/dashboard/campaigns", label: "Campaigns" },
   { href: "/dashboard/users", label: "Users" },
   { href: "/pos", label: "POS System" },
 ];
@@ -26,6 +27,7 @@ const MOBILE_MORE_ITEMS = [
   { href: "/dashboard/categories", label: "Categories", exact: false },
   { href: "/dashboard/customers", label: "Customers", exact: false },
   { href: "/dashboard/shifts", label: "Shifts", exact: false },
+  { href: "/dashboard/campaigns", label: "Campaigns", exact: false },
   { href: "/dashboard/users", label: "Users", exact: false },
 ];
 

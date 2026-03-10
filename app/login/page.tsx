@@ -13,6 +13,7 @@ export default async function LoginPage() {
     const role = await resolveCurrentUserRole(user.id, fallback);
     if (role === "admin") redirect("/dashboard");
     if (role === "cashier") redirect("/pos");
+    if (role === "customer") redirect("/customer");
   }
 
   return (

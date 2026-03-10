@@ -14,10 +14,18 @@ type ProductQueryRow = {
   stock: number;
   is_active: boolean | null;
   category_id: string | null;
-  categories: Array<{ id: string; name: string }> | null;
+  categories: { id: string; name: string } | Array<{ id: string; name: string }> | null;
   product_variants: Array<{ id: string; name: string; price_adjustment: number }> | null;
   product_addons: Array<{ id: string; name: string; price: number }> | null;
 };
+
+function pickCategoryName(
+  categories: ProductQueryRow["categories"]
+) {
+  if (!categories) return null;
+  if (Array.isArray(categories)) return categories[0]?.name || null;
+  return categories.name || null;
+}
 
 // ================= GET PRODUCTS =================
 export async function GET(req: Request) {
@@ -71,7 +79,7 @@ export async function GET(req: Request) {
     cost: p.cost,
     stock: p.stock,
     category_id: p.category_id || null,
-    category: p.categories?.[0]?.name || null,
+    category: pickCategoryName(p.categories),
     status: p.is_active === false ? "disabled" : "enabled",
     variants: p.product_variants || [],
     addons: p.product_addons || [],
