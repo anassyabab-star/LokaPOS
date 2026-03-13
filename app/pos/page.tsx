@@ -948,7 +948,7 @@ export default function POSPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-28">
+    <div className="min-h-screen bg-gray-100 pb-28 text-gray-900">
       <div className="sticky top-0 z-10 bg-black p-4 text-white">
         <div className="flex items-center justify-between">
           <div>
@@ -1372,7 +1372,7 @@ export default function POSPage() {
 
       {selectedProduct && !showAddonModal ? (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-4">
+          <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-4 text-gray-900">
             <h2 className="text-lg font-bold">{selectedProduct.name}</h2>
 
             {selectedProduct.variants?.map(variant => (
@@ -1432,7 +1432,7 @@ export default function POSPage() {
 
       {showAddonModal && selectedProduct ? (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-4">
+          <div className="w-full max-w-md space-y-4 rounded-2xl bg-white p-4 text-gray-900">
             <h2 className="text-lg font-bold">{selectedProduct.name} Addons</h2>
 
             {selectedProduct.addons?.map(addon => (

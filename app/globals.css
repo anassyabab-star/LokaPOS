@@ -3,13 +3,232 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: dark;
+  --app-bg: #030303;
+  --app-surface: #111111;
+  --app-surface-soft: #1b1b1b;
+  --app-border: #1f2937;
+  --app-text: #e5e7eb;
+  --app-muted: #9ca3af;
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
+  --app-bg: #f3f4f6;
+  --app-surface: #ffffff;
+  --app-surface-soft: #e5e7eb;
+  --app-border: #d1d5db;
+  --app-text: #111827;
+  --app-muted: #6b7280;
 }
 
 body {
-  @apply bg-pos-bg text-pos-ink antialiased;
+  background: var(--app-bg);
+  color: var(--app-text);
+  @apply antialiased;
 }
 
 a {
   @apply text-inherit no-underline;
+}
+
+/* Light-mode adaptation layer for existing dark-first admin/customer UI. */
+:root[data-theme="light"] .theme-scope.bg-black,
+:root[data-theme="light"] .theme-scope .bg-black {
+  background-color: var(--app-bg) !important;
+}
+
+:root[data-theme="light"] .theme-scope.bg-\[\#111\],
+:root[data-theme="light"] .theme-scope.bg-\[\#111111\],
+:root[data-theme="light"] .theme-scope .bg-\[\#111\],
+:root[data-theme="light"] .theme-scope .bg-\[\#111111\] {
+  background-color: var(--app-surface) !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-\[\#1b1b1b\],
+:root[data-theme="light"] .theme-scope .bg-\[\#101010\],
+:root[data-theme="light"] .theme-scope .bg-\[\#1d1d1d\],
+:root[data-theme="light"] .theme-scope .bg-black\/30,
+:root[data-theme="light"] .theme-scope .bg-black\/40,
+:root[data-theme="light"] .theme-scope .bg-black\/50 {
+  background-color: var(--app-surface-soft) !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-gray-800,
+:root[data-theme="light"] .theme-scope .border-gray-700 {
+  border-color: var(--app-border) !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-white,
+:root[data-theme="light"] .theme-scope .text-gray-200,
+:root[data-theme="light"] .theme-scope .text-gray-100 {
+  color: #0f172a !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-gray-300 {
+  color: #374151 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-gray-400 {
+  color: #6b7280 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-gray-500 {
+  color: #4b5563 !important;
+}
+
+:root[data-theme="light"] .theme-scope .hover\:bg-\[\#1b1b1b\]:hover {
+  background-color: #e5e7eb !important;
+}
+
+:root[data-theme="light"] .theme-scope .hover\:text-white:hover {
+  color: #111827 !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-white\/10 {
+  background-color: #e5e7eb !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-white\/10,
+:root[data-theme="light"] .theme-scope .border-white\/20 {
+  border-color: #d1d5db !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-red-950\/20 {
+  background-color: #fee2e2 !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-red-900 {
+  border-color: #fca5a5 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-red-300 {
+  color: #b91c1c !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-green-300 {
+  color: #047857 !important;
+}
+
+:root[data-theme="light"] .theme-scope [class*="bg-\[\#7F1D1D\]"] {
+  color: #ffffff !important;
+}
+
+/* Status/action palette for light mode readability. */
+:root[data-theme="light"] .theme-scope .bg-yellow-900\/20 {
+  background-color: #fef3c7 !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-yellow-700\/40 {
+  border-color: #f59e0b !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-yellow-200 {
+  color: #92400e !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-amber-900\/20 {
+  background-color: #ffedd5 !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-amber-700\/40,
+:root[data-theme="light"] .theme-scope .border-amber-700\/50 {
+  border-color: #f59e0b !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-amber-200 {
+  color: #92400e !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-emerald-900\/20 {
+  background-color: #dcfce7 !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-emerald-700\/40,
+:root[data-theme="light"] .theme-scope .border-emerald-700\/50 {
+  border-color: #10b981 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-emerald-200 {
+  color: #065f46 !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-sky-900\/20 {
+  background-color: #dbeafe !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-sky-700\/40,
+:root[data-theme="light"] .theme-scope .border-sky-700\/50 {
+  border-color: #3b82f6 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-sky-200 {
+  color: #1d4ed8 !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-indigo-900\/20 {
+  background-color: #e0e7ff !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-indigo-700\/40 {
+  border-color: #6366f1 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-indigo-200 {
+  color: #4338ca !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-violet-900\/20 {
+  background-color: #ede9fe !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-violet-700\/40 {
+  border-color: #8b5cf6 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-violet-200 {
+  color: #6d28d9 !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-red-900\/20 {
+  background-color: #fee2e2 !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-red-700\/40,
+:root[data-theme="light"] .theme-scope .border-red-700\/50 {
+  border-color: #ef4444 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-red-200 {
+  color: #991b1b !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-gray-900\/20,
+:root[data-theme="light"] .theme-scope .bg-gray-800\/50 {
+  background-color: #e5e7eb !important;
+}
+
+:root[data-theme="light"] .theme-scope .bg-gray-800,
+:root[data-theme="light"] .theme-scope .bg-gray-900 {
+  background-color: #d1d5db !important;
+}
+
+:root[data-theme="light"] .theme-scope .border-gray-600 {
+  border-color: #9ca3af !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-gray-600,
+:root[data-theme="light"] .theme-scope .text-gray-700 {
+  color: #374151 !important;
+}
+
+:root[data-theme="light"] .theme-scope .text-gray-800,
+:root[data-theme="light"] .theme-scope .text-gray-900 {
+  color: #111827 !important;
+}
+
+/* Improve disabled readability in light mode. */
+:root[data-theme="light"] .theme-scope button:disabled,
+:root[data-theme="light"] .theme-scope a[aria-disabled="true"] {
+  opacity: 0.78 !important;
 }

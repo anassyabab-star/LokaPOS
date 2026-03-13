@@ -1,5 +1,6 @@
 "use client";
 
+import ThemeToggle from "@/components/theme-toggle";
 import { useState } from "react";
 
 export default function AccountMenu() {
@@ -12,6 +13,9 @@ export default function AccountMenu() {
           Account
         </summary>
         <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-gray-800 bg-[#111] p-1.5 shadow-xl">
+          <div className="px-1 py-1">
+            <ThemeToggle className="w-full text-left" />
+          </div>
           <a
             href="/pos"
             className="block rounded-md px-3 py-2 text-sm text-gray-200 hover:bg-[#1b1b1b]"

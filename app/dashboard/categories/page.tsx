@@ -86,18 +86,24 @@ export default function CategoriesPage() {
     setName("");
   };
 
+  const panelClass = "rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-surface)] p-4";
+  const fieldClass =
+    "w-full rounded border border-[color:var(--app-border)] bg-[color:var(--app-bg)] px-3 py-2 text-[color:var(--app-text)] placeholder:text-[color:var(--app-muted)]";
+  const neutralButtonClass =
+    "rounded border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)] px-3 py-1.5 text-xs text-[color:var(--app-text)]";
+
   return (
-    <div className="space-y-4 p-4 text-white md:space-y-6 md:p-6">
+    <div className="space-y-4 p-4 text-[color:var(--app-text)] md:space-y-6 md:p-6">
       <div>
         <h1 className="text-xl font-semibold md:text-2xl">Categories</h1>
-        <p className="mt-1 text-sm text-gray-400">Manage category list used by products.</p>
+        <p className="mt-1 text-sm text-[color:var(--app-muted)]">Manage category list used by products.</p>
       </div>
 
-      <section className="rounded-xl border border-gray-800 bg-[#111] p-4">
+      <section className={panelClass}>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
           <input
             placeholder="Category name"
-            className="w-full rounded border border-gray-700 bg-black px-3 py-2"
+            className={fieldClass}
             value={name}
             onChange={e => setName(e.target.value)}
           />
@@ -105,54 +111,54 @@ export default function CategoriesPage() {
           <button
             onClick={() => void handleSubmit()}
             disabled={saving || !name.trim()}
-            className="rounded bg-[#7F1D1D] px-4 py-2 disabled:opacity-50"
+            className="rounded bg-[#7F1D1D] px-4 py-2 text-[#ffffff] disabled:opacity-50"
           >
             {saving ? "Saving..." : editingId ? "Update Category" : "Add Category"}
           </button>
 
           {editingId ? (
-            <button onClick={cancelEdit} className="rounded bg-gray-700 px-4 py-2">
+            <button onClick={cancelEdit} className="rounded border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)] px-4 py-2 text-[color:var(--app-text)]">
               Cancel
             </button>
           ) : null}
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-800 bg-[#111] p-4">
+      <section className={panelClass}>
         <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <p className="text-sm text-gray-400">{filteredCategories.length} category</p>
+          <p className="text-sm text-[color:var(--app-muted)]">{filteredCategories.length} category</p>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search category"
-            className="w-full rounded border border-gray-700 bg-black px-3 py-2 text-sm md:max-w-xs"
+            className={`${fieldClass} text-sm md:max-w-xs`}
           />
         </div>
 
         {loading ? (
-          <p className="text-sm text-gray-400">Loading categories...</p>
+          <p className="text-sm text-[color:var(--app-muted)]">Loading categories...</p>
         ) : filteredCategories.length === 0 ? (
-          <p className="text-sm text-gray-500">No categories found.</p>
+          <p className="text-sm text-[color:var(--app-muted)]">No categories found.</p>
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {filteredCategories.map(c => (
               <div
                 key={c.id}
-                className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/40 p-3"
+                className="flex items-center justify-between rounded-lg border border-[color:var(--app-border)] bg-[color:var(--app-bg)] p-3"
               >
                 <p className="font-medium">{c.name}</p>
 
                 <div className="flex gap-2">
                   <button
                     onClick={() => startEdit(c)}
-                    className="rounded bg-gray-700 px-3 py-1.5 text-xs"
+                    className={neutralButtonClass}
                   >
                     Edit
                   </button>
 
                   <button
                     onClick={() => void handleDelete(c.id)}
-                    className="rounded bg-red-700 px-3 py-1.5 text-xs"
+                    className="rounded bg-red-700 px-3 py-1.5 text-xs text-[#ffffff]"
                   >
                     Delete
                   </button>

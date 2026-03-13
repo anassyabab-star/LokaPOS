@@ -1,5 +1,6 @@
 "use client";
 
+import ThemeToggle from "@/components/theme-toggle";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -73,6 +74,9 @@ export default function AdminNav() {
               </div>
               <div className="mt-2 border-t border-gray-800 pt-2">
                 <p className="mb-1 px-2 text-[11px] uppercase tracking-wide text-gray-500">Account</p>
+                <div className="mb-2 px-1">
+                  <ThemeToggle className="w-full text-left" />
+                </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Link
                     href="/pos"

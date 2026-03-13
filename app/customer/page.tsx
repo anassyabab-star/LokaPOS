@@ -1,5 +1,6 @@
 "use client";
 
+import ThemeToggle from "@/components/theme-toggle";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -582,6 +583,7 @@ export default function CustomerOrderAppPage() {
               <p className="text-xs text-gray-400">{profile?.name || "Member"}</p>
             </div>
             <div className="text-right">
+              <ThemeToggle className="mb-2" />
               <p className="text-xs text-gray-500">Available Points</p>
               <p className="text-lg font-semibold text-[#34d399]">
                 {Number(loyalty?.points_available || 0)}

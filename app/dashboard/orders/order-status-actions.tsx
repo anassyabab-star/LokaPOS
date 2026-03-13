@@ -63,7 +63,7 @@ export default function OrderStatusActions({ orderId, currentStatus }: Props) {
           type="button"
           disabled={!canMarkPreparing || Boolean(loadingStatus)}
           onClick={() => updateStatus("preparing")}
-          className="rounded-md border border-amber-700/50 bg-amber-900/20 px-2.5 py-1 text-xs font-medium text-amber-200 transition hover:bg-amber-800/30 disabled:cursor-not-allowed disabled:opacity-45"
+          className="rounded-md border border-amber-700/50 bg-amber-900/20 px-2.5 py-1 text-xs font-medium text-amber-200 transition hover:bg-amber-800/30 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loadingStatus === "preparing" ? "Updating..." : "Mark Preparing"}
         </button>
@@ -71,7 +71,7 @@ export default function OrderStatusActions({ orderId, currentStatus }: Props) {
           type="button"
           disabled={!canMarkReady || Boolean(loadingStatus)}
           onClick={() => updateStatus("ready")}
-          className="rounded-md border border-emerald-700/50 bg-emerald-900/20 px-2.5 py-1 text-xs font-medium text-emerald-200 transition hover:bg-emerald-800/30 disabled:cursor-not-allowed disabled:opacity-45"
+          className="rounded-md border border-emerald-700/50 bg-emerald-900/20 px-2.5 py-1 text-xs font-medium text-emerald-200 transition hover:bg-emerald-800/30 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loadingStatus === "ready" ? "Updating..." : "Mark Ready"}
         </button>
@@ -79,7 +79,7 @@ export default function OrderStatusActions({ orderId, currentStatus }: Props) {
           type="button"
           disabled={!canMarkCompleted || Boolean(loadingStatus)}
           onClick={() => updateStatus("completed")}
-          className="rounded-md border border-sky-700/50 bg-sky-900/20 px-2.5 py-1 text-xs font-medium text-sky-200 transition hover:bg-sky-800/30 disabled:cursor-not-allowed disabled:opacity-45"
+          className="rounded-md border border-sky-700/50 bg-sky-900/20 px-2.5 py-1 text-xs font-medium text-sky-200 transition hover:bg-sky-800/30 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loadingStatus === "completed" ? "Updating..." : "Mark Completed"}
         </button>

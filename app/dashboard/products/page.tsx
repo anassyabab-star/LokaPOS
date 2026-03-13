@@ -411,32 +411,38 @@ export default function ProductsPage() {
     }
   }
 
+  const panelClass = "rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-surface)] p-4";
+  const fieldClass =
+    "rounded border border-[color:var(--app-border)] bg-[color:var(--app-bg)] p-2 text-[color:var(--app-text)] placeholder:text-[color:var(--app-muted)]";
+  const neutralButtonClass =
+    "rounded border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)] px-3 py-1 text-[color:var(--app-text)] hover:opacity-90";
+
   return (
-    <div className="p-6 text-white">
+    <div className="p-6 text-[color:var(--app-text)]">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Products</h1>
         <button
           type="button"
           onClick={() => setShowCreateForm(prev => !prev)}
-          className="rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium hover:bg-[#942424]"
+          className="rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-[#ffffff] hover:bg-[#942424]"
         >
           {showCreateForm ? "Close Form" : "+ New Product"}
         </button>
       </div>
 
       {showCreateForm ? (
-        <div className="bg-[#111] p-4 rounded-xl border border-gray-800 mb-6 space-y-4">
+        <div className={`${panelClass} mb-6 space-y-4`}>
         <div className="grid grid-cols-2 gap-3">
           <input
             placeholder="Product name"
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            className="p-2 bg-black border border-gray-700 rounded"
+            className={fieldClass}
           />
           <select
             value={newCategoryId}
             onChange={e => setNewCategoryId(e.target.value)}
-            className="p-2 bg-black border border-gray-700 rounded"
+            className={fieldClass}
           >
             <option value="">Select Category</option>
             {categories.map(c => (
@@ -450,29 +456,29 @@ export default function ProductsPage() {
             type="number"
             value={newPrice}
             onChange={e => setNewPrice(e.target.value)}
-            className="p-2 bg-black border border-gray-700 rounded"
+            className={fieldClass}
           />
           <input
             placeholder="Cost Price"
             type="number"
             value={newCost}
             onChange={e => setNewCost(e.target.value)}
-            className="p-2 bg-black border border-gray-700 rounded"
+            className={fieldClass}
           />
           <input
             placeholder="Stock"
             type="number"
             value={newStock}
             onChange={e => setNewStock(e.target.value)}
-            className="p-2 bg-black border border-gray-700 rounded"
+            className={fieldClass}
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-800 pt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-[color:var(--app-border)] pt-4">
           <div className="space-y-2">
             <div className="font-semibold text-sm">Initial Variants (optional)</div>
             {initialVariants.map((v, idx) => (
-              <div key={`${v.name}-${idx}`} className="text-sm text-gray-300 flex justify-between">
+              <div key={`${v.name}-${idx}`} className="text-sm text-[color:var(--app-muted)] flex justify-between">
                 <span>{v.name} (+RM{v.price_adjustment})</span>
                 <button
                   className="text-red-400"
@@ -487,16 +493,16 @@ export default function ProductsPage() {
                 placeholder="Variant Name"
                 value={draftVariantName}
                 onChange={e => setDraftVariantName(e.target.value)}
-                className="flex-1 p-2 bg-black border border-gray-700 rounded"
+                className={`flex-1 ${fieldClass}`}
               />
               <input
                 placeholder="+RM"
                 type="number"
                 value={draftVariantPrice}
                 onChange={e => setDraftVariantPrice(e.target.value)}
-                className="w-24 p-2 bg-black border border-gray-700 rounded"
+                className={`w-24 ${fieldClass}`}
               />
-              <button onClick={addInitialVariant} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded">
+              <button onClick={addInitialVariant} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded text-[#ffffff]">
                 Add
               </button>
             </div>
@@ -505,7 +511,7 @@ export default function ProductsPage() {
           <div className="space-y-2">
             <div className="font-semibold text-sm">Initial Addons (optional)</div>
             {initialAddons.map((a, idx) => (
-              <div key={`${a.name}-${idx}`} className="text-sm text-gray-300 flex justify-between">
+              <div key={`${a.name}-${idx}`} className="text-sm text-[color:var(--app-muted)] flex justify-between">
                 <span>{a.name} (+RM{a.price})</span>
                 <button
                   className="text-red-400"
@@ -520,23 +526,23 @@ export default function ProductsPage() {
                 placeholder="Addon Name"
                 value={draftAddonName}
                 onChange={e => setDraftAddonName(e.target.value)}
-                className="flex-1 p-2 bg-black border border-gray-700 rounded"
+                className={`flex-1 ${fieldClass}`}
               />
               <input
                 placeholder="+RM"
                 type="number"
                 value={draftAddonPrice}
                 onChange={e => setDraftAddonPrice(e.target.value)}
-                className="w-24 p-2 bg-black border border-gray-700 rounded"
+                className={`w-24 ${fieldClass}`}
               />
-              <button onClick={addInitialAddon} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded">
+              <button onClick={addInitialAddon} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded text-[#ffffff]">
                 Add
               </button>
             </div>
           </div>
         </div>
 
-        <button onClick={addProduct} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 py-2 rounded">
+        <button onClick={addProduct} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 py-2 rounded text-[#ffffff]">
           Add Product
         </button>
         </div>
@@ -554,10 +560,10 @@ export default function ProductsPage() {
           return (
             <div
               key={product.id}
-              className={`bg-[#111] p-4 rounded-xl border ${
+              className={`rounded-xl border p-4 bg-[color:var(--app-surface)] ${
                 isRestockTarget
                   ? "border-[#7F1D1D] shadow-[0_0_0_1px_rgba(127,29,29,0.35)]"
-                  : "border-gray-800"
+                  : "border-[color:var(--app-border)]"
               }`}
             >
               <div className="flex justify-between items-center">
@@ -587,7 +593,7 @@ export default function ProductsPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => void toggleStatus(product)}
-                    className={`px-3 py-1 rounded text-white ${
+                    className={`px-3 py-1 rounded text-[#ffffff] ${
                       product.status === "enabled"
                         ? "bg-green-600 hover:bg-green-500"
                         : "bg-red-700 hover:bg-red-600"
@@ -598,7 +604,7 @@ export default function ProductsPage() {
 
                   <button
                     onClick={() => openProductEditor(product)}
-                    className="px-3 py-1 bg-[#2d2d2d] hover:bg-[#3b3b3b] rounded"
+                    className={neutralButtonClass}
                   >
                     Edit
                   </button>
@@ -606,7 +612,7 @@ export default function ProductsPage() {
               </div>
 
               {expandedId === product.id && (
-                <div className="mt-4 space-y-6 border-t border-gray-700 pt-4">
+                <div className="mt-4 space-y-6 border-t border-[color:var(--app-border)] pt-4">
                   <div>
                     <div className="font-semibold mb-2">Product Details</div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -619,7 +625,7 @@ export default function ProductsPage() {
                           }))
                         }
                         placeholder="Product name"
-                        className="p-2 bg-black border border-gray-700 rounded"
+                        className={fieldClass}
                       />
                       <select
                         value={productDraft.category_id}
@@ -629,7 +635,7 @@ export default function ProductsPage() {
                             [product.id]: { ...ensureDraft(prev, product.id, initProductDraft(product)), category_id: e.target.value },
                           }))
                         }
-                        className="p-2 bg-black border border-gray-700 rounded"
+                        className={fieldClass}
                       >
                         <option value="">Select Category</option>
                         {categories.map(c => (
@@ -648,7 +654,7 @@ export default function ProductsPage() {
                           }))
                         }
                         placeholder="Selling price"
-                        className="p-2 bg-black border border-gray-700 rounded"
+                        className={fieldClass}
                       />
                       <input
                         type="number"
@@ -660,7 +666,7 @@ export default function ProductsPage() {
                           }))
                         }
                         placeholder="Cost price"
-                        className="p-2 bg-black border border-gray-700 rounded"
+                        className={fieldClass}
                       />
                       <input
                         type="number"
@@ -672,14 +678,14 @@ export default function ProductsPage() {
                           }))
                         }
                         placeholder="Stock"
-                        className="p-2 bg-black border border-gray-700 rounded"
+                        className={fieldClass}
                       />
                     </div>
                     <div className="mt-2">
                       <button
                         onClick={() => void saveProductDetails(product.id)}
                         disabled={savingProductId === product.id}
-                        className="bg-[#7F1D1D] px-4 py-2 rounded disabled:opacity-60"
+                        className="bg-[#7F1D1D] px-4 py-2 rounded text-[#ffffff] disabled:opacity-60"
                       >
                         {savingProductId === product.id ? "Saving..." : "Save Product"}
                       </button>
@@ -694,17 +700,17 @@ export default function ProductsPage() {
                         {editingVariantId === v.id ? (
                           <div className="flex gap-2 flex-1">
                             <input
-                              className="flex-1 p-2 bg-black border border-gray-700 rounded"
+                              className={`flex-1 ${fieldClass}`}
                               value={editVariantName}
                               onChange={e => setEditVariantName(e.target.value)}
                             />
                             <input
-                              className="w-24 p-2 bg-black border border-gray-700 rounded"
+                              className={`w-24 ${fieldClass}`}
                               type="number"
                               value={editVariantPrice}
                               onChange={e => setEditVariantPrice(e.target.value)}
                             />
-                            <button onClick={() => void saveVariantEdit()} className="px-3 py-1 rounded bg-[#7F1D1D] hover:bg-[#942424]">
+                            <button onClick={() => void saveVariantEdit()} className="px-3 py-1 rounded bg-[#7F1D1D] hover:bg-[#942424] text-[#ffffff]">
                               Save
                             </button>
                             <button
@@ -713,7 +719,7 @@ export default function ProductsPage() {
                                 setEditVariantName("");
                                 setEditVariantPrice("");
                               }}
-                              className="px-3 py-1 rounded bg-gray-600"
+                              className={neutralButtonClass}
                             >
                               Cancel
                             </button>
@@ -751,7 +757,7 @@ export default function ProductsPage() {
                             [product.id]: { ...ensureDraft(prev, product.id, { name: "", price: "" }), name: e.target.value },
                           }))
                         }
-                        className="flex-1 p-2 bg-black border border-gray-700 rounded"
+                        className={`flex-1 ${fieldClass}`}
                       />
                       <input
                         placeholder="+RM"
@@ -763,9 +769,9 @@ export default function ProductsPage() {
                             [product.id]: { ...ensureDraft(prev, product.id, { name: "", price: "" }), price: e.target.value },
                           }))
                         }
-                        className="w-24 p-2 bg-black border border-gray-700 rounded"
+                        className={`w-24 ${fieldClass}`}
                       />
-                      <button onClick={() => void addVariant(product.id)} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded">
+                      <button onClick={() => void addVariant(product.id)} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded text-[#ffffff]">
                         Add
                       </button>
                     </div>
@@ -779,17 +785,17 @@ export default function ProductsPage() {
                         {editingAddonId === a.id ? (
                           <div className="flex gap-2 flex-1">
                             <input
-                              className="flex-1 p-2 bg-black border border-gray-700 rounded"
+                              className={`flex-1 ${fieldClass}`}
                               value={editAddonName}
                               onChange={e => setEditAddonName(e.target.value)}
                             />
                             <input
-                              className="w-24 p-2 bg-black border border-gray-700 rounded"
+                              className={`w-24 ${fieldClass}`}
                               type="number"
                               value={editAddonPrice}
                               onChange={e => setEditAddonPrice(e.target.value)}
                             />
-                            <button onClick={() => void saveAddonEdit()} className="px-3 py-1 rounded bg-[#7F1D1D] hover:bg-[#942424]">
+                            <button onClick={() => void saveAddonEdit()} className="px-3 py-1 rounded bg-[#7F1D1D] hover:bg-[#942424] text-[#ffffff]">
                               Save
                             </button>
                             <button
@@ -798,7 +804,7 @@ export default function ProductsPage() {
                                 setEditAddonName("");
                                 setEditAddonPrice("");
                               }}
-                              className="px-3 py-1 rounded bg-gray-600"
+                              className={neutralButtonClass}
                             >
                               Cancel
                             </button>
@@ -836,7 +842,7 @@ export default function ProductsPage() {
                             [product.id]: { ...ensureDraft(prev, product.id, { name: "", price: "" }), name: e.target.value },
                           }))
                         }
-                        className="flex-1 p-2 bg-black border border-gray-700 rounded"
+                        className={`flex-1 ${fieldClass}`}
                       />
                       <input
                         placeholder="+RM"
@@ -848,9 +854,9 @@ export default function ProductsPage() {
                             [product.id]: { ...ensureDraft(prev, product.id, { name: "", price: "" }), price: e.target.value },
                           }))
                         }
-                        className="w-24 p-2 bg-black border border-gray-700 rounded"
+                        className={`w-24 ${fieldClass}`}
                       />
-                      <button onClick={() => void addAddon(product.id)} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded">
+                      <button onClick={() => void addAddon(product.id)} className="bg-[#7F1D1D] hover:bg-[#942424] px-4 rounded text-[#ffffff]">
                         Add
                       </button>
                     </div>
