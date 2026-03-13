@@ -1170,31 +1170,23 @@ export default function POSPage() {
       ) : null}
 
       {showSugarQuickPick && sugarQuickPickPayload ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 text-gray-900 shadow-xl">
             <h3 className="text-base font-semibold text-gray-900">Sugar Level</h3>
             <p className="mt-1 text-sm text-gray-500">{sugarQuickPickPayload.product_name}</p>
 
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => submitQuickSugar("normal")}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800"
-              >
-                Normal
-              </button>
-              <button
-                type="button"
-                onClick={() => submitQuickSugar("less")}
-                className="rounded-lg bg-[#7F1D1D] px-3 py-2 text-sm font-medium text-white"
-              >
-                Less Sugar
-              </button>
+              {SUGAR_LEVEL_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => submitQuickSugar(option.value)}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
-
-            <p className="mt-2 text-xs text-gray-500">
-              Half / No Sugar boleh ubah di checkout.
-            </p>
 
             <button
               type="button"
