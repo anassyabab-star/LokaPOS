@@ -17,6 +17,7 @@ type ShiftRow = {
   counted_cash: number | null;
   expected_cash: number | null;
   over_short: number | null;
+  paid_out_total?: number;
   closing_note: string | null;
   opened_by_name: string;
   opened_by_email: string | null;
@@ -30,6 +31,7 @@ type Summary = {
   closed: number;
   short_count: number;
   short_total: number;
+  paid_out_total: number;
 };
 
 const EMPTY_SUMMARY: Summary = {
@@ -38,6 +40,7 @@ const EMPTY_SUMMARY: Summary = {
   closed: 0,
   short_count: 0,
   short_total: 0,
+  paid_out_total: 0,
 };
 
 export default function ShiftsPage() {
@@ -91,7 +94,7 @@ export default function ShiftsPage() {
         </p>
       </div>
 
-      <div className="-mx-1 mb-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 md:mx-0 md:grid md:grid-cols-5 md:overflow-visible md:px-0">
+      <div className="-mx-1 mb-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 md:mx-0 md:grid md:grid-cols-6 md:overflow-visible md:px-0">
         <Stat label="Total" value={summary.total} />
         <Stat label="Open" value={summary.open} color="text-amber-300" />
         <Stat label="Closed" value={summary.closed} color="text-green-400" />
@@ -100,6 +103,11 @@ export default function ShiftsPage() {
           label="Short Total"
           value={`RM ${summary.short_total.toFixed(2)}`}
           color="text-red-400"
+        />
+        <Stat
+          label="Paid Out Total"
+          value={`RM ${summary.paid_out_total.toFixed(2)}`}
+          color="text-amber-300"
         />
       </div>
 
@@ -163,6 +171,7 @@ export default function ShiftsPage() {
             const expected = Number(row.expected_cash || row.opening_cash || 0);
             const counted = row.counted_cash == null ? null : Number(row.counted_cash);
             const overShort = row.over_short == null ? null : Number(row.over_short);
+            const paidOutTotal = Number(row.paid_out_total || 0);
             const short = (overShort || 0) < 0;
 
             return (
@@ -217,6 +226,10 @@ export default function ShiftsPage() {
                     <div className="mt-1 flex justify-between">
                       <span className="text-gray-400">Expected</span>
                       <span>RM {expected.toFixed(2)}</span>
+                    </div>
+                    <div className="mt-1 flex justify-between">
+                      <span className="text-gray-400">Paid Out</span>
+                      <span>RM {paidOutTotal.toFixed(2)}</span>
                     </div>
                     <div className="mt-1 flex justify-between">
                       <span className="text-gray-400">Counted</span>

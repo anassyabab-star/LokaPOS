@@ -12,10 +12,30 @@ type OrderItemJoinRow = {
   products: ProductJoin;
 };
 
+type NumericRow = {
+  total?: number | string | null;
+  amount?: number | string | null;
+};
+
 function getMYDate(date: Date) {
   return date.toLocaleDateString("sv-SE", {
     timeZone: "Asia/Kuala_Lumpur",
   });
+}
+
+function isMissingRelationError(message: string | null | undefined) {
+  const m = String(message || "").toLowerCase();
+  return m.includes("does not exist") || m.includes("schema cache");
+}
+
+function myDayStartToUtcIso(dateStr: string) {
+  return new Date(`${dateStr}T00:00:00+08:00`).toISOString();
+}
+
+function plusDays(dateStr: string, days: number) {
+  const date = new Date(`${dateStr}T00:00:00+08:00`);
+  date.setDate(date.getDate() + days);
+  return getMYDate(date);
 }
 
 export async function GET(req: NextRequest) {
@@ -48,6 +68,9 @@ export async function GET(req: NextRequest) {
       start = getMYDate(first);
       end = todayStr;
     }
+
+    const monthStart = `${todayStr.slice(0, 7)}-01`;
+    const monthEndExclusive = plusDays(todayStr, 1);
 
     // =========================
     // ORDERS
@@ -152,6 +175,58 @@ export async function GET(req: NextRequest) {
 
     if (lowStockError) throw lowStockError;
 
+    // =========================
+    // MONTHLY P/L SNAPSHOT
+    // =========================
+    const { data: monthSalesRows, error: monthSalesError } = await supabase
+      .from("orders")
+      .select("total")
+      .eq("status", "completed")
+      .gte("date_key", monthStart)
+      .lte("date_key", todayStr);
+
+    if (monthSalesError) throw monthSalesError;
+
+    const monthSales = ((monthSalesRows || []) as NumericRow[]).reduce(
+      (sum, row) => sum + Number(row.total || 0),
+      0
+    );
+
+    let monthExpenses = 0;
+    const { data: monthExpenseRows, error: monthExpenseError } = await supabase
+      .from("expenses")
+      .select("amount")
+      .gte("expense_date", monthStart)
+      .lte("expense_date", todayStr);
+
+    if (!monthExpenseError) {
+      monthExpenses = ((monthExpenseRows || []) as NumericRow[]).reduce(
+        (sum, row) => sum + Number(row.amount || 0),
+        0
+      );
+    } else if (!isMissingRelationError(monthExpenseError.message)) {
+      throw monthExpenseError;
+    }
+
+    let monthPaidOut = 0;
+    const { data: monthPaidOutRows, error: monthPaidOutError } = await supabase
+      .from("paid_outs")
+      .select("amount")
+      .gte("created_at", myDayStartToUtcIso(monthStart))
+      .lt("created_at", myDayStartToUtcIso(monthEndExclusive));
+
+    if (!monthPaidOutError) {
+      monthPaidOut = ((monthPaidOutRows || []) as NumericRow[]).reduce(
+        (sum, row) => sum + Number(row.amount || 0),
+        0
+      );
+    } else if (!isMissingRelationError(monthPaidOutError.message)) {
+      throw monthPaidOutError;
+    }
+
+    const monthOutflow = monthExpenses + monthPaidOut;
+    const monthProfitLoss = monthSales - monthOutflow;
+
     return NextResponse.json({
       orders: orders || [],
       topProducts,
@@ -160,6 +235,14 @@ export async function GET(req: NextRequest) {
       bestHourSales,
       paymentMix,
       lowStock: lowStockRows || [],
+      monthlyPL: {
+        month: monthStart.slice(0, 7),
+        sales: monthSales,
+        expenses: monthExpenses,
+        paid_out: monthPaidOut,
+        outflow: monthOutflow,
+        profit_loss: monthProfitLoss,
+      },
     });
 
   } catch (error) {
@@ -173,6 +256,14 @@ export async function GET(req: NextRequest) {
         bestHourSales: 0,
         paymentMix: {},
         lowStock: [],
+        monthlyPL: {
+          month: "",
+          sales: 0,
+          expenses: 0,
+          paid_out: 0,
+          outflow: 0,
+          profit_loss: 0,
+        },
       },
       { status: 500 }
     );

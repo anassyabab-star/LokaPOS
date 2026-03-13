@@ -52,7 +52,7 @@ type MurpatiStatus = {
   error: string | null;
 };
 
-type IntegrationCategory = "messaging" | "payment" | "email" | "system";
+type IntegrationCategory = "messaging" | "payment" | "email" | "system" | "storage";
 
 type IntegrationStatusCheck = {
   key: string;

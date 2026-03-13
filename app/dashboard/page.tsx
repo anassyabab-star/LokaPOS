@@ -27,6 +27,15 @@ type LowStockItem = {
   stock: number;
 };
 
+type MonthlyPL = {
+  month: string;
+  sales: number;
+  expenses: number;
+  paid_out: number;
+  outflow: number;
+  profit_loss: number;
+};
+
 export default function DashboardPage() {
   const [range, setRange] = useState("today");
   const [orders, setOrders] = useState<Order[]>([]);
@@ -36,6 +45,14 @@ export default function DashboardPage() {
   const [yesterdaySales, setYesterdaySales] = useState(0);
   const [bestHour, setBestHour] = useState<string | null>(null);
   const [bestHourSales, setBestHourSales] = useState(0);
+  const [monthlyPL, setMonthlyPL] = useState<MonthlyPL>({
+    month: "",
+    sales: 0,
+    expenses: 0,
+    paid_out: 0,
+    outflow: 0,
+    profit_loss: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,6 +69,16 @@ export default function DashboardPage() {
       setBestHourSales(data.bestHourSales || 0);
       setPaymentMix(data.paymentMix || {});
       setLowStock(data.lowStock || []);
+      setMonthlyPL(
+        (data.monthlyPL as MonthlyPL) || {
+          month: "",
+          sales: 0,
+          expenses: 0,
+          paid_out: 0,
+          outflow: 0,
+          profit_loss: 0,
+        }
+      );
 
       setLoading(false);
     };
@@ -135,7 +162,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI */}
-      <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 text-sm md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
+      <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 text-sm md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 xl:grid-cols-5">
         <div className="min-w-[170px] snap-start bg-[#111111] border border-gray-800 rounded-lg p-3 md:min-w-0">
           <p className="text-xs text-gray-500">Sales</p>
           <p className="text-base font-semibold mt-1">
@@ -175,6 +202,22 @@ export default function DashboardPage() {
           <p className="text-xs text-gray-400">
             RM {bestHourSales.toFixed(2)}
           </p>
+        </div>
+
+        <div className="min-w-[170px] snap-start bg-[#111111] border border-gray-800 rounded-lg p-3 md:min-w-0">
+          <p className="text-xs text-gray-500">Monthly P/L ({monthlyPL.month || "N/A"})</p>
+          <p
+            className={`text-base font-semibold mt-1 ${
+              monthlyPL.profit_loss >= 0 ? "text-green-400" : "text-red-400"
+            }`}
+          >
+            RM {monthlyPL.profit_loss.toFixed(2)}
+          </p>
+          <p className="text-xs text-gray-400">
+            Sales {monthlyPL.sales.toFixed(2)} • Outflow {monthlyPL.outflow.toFixed(2)}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">Expenses: RM {monthlyPL.expenses.toFixed(2)}</p>
+          <p className="text-xs text-gray-500">Paid Out: RM {monthlyPL.paid_out.toFixed(2)}</p>
         </div>
       </div>
 

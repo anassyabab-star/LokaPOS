@@ -13,7 +13,7 @@ type IntegrationCheck = {
 type IntegrationSummary = {
   id: string;
   name: string;
-  category: "messaging" | "payment" | "email" | "system";
+  category: "messaging" | "payment" | "email" | "system" | "storage";
   configured: boolean;
   healthy: boolean;
   status: string;
@@ -98,6 +98,31 @@ function buildEmailSummary(): IntegrationSummary {
   };
 }
 
+function buildInvoiceStorageSummary(): IntegrationSummary {
+  const bucketName = String(process.env.EXPENSES_STORAGE_BUCKET || "expense-invoices").trim();
+  const hasSupabaseUrl = Boolean(String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim());
+  const hasServiceRole = Boolean(String(process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim());
+  const hasBucket = Boolean(bucketName);
+  const configured = hasSupabaseUrl && hasServiceRole && hasBucket;
+
+  return {
+    id: "invoice-storage",
+    name: "Invoice Storage (Supabase)",
+    category: "storage",
+    configured,
+    healthy: configured,
+    status: configured ? "Configured" : "Not configured",
+    checks: [
+      { key: "supabaseUrl", label: "Supabase URL", ok: hasSupabaseUrl },
+      { key: "serviceRole", label: "Service Role Key", ok: hasServiceRole },
+      { key: "bucket", label: `Bucket (${bucketName || "-"})`, ok: hasBucket },
+    ],
+    hint: configured
+      ? "Invoice upload uses Supabase Storage."
+      : "Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, EXPENSES_STORAGE_BUCKET",
+  };
+}
+
 export async function GET() {
   const auth = await requireAdminApi();
   if (!auth.ok) return auth.response;
@@ -106,6 +131,7 @@ export async function GET() {
     const activeProvider = normalizePaymentProvider();
     const payment = buildPaymentGatewaySummary(activeProvider);
     const email = buildEmailSummary();
+    const invoiceStorage = buildInvoiceStorageSummary();
 
     const murpatiConfig = getMurpatiConfigStatus();
     let murpatiSessionStatus: string | null = null;
@@ -179,6 +205,7 @@ export async function GET() {
         ],
         hint: payment.billplz.configured ? null : "Set BILLPLZ_API_KEY and BILLPLZ_COLLECTION_ID",
       },
+      invoiceStorage,
       email,
     ];
 

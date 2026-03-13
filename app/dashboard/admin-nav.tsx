@@ -10,6 +10,8 @@ const NAV_ITEMS = [
   { href: "/dashboard/categories", label: "Categories" },
   { href: "/dashboard/orders", label: "Orders" },
   { href: "/dashboard/shifts", label: "Shifts" },
+  { href: "/dashboard/paid-outs", label: "Paid Outs" },
+  { href: "/dashboard/expenses", label: "Expenses" },
   { href: "/dashboard/customers", label: "Customers" },
   { href: "/dashboard/campaigns", label: "Campaigns" },
   { href: "/dashboard/users", label: "Users" },
@@ -24,6 +26,8 @@ const MOBILE_PRIMARY_ITEMS = [
 ];
 
 const MOBILE_MORE_ITEMS = [
+  { href: "/dashboard/paid-outs", label: "Paid Outs", exact: false },
+  { href: "/dashboard/expenses", label: "Expenses", exact: false },
   { href: "/dashboard/categories", label: "Categories", exact: false },
   { href: "/dashboard/customers", label: "Customers", exact: false },
   { href: "/dashboard/shifts", label: "Shifts", exact: false },

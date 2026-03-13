@@ -28,6 +28,11 @@ type ListUsersResponse = {
   };
 };
 
+type PaidOutRow = {
+  shift_id: string;
+  amount: number | string | null;
+};
+
 function toNum(value: number | string | null | undefined) {
   return Number(value || 0);
 }
@@ -83,15 +88,33 @@ export async function GET(req: Request) {
       ])
     );
 
+    const paidOutTotals = new Map<string, number>();
+    if (rows.length > 0) {
+      const shiftIds = rows.map(row => row.id);
+      const { data: paidOutData, error: paidOutError } = await supabase
+        .from("paid_outs")
+        .select("shift_id,amount")
+        .in("shift_id", shiftIds);
+
+      if (!paidOutError) {
+        for (const row of (paidOutData || []) as PaidOutRow[]) {
+          const current = paidOutTotals.get(row.shift_id) || 0;
+          paidOutTotals.set(row.shift_id, current + Number(row.amount || 0));
+        }
+      }
+    }
+
     const mapped = rows.map(row => {
       const opened = userMap.get(row.opened_by);
       const closed = row.closed_by ? userMap.get(row.closed_by) : undefined;
+      const paidOutTotal = paidOutTotals.get(row.id) || 0;
       return {
         ...row,
         opening_cash: toNum(row.opening_cash),
         counted_cash: row.counted_cash == null ? null : toNum(row.counted_cash),
         expected_cash: row.expected_cash == null ? null : toNum(row.expected_cash),
         over_short: row.over_short == null ? null : toNum(row.over_short),
+        paid_out_total: paidOutTotal,
         opened_by_name: opened?.name || row.opened_by.slice(0, 8),
         opened_by_email: opened?.email || null,
         closed_by_name: closed?.name || null,
@@ -120,8 +143,12 @@ export async function GET(req: Request) {
         }
         return acc;
       },
-      { total: 0, open: 0, closed: 0, short_count: 0, short_total: 0 }
+      { total: 0, open: 0, closed: 0, short_count: 0, short_total: 0, paid_out_total: 0 }
     );
+
+    for (const row of mapped) {
+      summary.paid_out_total += Number((row as { paid_out_total?: number }).paid_out_total || 0);
+    }
 
     return NextResponse.json({
       shifts: filtered,

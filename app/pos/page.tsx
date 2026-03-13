@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buildReceiptHtml } from "@/lib/receipt-print";
 
 type Variant = {
@@ -39,6 +39,21 @@ type Shift = {
   expected_cash: number | null;
   over_short: number | null;
   closing_note: string | null;
+};
+
+type PaidOutEntry = {
+  id: string;
+  shift_id: string;
+  register_id: string;
+  amount: number;
+  staff_name: string | null;
+  reason: string;
+  vendor_name: string | null;
+  invoice_number: string | null;
+  invoice_url: string | null;
+  notes: string | null;
+  created_by: string;
+  created_at: string;
 };
 
 type CartItem = {
@@ -87,15 +102,23 @@ type MemberLookup = {
   loyalty_points: number;
   expiring_points_30d: number;
 };
+type CheckoutTab = "items" | "customer" | "promo" | "payment";
 
 const DISCOUNT_TYPES: Array<"percent" | "fixed" | "none"> = ["percent", "fixed", "none"];
 const PAYMENT_METHODS: Array<"cash" | "qr" | "card"> = ["cash", "qr", "card"];
+const CHECKOUT_TABS: Array<{ key: CheckoutTab; label: string }> = [
+  { key: "items", label: "Items" },
+  { key: "customer", label: "Customer" },
+  { key: "promo", label: "Promo" },
+  { key: "payment", label: "Payment" },
+];
 type MarketingConsentMode = "none" | "whatsapp" | "email" | "both";
 type SugarLevel = "normal" | "less" | "half" | "none";
 const LOYALTY_REDEEM_RM_PER_POINT = 0.05;
 const LOYALTY_REDEEM_MIN_POINTS = 100;
 const LOYALTY_REDEEM_MAX_RATIO = 0.3;
 const POS_AUTO_PRINT_KEY = "pos_auto_print_enabled";
+const POS_PAID_OUT_STAFF_NAME_KEY = "pos_paid_out_staff_name";
 const DEFAULT_SUGAR_LEVEL: SugarLevel = "normal";
 const SUGAR_LEVEL_OPTIONS: Array<{ value: SugarLevel; label: string }> = [
   { value: "normal", label: "Normal Sugar" },
@@ -161,14 +184,25 @@ export default function POSPage() {
   const [shiftError, setShiftError] = useState<string | null>(null);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [cashSalesLive, setCashSalesLive] = useState(0);
+  const [paidOutTotalLive, setPaidOutTotalLive] = useState(0);
   const [expectedCashLive, setExpectedCashLive] = useState(0);
   const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
   const [showCloseShiftModal, setShowCloseShiftModal] = useState(false);
+  const [showPaidOutModal, setShowPaidOutModal] = useState(false);
   const [openingCash, setOpeningCash] = useState("");
   const [openingNote, setOpeningNote] = useState("");
   const [countedCash, setCountedCash] = useState("");
   const [closingNote, setClosingNote] = useState("");
   const [shiftSubmitting, setShiftSubmitting] = useState(false);
+  const [paidOutSubmitting, setPaidOutSubmitting] = useState(false);
+  const [paidOutAmount, setPaidOutAmount] = useState("");
+  const [paidOutStaffName, setPaidOutStaffName] = useState("");
+  const [paidOutReason, setPaidOutReason] = useState("");
+  const [paidOutVendor, setPaidOutVendor] = useState("");
+  const [paidOutInvoiceNumber, setPaidOutInvoiceNumber] = useState("");
+  const [paidOutInvoiceUrl, setPaidOutInvoiceUrl] = useState("");
+  const [paidOutNotes, setPaidOutNotes] = useState("");
+  const [recentPaidOuts, setRecentPaidOuts] = useState<PaidOutEntry[]>([]);
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -186,6 +220,8 @@ export default function POSPage() {
   const [redeemPointsInput, setRedeemPointsInput] = useState("");
 
   const [showDiscountControls, setShowDiscountControls] = useState(false);
+  const [checkoutTab, setCheckoutTab] = useState<CheckoutTab>("items");
+  const [lastCheckoutCartSignature, setLastCheckoutCartSignature] = useState<string | null>(null);
   const [discountType, setDiscountType] = useState<"none" | "percent" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "qr" | "card">("cash");
@@ -193,6 +229,7 @@ export default function POSPage() {
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
 
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const wasCheckoutOpenRef = useRef(false);
 
   function getMarketingConsentMode(): MarketingConsentMode {
     if (consentWhatsapp && consentEmail) return "both";
@@ -234,13 +271,16 @@ export default function POSPage() {
         setShiftError(data?.error || "Failed to load shift");
         setCurrentShift(null);
         setCashSalesLive(0);
+        setPaidOutTotalLive(0);
         setExpectedCashLive(0);
+        setRecentPaidOuts([]);
         if (autoPromptIfClosed) setShowOpenShiftModal(true);
         return;
       }
 
       setCurrentShift(data.shift || null);
       setCashSalesLive(Number(data.cash_sales || 0));
+      setPaidOutTotalLive(Number(data.paid_out_total || 0));
       setExpectedCashLive(Number(data.expected_cash_live || 0));
 
       if (autoPromptIfClosed) {
@@ -252,7 +292,9 @@ export default function POSPage() {
       setShiftError("Failed to load shift");
       setCurrentShift(null);
       setCashSalesLive(0);
+      setPaidOutTotalLive(0);
       setExpectedCashLive(0);
+      setRecentPaidOuts([]);
       if (autoPromptIfClosed) setShowOpenShiftModal(true);
     } finally {
       setShiftLoading(false);
@@ -267,6 +309,27 @@ export default function POSPage() {
 
     void refreshShiftState();
   }, []);
+
+  async function loadPaidOuts() {
+    try {
+      const res = await fetch(`/api/pos/paid-outs?register_id=${registerId}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) return;
+
+      setRecentPaidOuts(Array.isArray(data.paid_outs) ? (data.paid_outs as PaidOutEntry[]) : []);
+      setPaidOutTotalLive(Number(data.paid_out_total || 0));
+    } catch {
+      // Keep POS running even if paid out endpoint fails.
+    }
+  }
+
+  useEffect(() => {
+    if (!currentShift) {
+      setRecentPaidOuts([]);
+      return;
+    }
+    void loadPaidOuts();
+  }, [currentShift]);
 
   useEffect(() => {
     if (!addedToast) return;
@@ -289,6 +352,50 @@ export default function POSPage() {
       // Ignore storage failures (private mode / strict browser settings)
     }
   }, [autoPrintEnabled]);
+
+  useEffect(() => {
+    try {
+      setPaidOutStaffName(window.localStorage.getItem(POS_PAID_OUT_STAFF_NAME_KEY) || "");
+    } catch {
+      setPaidOutStaffName("");
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(POS_PAID_OUT_STAFF_NAME_KEY, paidOutStaffName);
+    } catch {
+      // Ignore storage failures (private mode / strict browser settings)
+    }
+  }, [paidOutStaffName]);
+
+  useEffect(() => {
+    if (showCheckout && !wasCheckoutOpenRef.current) {
+      const cartSignature = Object.entries(cart)
+        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+        .map(([key, qty]) => `${key}:${qty}`)
+        .join("|");
+      const customerReady = Boolean(
+        linkedCustomerId || customerName.trim() || customerPhone.trim() || customerEmail.trim()
+      );
+      const shouldJumpToPayment =
+        Boolean(lastCheckoutCartSignature) &&
+        cartSignature === lastCheckoutCartSignature &&
+        customerReady;
+
+      setCheckoutTab(shouldJumpToPayment ? "payment" : "items");
+      setLastCheckoutCartSignature(cartSignature);
+    }
+    wasCheckoutOpenRef.current = showCheckout;
+  }, [
+    showCheckout,
+    cart,
+    linkedCustomerId,
+    customerName,
+    customerPhone,
+    customerEmail,
+    lastCheckoutCartSignature,
+  ]);
 
   function addToCart(
     productId: string,
@@ -463,6 +570,16 @@ export default function POSPage() {
     : 0;
   const appliedRedeemPoints =
     candidateRedeemPoints >= LOYALTY_REDEEM_MIN_POINTS ? candidateRedeemPoints : 0;
+  let redeemStatusMessage: string | null = null;
+  if (linkedCustomerId) {
+    if (redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS) {
+      redeemStatusMessage = `Subtotal terlalu rendah untuk min redeem ${LOYALTY_REDEEM_MIN_POINTS} points (cap 30% sekarang ${redeemEligibleMaxPoints} pts).`;
+    } else if (requestedRedeemPoints > 0 && requestedRedeemPoints < LOYALTY_REDEEM_MIN_POINTS) {
+      redeemStatusMessage = `Minimum redeem ialah ${LOYALTY_REDEEM_MIN_POINTS} points.`;
+    } else if (requestedRedeemPoints > redeemEligibleMaxPoints) {
+      redeemStatusMessage = `Max redeem sekarang ${redeemEligibleMaxPoints} points (30% cap).`;
+    }
+  }
   const redeemAmount = appliedRedeemPoints * LOYALTY_REDEEM_RM_PER_POINT;
   const total = Math.max(totalAfterDiscount - redeemAmount, 0);
   const balance = paymentMethod === "cash" ? cashNum - total : 0;
@@ -497,9 +614,11 @@ export default function POSPage() {
 
       setCurrentShift(data.shift || null);
       setCashSalesLive(Number(data.cash_sales || 0));
+      setPaidOutTotalLive(Number(data.paid_out_total || 0));
       setExpectedCashLive(Number(data.expected_cash_live || 0));
       setOpeningCash("");
       setOpeningNote("");
+      setRecentPaidOuts([]);
       setShowOpenShiftModal(false);
     } finally {
       setShiftSubmitting(false);
@@ -541,13 +660,83 @@ export default function POSPage() {
 
       setCurrentShift(null);
       setCashSalesLive(0);
+      setPaidOutTotalLive(0);
       setExpectedCashLive(0);
+      setRecentPaidOuts([]);
       setCountedCash("");
       setClosingNote("");
       setShowCloseShiftModal(false);
       setShowOpenShiftModal(true);
     } finally {
       setShiftSubmitting(false);
+    }
+  }
+
+  async function submitPaidOut() {
+    if (!currentShift) {
+      alert("Open shift first");
+      setShowOpenShiftModal(true);
+      return;
+    }
+
+    const amount = Number(paidOutAmount || 0);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Paid out amount tak valid");
+      return;
+    }
+    if (!paidOutReason.trim()) {
+      alert("Reason is required");
+      return;
+    }
+    if (!paidOutStaffName.trim()) {
+      alert("Staff name is required");
+      return;
+    }
+    if (paidOutInvoiceUrl.trim() && !/^https?:\/\//i.test(paidOutInvoiceUrl.trim())) {
+      alert("Invoice URL mesti bermula dengan http:// atau https://");
+      return;
+    }
+
+    setPaidOutSubmitting(true);
+    setShiftError(null);
+    try {
+      const res = await fetch("/api/pos/paid-outs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          register_id: registerId,
+          amount,
+          staff_name: paidOutStaffName.trim(),
+          reason: paidOutReason,
+          vendor_name: paidOutVendor,
+          invoice_number: paidOutInvoiceNumber,
+          invoice_url: paidOutInvoiceUrl,
+          notes: paidOutNotes,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data?.error || "Failed to submit paid out");
+        return;
+      }
+
+      setPaidOutAmount("");
+      setPaidOutReason("");
+      setPaidOutVendor("");
+      setPaidOutInvoiceNumber("");
+      setPaidOutInvoiceUrl("");
+      setPaidOutNotes("");
+      setShowPaidOutModal(false);
+
+      setCashSalesLive(Number(data.cash_sales || cashSalesLive));
+      setPaidOutTotalLive(Number(data.paid_out_total || paidOutTotalLive));
+      setExpectedCashLive(Number(data.expected_cash_live || expectedCashLive));
+
+      await loadPaidOuts();
+      alert("Paid out saved.");
+    } finally {
+      setPaidOutSubmitting(false);
     }
   }
 
@@ -611,10 +800,7 @@ export default function POSPage() {
       return;
     }
 
-    if (!customerName.trim()) {
-      alert("Customer name required");
-      return;
-    }
+    const finalCustomerName = customerName.trim() || "Walk-in";
 
     if (consentWhatsapp && !customerPhone.trim()) {
       alert("Phone number required for WhatsApp consent");
@@ -647,10 +833,10 @@ export default function POSPage() {
         body: JSON.stringify({
           items,
           register_id: registerId,
-          customer_name: customerName,
+          customer_name: finalCustomerName,
           customer: {
             id: linkedCustomerId || undefined,
-            name: customerName,
+            name: finalCustomerName,
             phone: customerPhone,
             email: customerEmail,
             consent_whatsapp: consentWhatsapp,
@@ -678,7 +864,7 @@ export default function POSPage() {
       const nextReceiptData: ReceiptData = {
         order_id: String(data.order_id || ""),
         receipt_number: data.receipt_number,
-        customerName,
+        customerName: finalCustomerName,
         items,
         subtotal,
         discount: discountAmount + redeemAmount,
@@ -771,7 +957,7 @@ export default function POSPage() {
               {shiftLoading
                 ? "Checking shift..."
                 : currentShift
-                  ? `Shift Open · Cash RM ${expectedCashLive.toFixed(2)}`
+                  ? `Shift Open · Cash RM ${expectedCashLive.toFixed(2)} · Paid Out RM ${paidOutTotalLive.toFixed(2)}`
                   : "Shift Closed"}
             </div>
           </div>
@@ -802,17 +988,29 @@ export default function POSPage() {
                       Admin Panel
                     </a>
                     {currentShift ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCountedCash(expectedCashLive.toFixed(2));
-                          setShowCloseShiftModal(true);
-                          setShowMoreMenu(false);
-                        }}
-                        className="block w-full rounded-md px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1b1b1b]"
-                      >
-                        Close Shift
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowPaidOutModal(true);
+                            setShowMoreMenu(false);
+                          }}
+                          className="block w-full rounded-md px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1b1b1b]"
+                        >
+                          Paid Out
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCountedCash(expectedCashLive.toFixed(2));
+                            setShowCloseShiftModal(true);
+                            setShowMoreMenu(false);
+                          }}
+                          className="block w-full rounded-md px-3 py-2 text-left text-sm text-gray-200 hover:bg-[#1b1b1b]"
+                        >
+                          Close Shift
+                        </button>
+                      </>
                     ) : (
                       <button
                         type="button"
@@ -868,6 +1066,104 @@ export default function POSPage() {
               >
                 Yes, Sign out
               </a>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showPaidOutModal && currentShift ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-gray-900">Paid Out (Cash Out)</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Rekod duit keluar untuk belian segera semasa shift.
+            </p>
+
+            <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              <div>Cash Sales: RM {cashSalesLive.toFixed(2)}</div>
+              <div>Paid Out Total: RM {paidOutTotalLive.toFixed(2)}</div>
+              <div className="font-semibold">Cash Available: RM {expectedCashLive.toFixed(2)}</div>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              <input
+                type="number"
+                value={paidOutAmount}
+                onChange={e => setPaidOutAmount(e.target.value)}
+                placeholder="Amount (RM)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                value={paidOutReason}
+                onChange={e => setPaidOutReason(e.target.value)}
+                placeholder="Reason (contoh: beli susu)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                value={paidOutStaffName}
+                onChange={e => setPaidOutStaffName(e.target.value)}
+                placeholder="Staff name (required)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                value={paidOutVendor}
+                onChange={e => setPaidOutVendor(e.target.value)}
+                placeholder="Vendor/shop name (optional)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                value={paidOutInvoiceNumber}
+                onChange={e => setPaidOutInvoiceNumber(e.target.value)}
+                placeholder="Invoice number (optional)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                value={paidOutInvoiceUrl}
+                onChange={e => setPaidOutInvoiceUrl(e.target.value)}
+                placeholder="Link bukti invoice (optional)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <textarea
+                value={paidOutNotes}
+                onChange={e => setPaidOutNotes(e.target.value)}
+                placeholder="Notes (optional)"
+                rows={2}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="mt-3 max-h-28 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-2">
+              <p className="mb-1 text-xs font-medium text-gray-600">Recent Paid Out</p>
+              {recentPaidOuts.length === 0 ? (
+                <p className="text-xs text-gray-500">No paid out yet.</p>
+              ) : (
+                <div className="space-y-1">
+                  {recentPaidOuts.slice(0, 4).map(entry => (
+                    <div key={entry.id} className="flex items-center justify-between text-xs">
+                      <span className="truncate pr-2 text-gray-700">{entry.reason}</span>
+                      <span className="font-medium text-red-600">RM {Number(entry.amount || 0).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPaidOutModal(false)}
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitPaidOut()}
+                disabled={paidOutSubmitting}
+                className="flex-1 rounded-lg bg-[#7F1D1D] px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {paidOutSubmitting ? "Saving..." : "Save Paid Out"}
+              </button>
             </div>
           </div>
         </div>
@@ -964,6 +1260,7 @@ export default function POSPage() {
             <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
               <div>Opening Cash: RM {Number(currentShift.opening_cash || 0).toFixed(2)}</div>
               <div>Cash Sales: RM {cashSalesLive.toFixed(2)}</div>
+              <div>Paid Out: RM {paidOutTotalLive.toFixed(2)}</div>
               <div className="font-semibold">Expected Cash: RM {expectedCashLive.toFixed(2)}</div>
             </div>
 
@@ -1231,275 +1528,347 @@ export default function POSPage() {
               </button>
             </div>
 
-            <div className="flex-1 space-y-2 overflow-y-auto p-3">
-              <div className="space-y-2">
-                {items.map(item => (
-                  <div key={item.id} className="flex items-center justify-between">
-                    <div className="min-w-0 pr-2">
-                      <div className="truncate text-[13px] leading-tight">{item.name}</div>
-                      {item.supports_sugar ? (
-                        <div className="mt-1">
-                          <select
-                            value={(item.sugar_level || DEFAULT_SUGAR_LEVEL) as SugarLevel}
-                            onChange={e => updateItemSugar(item, e.target.value as SugarLevel)}
-                            className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700"
-                          >
-                            {SUGAR_LEVEL_OPTIONS.map(option => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : null}
-                      {item.addon_names?.length > 0 ? (
-                        <div className="truncate text-xs text-[#7F1D1D]">
-                          Addon: {item.addon_names.join(", ")}
-                        </div>
-                      ) : null}
-                      <div className="text-xs text-gray-500">RM {item.price}</div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="h-6 w-6 rounded bg-gray-200 text-sm"
-                      >
-                        -
-                      </button>
-                      <span className="text-sm">{item.qty}</span>
-                      <button
-                        onClick={() =>
-                          addToCart(
-                            item.product_id,
-                            item.variant_id || undefined,
-                            item.addon_ids,
-                            item.sugar_level,
-                            undefined,
-                            true
-                          )
-                        }
-                        className="h-6 w-6 rounded bg-gray-200 text-sm"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-2 border-t pt-2">
-                <input
-                  placeholder="Customer Name"
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  className="w-full rounded-lg border p-2.5"
-                />
-
-                <div className="flex gap-2">
-                  <input
-                    placeholder="Phone (optional)"
-                    value={customerPhone}
-                    onChange={e => {
-                      setCustomerPhone(e.target.value);
-                      setLinkedCustomerId(null);
-                      setMemberPoints(0);
-                      setMemberExpiringPoints(0);
-                      setRedeemPointsInput("");
-                      setMemberLookupMessage(null);
-                    }}
-                    className="w-full rounded-lg border p-2.5"
-                  />
+            <div className="border-b px-3 pb-2 pt-1">
+              <div className="grid grid-cols-4 gap-1 rounded-lg bg-gray-100 p-1">
+                {CHECKOUT_TABS.map(tab => (
                   <button
+                    key={tab.key}
                     type="button"
-                    onClick={() => void lookupMemberByPhone()}
-                    disabled={memberLookupLoading}
-                    className="whitespace-nowrap rounded-lg border border-gray-300 px-3 text-sm"
-                  >
-                    {memberLookupLoading ? "Finding..." : "Find"}
-                  </button>
-                </div>
-
-                {memberLookupMessage ? (
-                  <div
-                    className={`text-xs ${
-                      memberLookupTone === "success"
-                        ? "text-green-600"
-                        : memberLookupTone === "warn"
-                          ? "text-amber-600"
-                          : "text-gray-500"
+                    onClick={() => setCheckoutTab(tab.key)}
+                    className={`rounded-md px-2 py-1.5 text-xs font-medium ${
+                      checkoutTab === tab.key ? "bg-[#7F1D1D] text-white" : "text-gray-600"
                     }`}
                   >
-                    {memberLookupMessage}
-                  </div>
-                ) : null}
-
-                {linkedCustomerId ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                    <div>
-                      Available points (valid 1 year): <span className="font-semibold">{memberPoints}</span>
-                    </div>
-                    {memberExpiringPoints > 0 ? (
-                      <div className="mt-0.5 text-[11px] text-amber-700">
-                        Expiring in next 30 days: {memberExpiringPoints} pts
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <input
-                  placeholder="Email (optional)"
-                  value={customerEmail}
-                  onChange={e => setCustomerEmail(e.target.value)}
-                  className="w-full rounded-lg border p-2.5"
-                />
-
-                <div className="rounded-lg border border-gray-200 p-2.5 text-sm">
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Marketing Consent</label>
-                  <select
-                    value={getMarketingConsentMode()}
-                    onChange={e => applyMarketingConsentMode(e.target.value as MarketingConsentMode)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="none">None</option>
-                    <option value="whatsapp">WhatsApp Only</option>
-                    <option value="email">Email Only</option>
-                    <option value="both">WhatsApp + Email</option>
-                  </select>
-                </div>
-
-                <div>
-                  <button
-                    onClick={() => setShowDiscountControls(prev => !prev)}
-                    className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm"
-                  >
-                    <span>Discount</span>
-                    <span className="text-gray-500">
-                      {discountType === "percent" ? "%" : discountType === "fixed" ? "RM" : "None"}
-                    </span>
+                    {tab.label}
                   </button>
+                ))}
+              </div>
+            </div>
 
-                  {showDiscountControls ? (
-                    <div className="mt-2">
-                      <div className="flex gap-2">
-                        {DISCOUNT_TYPES.map(type => (
-                          <button
-                            key={type}
-                            onClick={() => setDiscountType(type)}
-                            className={`flex-1 rounded-lg py-1.5 text-sm ${
-                              discountType === type ? "bg-[#7F1D1D] text-white" : "bg-gray-200"
-                            }`}
-                          >
-                            {type === "percent" ? "%" : type === "fixed" ? "RM" : "None"}
-                          </button>
-                        ))}
+            <div className="flex-1 overflow-y-auto p-3">
+              {checkoutTab === "items" ? (
+                <div className="space-y-2">
+                  {items.map(item => (
+                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-2">
+                      <div className="min-w-0 pr-2">
+                        <div className="truncate text-[13px] leading-tight">{item.name}</div>
+                        {item.supports_sugar ? (
+                          <div className="mt-1">
+                            <select
+                              value={(item.sugar_level || DEFAULT_SUGAR_LEVEL) as SugarLevel}
+                              onChange={e => updateItemSugar(item, e.target.value as SugarLevel)}
+                              className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-700"
+                            >
+                              {SUGAR_LEVEL_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null}
+                        {item.addon_names?.length > 0 ? (
+                          <div className="truncate text-xs text-[#7F1D1D]">
+                            Addon: {item.addon_names.join(", ")}
+                          </div>
+                        ) : null}
+                        <div className="text-xs text-gray-500">RM {item.price}</div>
                       </div>
 
-                      {discountType !== "none" ? (
-                        <input
-                          type="number"
-                          placeholder="Enter value"
-                          value={discountValue}
-                          onChange={e => setDiscountValue(e.target.value)}
-                          className="mt-2 w-full rounded-lg border p-2"
-                        />
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => removeFromCart(item.id)}
+                          className="h-6 w-6 rounded bg-gray-200 text-sm"
+                        >
+                          -
+                        </button>
+                        <span className="text-sm">{item.qty}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            addToCart(
+                              item.product_id,
+                              item.variant_id || undefined,
+                              item.addon_ids,
+                              item.sugar_level,
+                              undefined,
+                              true
+                            )
+                          }
+                          className="h-6 w-6 rounded bg-gray-200 text-sm"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutTab("customer")}
+                    className="w-full rounded-lg border border-gray-300 py-2 text-sm text-gray-700"
+                  >
+                    Next: Customer
+                  </button>
+                </div>
+              ) : null}
+
+              {checkoutTab === "customer" ? (
+                <div className="space-y-2">
+                  <input
+                    placeholder="Customer Name (optional)"
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    className="w-full rounded-lg border p-2.5"
+                  />
+
+                  <div className="flex gap-2">
+                    <input
+                      placeholder="Phone (optional)"
+                      value={customerPhone}
+                      onChange={e => {
+                        setCustomerPhone(e.target.value);
+                        setLinkedCustomerId(null);
+                        setMemberPoints(0);
+                        setMemberExpiringPoints(0);
+                        setRedeemPointsInput("");
+                        setMemberLookupMessage(null);
+                      }}
+                      className="w-full rounded-lg border p-2.5"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void lookupMemberByPhone()}
+                      disabled={memberLookupLoading}
+                      className="whitespace-nowrap rounded-lg border border-gray-300 px-3 text-sm"
+                    >
+                      {memberLookupLoading ? "Finding..." : "Find"}
+                    </button>
+                  </div>
+
+                  {memberLookupMessage ? (
+                    <div
+                      className={`text-xs ${
+                        memberLookupTone === "success"
+                          ? "text-green-600"
+                          : memberLookupTone === "warn"
+                            ? "text-amber-600"
+                            : "text-gray-500"
+                      }`}
+                    >
+                      {memberLookupMessage}
+                    </div>
+                  ) : null}
+
+                  {linkedCustomerId ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                      <div>
+                        Available points (valid 1 year): <span className="font-semibold">{memberPoints}</span>
+                      </div>
+                      {memberExpiringPoints > 0 ? (
+                        <div className="mt-0.5 text-[11px] text-amber-700">
+                          Expiring in next 30 days: {memberExpiringPoints} pts
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
-                </div>
 
-                {linkedCustomerId ? (
-                  <div className="rounded-lg border border-gray-200 p-2.5">
-                    <div className="mb-1 text-sm">Redeem Points</div>
-                    <input
-                      type="number"
-                      min={0}
-                      max={memberPoints}
-                      placeholder={`Min ${LOYALTY_REDEEM_MIN_POINTS} • Max ${Math.min(
-                        memberPoints,
-                        maxRedeemByAmount
-                      )} pts`}
-                      value={redeemPointsInput}
-                      onChange={e => setRedeemPointsInput(e.target.value)}
-                      className="w-full rounded-lg border border-gray-300 p-2 text-sm"
-                    />
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setRedeemPointsInput(String(LOYALTY_REDEEM_MIN_POINTS))}
-                        disabled={redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-50"
-                      >
-                        Use 100
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRedeemPointsInput(String(redeemEligibleMaxPoints))}
-                        disabled={redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-50"
-                      >
-                        Use Max
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRedeemPointsInput("")}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-xs"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      100 pts = RM 5.00 | Max 30% order | Redeem: {appliedRedeemPoints} pts (RM{" "}
-                      {redeemAmount.toFixed(2)})
-                    </div>
-                    {redeemEligibleMaxPoints >= LOYALTY_REDEEM_MIN_POINTS && !redeemPointsInput ? (
-                      <div className="mt-1 text-xs text-amber-600">
-                        Member eligible. Tap `Use 100` or enter points to apply redeem.
+                  <input
+                    placeholder="Email (optional)"
+                    value={customerEmail}
+                    onChange={e => setCustomerEmail(e.target.value)}
+                    className="w-full rounded-lg border p-2.5"
+                  />
+
+                  <div className="rounded-lg border border-gray-200 p-2.5 text-sm">
+                    <label className="mb-1 block text-xs font-medium text-gray-600">Marketing Consent</label>
+                    <select
+                      value={getMarketingConsentMode()}
+                      onChange={e => applyMarketingConsentMode(e.target.value as MarketingConsentMode)}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      <option value="none">None</option>
+                      <option value="whatsapp">WhatsApp Only</option>
+                      <option value="email">Email Only</option>
+                      <option value="both">WhatsApp + Email</option>
+                    </select>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutTab("promo")}
+                    className="w-full rounded-lg border border-gray-300 py-2 text-sm text-gray-700"
+                  >
+                    Next: Promo
+                  </button>
+                </div>
+              ) : null}
+
+              {checkoutTab === "promo" ? (
+                <div className="space-y-2">
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDiscountControls(prev => !prev)}
+                      className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                    >
+                      <span>Discount</span>
+                      <span className="text-gray-500">
+                        {discountType === "percent" ? "%" : discountType === "fixed" ? "RM" : "None"}
+                      </span>
+                    </button>
+
+                    {showDiscountControls ? (
+                      <div className="mt-2">
+                        <div className="flex gap-2">
+                          {DISCOUNT_TYPES.map(type => (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => setDiscountType(type)}
+                              className={`flex-1 rounded-lg py-1.5 text-sm ${
+                                discountType === type ? "bg-[#7F1D1D] text-white" : "bg-gray-200"
+                              }`}
+                            >
+                              {type === "percent" ? "%" : type === "fixed" ? "RM" : "None"}
+                            </button>
+                          ))}
+                        </div>
+
+                        {discountType !== "none" ? (
+                          <input
+                            type="number"
+                            placeholder="Enter value"
+                            value={discountValue}
+                            onChange={e => setDiscountValue(e.target.value)}
+                            className="mt-2 w-full rounded-lg border p-2"
+                          />
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
-                ) : null}
 
-                <div>
-                  <div className="mb-1 text-sm">Payment</div>
-                  <div className="flex gap-2">
-                    {PAYMENT_METHODS.map(type => (
-                      <button
-                        key={type}
-                        onClick={() => setPaymentMethod(type)}
-                        className={`flex-1 rounded-lg py-1.5 text-sm font-medium ${
-                          paymentMethod === type ? "bg-[#7F1D1D] text-white" : "bg-gray-200"
-                        }`}
-                      >
-                        {type.toUpperCase()}
-                      </button>
-                    ))}
+                  {linkedCustomerId ? (
+                    <div className="rounded-lg border border-gray-200 p-2.5">
+                      <div className="mb-1 text-sm">Redeem Points</div>
+                      <input
+                        type="number"
+                        min={0}
+                        max={memberPoints}
+                        placeholder={`Min ${LOYALTY_REDEEM_MIN_POINTS} • Max ${Math.min(
+                          memberPoints,
+                          maxRedeemByAmount
+                        )} pts`}
+                        value={redeemPointsInput}
+                        onChange={e => setRedeemPointsInput(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 p-2 text-sm"
+                      />
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRedeemPointsInput(String(LOYALTY_REDEEM_MIN_POINTS))}
+                          disabled={redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS}
+                          className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-50"
+                        >
+                          Use 100
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRedeemPointsInput(String(redeemEligibleMaxPoints))}
+                          disabled={redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS}
+                          className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-50"
+                        >
+                          Use Max
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRedeemPointsInput("")}
+                          className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        100 pts = RM 5.00 | Max 30% order | Redeem: {appliedRedeemPoints} pts (RM{" "}
+                        {redeemAmount.toFixed(2)})
+                      </div>
+                      {redeemStatusMessage ? (
+                        <div className="mt-1 text-xs text-amber-600">{redeemStatusMessage}</div>
+                      ) : null}
+                      {redeemEligibleMaxPoints >= LOYALTY_REDEEM_MIN_POINTS && !redeemPointsInput ? (
+                        <div className="mt-1 text-xs text-amber-600">
+                          Member eligible. Tap `Use 100` or enter points to apply redeem.
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-gray-300 p-2 text-xs text-gray-500">
+                      Link customer in tab `Customer` to use loyalty redeem.
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutTab("payment")}
+                    className="w-full rounded-lg border border-gray-300 py-2 text-sm text-gray-700"
+                  >
+                    Next: Payment
+                  </button>
+                </div>
+              ) : null}
+
+              {checkoutTab === "payment" ? (
+                <div className="space-y-2">
+                  <div>
+                    <div className="mb-1 text-sm">Payment</div>
+                    <div className="flex gap-2">
+                      {PAYMENT_METHODS.map(type => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setPaymentMethod(type)}
+                          className={`flex-1 rounded-lg py-1.5 text-sm font-medium ${
+                            paymentMethod === type ? "bg-[#7F1D1D] text-white" : "bg-gray-200"
+                          }`}
+                        >
+                          {type.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+
+                    {paymentMethod === "cash" ? (
+                      <input
+                        type="number"
+                        placeholder="Cash Received"
+                        value={cashReceived}
+                        onChange={e => setCashReceived(e.target.value)}
+                        className="mt-2 w-full rounded-lg border p-2"
+                      />
+                    ) : null}
                   </div>
 
-                  {paymentMethod === "cash" ? (
+                  <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
+                    <span>Auto Print after Complete</span>
                     <input
-                      type="number"
-                      placeholder="Cash Received"
-                      value={cashReceived}
-                      onChange={e => setCashReceived(e.target.value)}
-                      className="mt-2 w-full rounded-lg border p-2"
+                      type="checkbox"
+                      checked={autoPrintEnabled}
+                      onChange={e => setAutoPrintEnabled(e.target.checked)}
+                      className="h-4 w-4 accent-[#7F1D1D]"
                     />
-                  ) : null}
-                </div>
+                  </label>
+                  <div className="-mt-1 text-xs text-gray-500">
+                    Opens browser print dialog automatically after successful payment.
+                  </div>
 
-                <label className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2.5 text-sm">
-                  <span>Auto Print after Complete</span>
-                  <input
-                    type="checkbox"
-                    checked={autoPrintEnabled}
-                    onChange={e => setAutoPrintEnabled(e.target.checked)}
-                    className="h-4 w-4 accent-[#7F1D1D]"
-                  />
-                </label>
-                <div className="-mt-1 text-xs text-gray-500">
-                  Opens browser print dialog automatically after successful payment.
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutTab("items")}
+                    className="w-full rounded-lg border border-gray-300 py-2 text-sm text-gray-700"
+                  >
+                    Back to Items
+                  </button>
                 </div>
-              </div>
+              ) : null}
             </div>
 
             <div className="space-y-2 border-t bg-white p-3">

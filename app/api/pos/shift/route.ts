@@ -22,6 +22,10 @@ type OrderCashRow = {
   total: number | null;
 };
 
+type PaidOutRow = {
+  amount: number | null;
+};
+
 const DEFAULT_REGISTER_ID = "main";
 
 async function getOpenShift(supabase: ReturnType<typeof createSupabaseAdminClient>, registerId: string) {
@@ -55,6 +59,29 @@ async function getCashSalesSince(
   return ((data || []) as OrderCashRow[]).reduce((sum, row) => sum + Number(row.total || 0), 0);
 }
 
+function isMissingPaidOutTable(message: string | null | undefined) {
+  const m = String(message || "").toLowerCase();
+  return m.includes("paid_outs") && (m.includes("does not exist") || m.includes("schema cache"));
+}
+
+async function getPaidOutForShift(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  shiftId: string
+) {
+  const { data, error } = await supabase
+    .from("paid_outs")
+    .select("amount")
+    .eq("shift_id", shiftId);
+
+  if (error) {
+    if (isMissingPaidOutTable(error.message)) return { total: 0, missingTable: true };
+    throw error;
+  }
+
+  const total = ((data || []) as PaidOutRow[]).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  return { total, missingTable: false };
+}
+
 export async function GET(req: Request) {
   const auth = await requireStaffApi();
   if (!auth.ok) return auth.response;
@@ -70,19 +97,23 @@ export async function GET(req: Request) {
       return NextResponse.json({
         shift: null,
         cash_sales: 0,
+        paid_out_total: 0,
         expected_cash_live: 0,
         register_id: registerId,
       });
     }
 
     const cashSales = await getCashSalesSince(supabase, shift.opened_at);
-    const expectedCashLive = Number(shift.opening_cash || 0) + cashSales;
+    const paidOutResult = await getPaidOutForShift(supabase, shift.id);
+    const expectedCashLive = Number(shift.opening_cash || 0) + cashSales - paidOutResult.total;
 
     return NextResponse.json({
       shift,
       cash_sales: cashSales,
+      paid_out_total: paidOutResult.total,
       expected_cash_live: expectedCashLive,
       register_id: registerId,
+      paid_out_schema_ready: !paidOutResult.missingTable,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load shift";
@@ -142,6 +173,7 @@ export async function POST(req: Request) {
         success: true,
         shift: created as ShiftRow,
         cash_sales: 0,
+        paid_out_total: 0,
         expected_cash_live: Number((created as ShiftRow).opening_cash || 0),
       });
     }
@@ -160,7 +192,8 @@ export async function POST(req: Request) {
       }
 
       const cashSales = await getCashSalesSince(supabase, currentOpen.opened_at);
-      const expectedCash = Number(currentOpen.opening_cash || 0) + cashSales;
+      const paidOutResult = await getPaidOutForShift(supabase, currentOpen.id);
+      const expectedCash = Number(currentOpen.opening_cash || 0) + cashSales - paidOutResult.total;
       const overShort = countedCash - expectedCash;
 
       const { data: closed, error: closeError } = await supabase
