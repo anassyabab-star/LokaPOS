@@ -948,7 +948,7 @@ export default function POSPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 pb-28 text-gray-900">
+    <div className="pos-surface min-h-screen bg-gray-100 pb-28 text-gray-900">
       <div className="sticky top-0 z-10 bg-black p-4 text-white">
         <div className="flex items-center justify-between">
           <div>

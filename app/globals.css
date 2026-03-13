@@ -232,3 +232,18 @@ a {
 :root[data-theme="light"] .theme-scope a[aria-disabled="true"] {
   opacity: 0.78 !important;
 }
+
+/* POS screen stays light-styled even when global theme is dark. */
+.pos-surface input,
+.pos-surface select,
+.pos-surface textarea {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #111827;
+  border-color: #d1d5db;
+}
+
+.pos-surface input::placeholder,
+.pos-surface textarea::placeholder {
+  color: #6b7280;
+}
