@@ -17,7 +17,7 @@ export async function PUT(req: Request, { params }: RouteContext) {
   const { id } = await params;
   const body = await req.json();
 
-  const { name, price, cost, stock, category_id, is_active } = body;
+  const { name, price, cost, stock, category_id, image_url, is_active } = body;
 
   if (stock != null && stock < 0) {
     return NextResponse.json(
@@ -30,14 +30,22 @@ export async function PUT(req: Request, { params }: RouteContext) {
   if (name !== undefined) updateData.name = name;
   if (price !== undefined) updateData.price = price;
   if (cost !== undefined) updateData.cost = cost;
+  if (image_url !== undefined) updateData.image_url = image_url || null;
   if (stock !== undefined) updateData.stock = stock;
   if (category_id !== undefined) updateData.category_id = category_id;
   if (is_active !== undefined) updateData.is_active = is_active;
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("products")
     .update(updateData)
     .eq("id", id);
+
+  if (error?.code === "42703" && "image_url" in updateData) {
+    const fallbackData = { ...updateData };
+    delete fallbackData.image_url;
+    const fallback = await supabase.from("products").update(fallbackData).eq("id", id);
+    error = fallback.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -7,6 +7,7 @@ type ProductRow = {
   id: string;
   name: string;
   price: number;
+  image_url?: string | null;
   category_id: string | null;
   categories: { id: string; name: string } | Array<{ id: string; name: string }> | null;
   product_variants: Array<{ id: string; name: string; price_adjustment: number }> | null;
@@ -27,32 +28,74 @@ export async function GET() {
 
   try {
     const supabase = createSupabaseAdminClient();
-    const { data, error } = await supabase
+    let data: ProductRow[] | null = null;
+    let error: { message: string; code?: string } | null = null;
+
+    const withImage = await supabase
       .from("products")
       .select(
         `
-        id,
-        name,
-        price,
-        category_id,
-        categories (
-          id,
-          name
-        ),
-        product_variants (
           id,
           name,
-          price_adjustment
-        ),
-        product_addons (
-          id,
-          name,
-          price
-        )
-      `
+          price,
+          image_url,
+          category_id,
+          categories (
+            id,
+            name
+          ),
+          product_variants (
+            id,
+            name,
+            price_adjustment
+          ),
+          product_addons (
+            id,
+            name,
+            price
+          )
+        `
       )
       .or("is_active.is.true,is_active.is.null")
       .order("name", { ascending: true });
+    data = (withImage.data || null) as ProductRow[] | null;
+    error = withImage.error
+      ? { message: withImage.error.message, code: withImage.error.code }
+      : null;
+
+    // Backward-compatible fallback for older databases that don't have products.image_url yet.
+    if (error?.code === "42703") {
+      const fallback = await supabase
+        .from("products")
+        .select(
+          `
+            id,
+            name,
+            price,
+            category_id,
+            categories (
+              id,
+              name
+            ),
+            product_variants (
+              id,
+              name,
+              price_adjustment
+            ),
+            product_addons (
+              id,
+              name,
+              price
+            )
+          `
+        )
+        .or("is_active.is.true,is_active.is.null")
+        .order("name", { ascending: true });
+      data = (fallback.data || null) as ProductRow[] | null;
+      error = fallback.error
+        ? { message: fallback.error.message, code: fallback.error.code }
+        : null;
+    }
 
     if (error) {
       return customerApiError(500, error.message, "INTERNAL_ERROR");
@@ -71,6 +114,7 @@ export async function GET() {
         id: row.id,
         name: row.name,
         price: Number(row.price || 0),
+        image_url: row.image_url || null,
         category: category?.name || null,
         variants: (row.product_variants || []).map(variant => ({
           id: variant.id,
@@ -95,4 +139,3 @@ export async function GET() {
     return customerApiError(500, message, "INTERNAL_ERROR");
   }
 }
-

@@ -20,6 +20,7 @@ type Product = {
   name: string;
   price: number;
   cost?: number;
+  image_url?: string | null;
   stock: number;
   category?: string;
   category_id?: string | null;
@@ -43,6 +44,7 @@ type ProductEditDraft = {
   category_id: string;
   price: string;
   cost: string;
+  image_url: string;
   stock: string;
 };
 
@@ -63,6 +65,10 @@ export default function ProductsPage() {
   const [newCategoryId, setNewCategoryId] = useState("");
   const [newPrice, setNewPrice] = useState("");
   const [newCost, setNewCost] = useState("");
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [newImageFileName, setNewImageFileName] = useState("");
+  const [uploadingNewImage, setUploadingNewImage] = useState(false);
   const [newStock, setNewStock] = useState("");
 
   // Initial Variant/Addons when adding new product
@@ -77,6 +83,8 @@ export default function ProductsPage() {
   const [variantDrafts, setVariantDrafts] = useState<Record<string, DraftValue>>({});
   const [addonDrafts, setAddonDrafts] = useState<Record<string, DraftValue>>({});
   const [productDrafts, setProductDrafts] = useState<Record<string, ProductEditDraft>>({});
+  const [productImageFiles, setProductImageFiles] = useState<Record<string, File | null>>({});
+  const [uploadingProductImageId, setUploadingProductImageId] = useState<string | null>(null);
   const [savingProductId, setSavingProductId] = useState<string | null>(null);
 
   // Edit variant/addon state
@@ -117,6 +125,69 @@ export default function ProductsPage() {
     setCategories(Array.isArray(data) ? data : []);
   }
 
+  async function uploadProductImage(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+
+    const res = await fetch("/api/products/upload-image", {
+      method: "POST",
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.file_url) {
+      throw new Error(data?.error || "Failed to upload image");
+    }
+    return {
+      fileUrl: String(data.file_url),
+      fileName: String(data.file_name || file.name),
+    };
+  }
+
+  async function uploadNewProductImage() {
+    if (!newImageFile) {
+      alert("Choose an image first");
+      return;
+    }
+
+    setUploadingNewImage(true);
+    try {
+      const uploaded = await uploadProductImage(newImageFile);
+      setNewImageUrl(uploaded.fileUrl);
+      setNewImageFileName(uploaded.fileName);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to upload image");
+    } finally {
+      setUploadingNewImage(false);
+    }
+  }
+
+  async function uploadEditProductImage(productId: string) {
+    const file = productImageFiles[productId];
+    if (!file) {
+      alert("Choose an image first");
+      return;
+    }
+
+    setUploadingProductImageId(productId);
+    try {
+      const uploaded = await uploadProductImage(file);
+      const sourceProduct = products.find(p => p.id === productId);
+      if (!sourceProduct) return;
+      setProductDrafts(prev => ({
+        ...prev,
+        [productId]: {
+          ...ensureDraft(prev, productId, initProductDraft(sourceProduct)),
+          image_url: uploaded.fileUrl,
+        },
+      }));
+      setProductImageFiles(prev => ({ ...prev, [productId]: null }));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to upload image");
+    } finally {
+      setUploadingProductImageId(null);
+    }
+  }
+
   function ensureDraft<T>(target: Record<string, T>, key: string, fallback: T): T {
     return target[key] ?? fallback;
   }
@@ -127,6 +198,7 @@ export default function ProductsPage() {
       category_id: product.category_id || "",
       price: String(product.price ?? ""),
       cost: String(product.cost ?? 0),
+      image_url: product.image_url || "",
       stock: String(product.stock ?? 0),
     };
   }
@@ -184,6 +256,7 @@ export default function ProductsPage() {
         category_id: newCategoryId,
         price: Number(newPrice),
         cost: Number(newCost || 0),
+        image_url: newImageUrl.trim() || null,
         stock: Number(newStock || 0),
       }),
     });
@@ -224,6 +297,9 @@ export default function ProductsPage() {
     setNewCategoryId("");
     setNewPrice("");
     setNewCost("");
+    setNewImageUrl("");
+    setNewImageFile(null);
+    setNewImageFileName("");
     setNewStock("");
     setInitialVariants([]);
     setInitialAddons([]);
@@ -392,6 +468,7 @@ export default function ProductsPage() {
         category_id: draft.category_id,
         price: Number(draft.price || 0),
         cost: Number(draft.cost || 0),
+        image_url: draft.image_url.trim() || null,
         stock: Number(draft.stock || 0),
       }),
     });
@@ -432,7 +509,7 @@ export default function ProductsPage() {
 
       {showCreateForm ? (
         <div className={`${panelClass} mb-6 space-y-4`}>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <input
             placeholder="Product name"
             value={newName}
@@ -472,6 +549,46 @@ export default function ProductsPage() {
             onChange={e => setNewStock(e.target.value)}
             className={fieldClass}
           />
+          <input
+            placeholder="Image URL (optional)"
+            value={newImageUrl}
+            onChange={e => setNewImageUrl(e.target.value)}
+            className={fieldClass}
+          />
+        </div>
+
+        <div className="rounded-lg border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)] p-3">
+          <div className="mb-2 text-sm font-semibold">Product Image (optional)</div>
+          <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+              onChange={e => setNewImageFile(e.target.files?.[0] || null)}
+              className={fieldClass}
+            />
+            <button
+              type="button"
+              onClick={() => void uploadNewProductImage()}
+              disabled={!newImageFile || uploadingNewImage}
+              className="rounded bg-[#7F1D1D] px-4 py-2 text-[#ffffff] disabled:opacity-60"
+            >
+              {uploadingNewImage ? "Uploading..." : "Upload Image"}
+            </button>
+          </div>
+          {newImageFileName ? (
+            <p className="mt-2 text-xs text-green-400">Uploaded: {newImageFileName}</p>
+          ) : null}
+          {newImageUrl ? (
+            <div className="mt-2 flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={newImageUrl}
+                alt="New product preview"
+                className="h-12 w-12 rounded-md border border-[color:var(--app-border)] object-cover"
+              />
+              <p className="truncate text-xs text-[color:var(--app-muted)]">{newImageUrl}</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-[color:var(--app-border)] pt-4">
@@ -566,27 +683,44 @@ export default function ProductsPage() {
                   : "border-[color:var(--app-border)]"
               }`}
             >
-              <div className="flex justify-between items-center">
-                <div>
-                  <div className="text-lg font-semibold">
-                    {product.name}{" "}
-                    {isRestockTarget ? (
-                      <span className="mr-2 rounded bg-[#7F1D1D]/25 px-2 py-0.5 text-xs text-[#fda4a4]">
-                        Restock Target
-                      </span>
-                    ) : null}
-                    <span
-                      className={`text-sm ${
-                        product.status === "enabled"
-                          ? "text-green-400"
-                          : "text-red-400"
-                      }`}
-                    >
-                      ({product.status || "disabled"})
-                    </span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)]">
+                    {product.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-[color:var(--app-muted)]">
+                        {String(product.name || "?").charAt(0).toUpperCase()}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm text-gray-400">
-                    Category: {product.category || "-"} | RM {product.price} | Stock: {product.stock}
+
+                  <div>
+                    <div className="text-lg font-semibold">
+                      {product.name}{" "}
+                      {isRestockTarget ? (
+                        <span className="mr-2 rounded bg-[#7F1D1D]/25 px-2 py-0.5 text-xs text-[#fda4a4]">
+                          Restock Target
+                        </span>
+                      ) : null}
+                      <span
+                        className={`text-sm ${
+                          product.status === "enabled"
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }`}
+                      >
+                        ({product.status || "disabled"})
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      Category: {product.category || "-"} | RM {product.price} | Stock: {product.stock}
+                    </div>
                   </div>
                 </div>
 
@@ -680,6 +814,55 @@ export default function ProductsPage() {
                         placeholder="Stock"
                         className={fieldClass}
                       />
+                      <input
+                        value={productDraft.image_url}
+                        onChange={e =>
+                          setProductDrafts(prev => ({
+                            ...prev,
+                            [product.id]: {
+                              ...ensureDraft(prev, product.id, initProductDraft(product)),
+                              image_url: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="Image URL (optional)"
+                        className={fieldClass}
+                      />
+                    </div>
+                    <div className="mt-2 rounded-lg border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)] p-3">
+                      <div className="mb-2 text-sm font-semibold">Upload Product Image</div>
+                      <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+                          onChange={e =>
+                            setProductImageFiles(prev => ({
+                              ...prev,
+                              [product.id]: e.target.files?.[0] || null,
+                            }))
+                          }
+                          className={fieldClass}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void uploadEditProductImage(product.id)}
+                          disabled={!productImageFiles[product.id] || uploadingProductImageId === product.id}
+                          className="rounded bg-[#7F1D1D] px-4 py-2 text-[#ffffff] disabled:opacity-60"
+                        >
+                          {uploadingProductImageId === product.id ? "Uploading..." : "Upload Image"}
+                        </button>
+                      </div>
+                      {productDraft.image_url ? (
+                        <div className="mt-2 flex items-center gap-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={productDraft.image_url}
+                            alt={`${productDraft.name || product.name} preview`}
+                            className="h-12 w-12 rounded-md border border-[color:var(--app-border)] object-cover"
+                          />
+                          <p className="truncate text-xs text-[color:var(--app-muted)]">{productDraft.image_url}</p>
+                        </div>
+                      ) : null}
                     </div>
                     <div className="mt-2">
                       <button

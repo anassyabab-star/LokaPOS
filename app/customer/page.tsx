@@ -25,6 +25,7 @@ type CatalogProduct = {
   id: string;
   name: string;
   price: number;
+  image_url: string | null;
   category: string | null;
   variants: CatalogVariant[];
   addons: CatalogAddon[];
@@ -154,6 +155,11 @@ function formatPayment(method: string | null | undefined) {
   return raw.toUpperCase();
 }
 
+function productInitial(name: string) {
+  const trimmed = name.trim();
+  return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
+}
+
 function readErrorMessage(payload: unknown, fallback: string) {
   if (!payload) return fallback;
   if (typeof payload === "string") return payload.trim() || fallback;
@@ -194,6 +200,7 @@ export default function CustomerOrderAppPage() {
   const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [menuSearch, setMenuSearch] = useState("");
 
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [loyalty, setLoyalty] = useState<LoyaltyResponse | null>(null);
@@ -257,9 +264,19 @@ export default function CustomerOrderAppPage() {
   const estimatedTotal = Math.max(0, cartSubtotal - estimatedRedeemAmount);
 
   const filteredProducts = useMemo(() => {
-    if (categoryFilter === "All") return products;
-    return products.filter(product => (product.category || "Uncategorized") === categoryFilter);
-  }, [products, categoryFilter]);
+    const byCategory =
+      categoryFilter === "All"
+        ? products
+        : products.filter(product => (product.category || "Uncategorized") === categoryFilter);
+
+    const keyword = menuSearch.trim().toLowerCase();
+    if (!keyword) return byCategory;
+
+    return byCategory.filter(product => {
+      const haystack = `${product.name} ${product.category || ""}`.toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [products, categoryFilter, menuSearch]);
 
   const loadCatalog = useCallback(async () => {
     const res = await fetch("/api/customer/catalog", { cache: "no-store" });
@@ -496,7 +513,15 @@ export default function CustomerOrderAppPage() {
   }
 
   async function openOrderDetail(orderId: string) {
+    if (selectedOrderId === orderId) {
+      setSelectedOrderId(null);
+      setSelectedOrder(null);
+      setOrderLoading(false);
+      return;
+    }
+
     setSelectedOrderId(orderId);
+    setSelectedOrder(null);
     setOrderLoading(true);
     try {
       const res = await fetch(`/api/customer/orders/${orderId}`, { cache: "no-store" });
@@ -599,6 +624,19 @@ export default function CustomerOrderAppPage() {
 
         {activeTab === "menu" ? (
           <section className="space-y-4">
+            <div className="rounded-xl border border-gray-800 bg-[#111] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Order Menu</p>
+                <p className="text-xs text-gray-400">{filteredProducts.length} items</p>
+              </div>
+              <input
+                value={menuSearch}
+                onChange={event => setMenuSearch(event.target.value)}
+                placeholder="Search drink or food"
+                className="mt-2 w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
+              />
+            </div>
+
             <div className="flex gap-2 overflow-x-auto pb-1">
               <button
                 type="button"
@@ -627,25 +665,62 @@ export default function CustomerOrderAppPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
               {filteredProducts.map(product => (
                 <article
                   key={product.id}
-                  className="rounded-xl border border-gray-800 bg-[#111] p-4"
+                  className="overflow-hidden rounded-xl border border-gray-800 bg-[#111]"
                 >
-                  <p className="text-base font-semibold text-white">{product.name}</p>
-                  <p className="mt-1 text-sm text-gray-400">{product.category || "Uncategorized"}</p>
-                  <p className="mt-3 text-lg font-semibold text-gray-100">{formatMoney(product.price)}</p>
-                  <button
-                    type="button"
-                    onClick={() => openConfigurator(product)}
-                    className="mt-3 w-full rounded-lg bg-[#7F1D1D] px-3 py-2 text-sm font-medium text-white"
-                  >
-                    Add
-                  </button>
+                  <div className="relative aspect-[4/3] w-full overflow-hidden border-b border-gray-800 bg-gradient-to-br from-[#1f2937] to-[#111827]">
+                    {product.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="h-full w-full object-cover"
+                        onError={event => {
+                          event.currentTarget.style.display = "none";
+                        }}
+                      />
+                    ) : null}
+                    <span className="absolute left-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-black/45 text-xs font-semibold text-white">
+                      {productInitial(product.name)}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 p-3">
+                    <div>
+                      <p className="truncate text-sm font-semibold text-white">{product.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-gray-400">
+                        {product.category || "Uncategorized"}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold text-gray-100">{formatMoney(product.price)}</p>
+                        <p className="text-[11px] text-gray-500">
+                          {product.variants.length} variant • {product.addons.length} addon
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openConfigurator(product)}
+                        className="rounded-md bg-[#7F1D1D] px-3 py-1.5 text-xs font-semibold text-white"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
                 </article>
               ))}
             </div>
+
+            {filteredProducts.length === 0 ? (
+              <div className="rounded-xl border border-gray-800 bg-[#111] p-4 text-sm text-gray-400">
+                No product found for current filter.
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -845,58 +920,44 @@ export default function CustomerOrderAppPage() {
                       onClick={() => void openOrderDetail(order.id)}
                       className="rounded-md border border-gray-700 px-2 py-1 text-gray-200"
                     >
-                      View
+                      {selectedOrderId === order.id ? "Hide" : "View"}
                     </button>
                   </div>
+
+                  {selectedOrderId === order.id ? (
+                    <div className="mt-3 rounded-lg border border-gray-800 bg-black p-3">
+                      {orderLoading ? (
+                        <p className="text-xs text-gray-400">Loading detail...</p>
+                      ) : selectedOrder ? (
+                        <div className="space-y-2">
+                          <p className="text-xs text-gray-400">
+                            #{selectedOrder.order_number} • {formatDateTime(selectedOrder.created_at)}
+                          </p>
+                          {selectedOrder.items.map(item => (
+                            <div
+                              key={item.id}
+                              className="flex items-start justify-between gap-2 rounded-md border border-gray-800 bg-[#0d0d0d] px-3 py-2"
+                            >
+                              <p className="text-xs text-gray-200">
+                                {item.name} x{item.qty}
+                              </p>
+                              <p className="text-xs text-gray-200">{formatMoney(item.line_total)}</p>
+                            </div>
+                          ))}
+                          <div className="border-t border-gray-800 pt-2 text-xs text-gray-300">
+                            <p>Subtotal: {formatMoney(selectedOrder.subtotal)}</p>
+                            <p>Discount: {formatMoney(selectedOrder.discount)}</p>
+                            <p className="font-semibold text-white">Total: {formatMoney(selectedOrder.total)}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400">Order detail unavailable.</p>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ))
             )}
-
-            {selectedOrderId ? (
-              <div className="rounded-xl border border-gray-800 bg-[#111] p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-white">Order Detail</h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedOrderId(null);
-                      setSelectedOrder(null);
-                    }}
-                    className="text-xs text-gray-400"
-                  >
-                    Close
-                  </button>
-                </div>
-
-                {orderLoading ? (
-                  <p className="text-xs text-gray-400">Loading detail...</p>
-                ) : selectedOrder ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-gray-400">
-                      #{selectedOrder.order_number} • {formatDateTime(selectedOrder.created_at)}
-                    </p>
-                    {selectedOrder.items.map(item => (
-                      <div
-                        key={item.id}
-                        className="flex items-start justify-between gap-2 rounded-md border border-gray-800 bg-black px-3 py-2"
-                      >
-                        <p className="text-xs text-gray-200">
-                          {item.name} x{item.qty}
-                        </p>
-                        <p className="text-xs text-gray-200">{formatMoney(item.line_total)}</p>
-                      </div>
-                    ))}
-                    <div className="border-t border-gray-800 pt-2 text-xs text-gray-300">
-                      <p>Subtotal: {formatMoney(selectedOrder.subtotal)}</p>
-                      <p>Discount: {formatMoney(selectedOrder.discount)}</p>
-                      <p className="font-semibold text-white">Total: {formatMoney(selectedOrder.total)}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400">Order detail unavailable.</p>
-                )}
-              </div>
-            ) : null}
           </section>
         ) : null}
 
@@ -1035,10 +1096,33 @@ export default function CustomerOrderAppPage() {
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
           <div className="w-full max-w-md rounded-t-2xl border border-gray-800 bg-[#111] p-4 sm:rounded-2xl">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">{configProduct.name}</h3>
+              <h3 className="text-base font-semibold text-white">Customize Item</h3>
               <button type="button" onClick={closeConfigurator} className="text-sm text-gray-400">
                 Close
               </button>
+            </div>
+
+            <div className="mb-3 flex items-center gap-3 rounded-lg border border-gray-800 bg-black p-2">
+              <div className="relative h-14 w-14 overflow-hidden rounded-md bg-gradient-to-br from-[#1f2937] to-[#111827]">
+                {configProduct.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={configProduct.image_url}
+                    alt={configProduct.name}
+                    className="h-full w-full object-cover"
+                    onError={event => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : null}
+                <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-white/90">
+                  {productInitial(configProduct.name)}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">{configProduct.name}</p>
+                <p className="text-xs text-gray-400">{formatMoney(configProduct.price)}</p>
+              </div>
             </div>
 
             {configProduct.variants.length > 0 ? (

@@ -11,6 +11,7 @@ type ProductQueryRow = {
   name: string;
   price: number;
   cost: number | null;
+  image_url: string | null;
   stock: number;
   is_active: boolean | null;
   category_id: string | null;
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
       name,
       price,
       cost,
+      image_url,
       stock,
       is_active,
       category_id,
@@ -63,7 +65,43 @@ export async function GET(req: Request) {
     query = query.or("is_active.is.true,is_active.is.null");
   }
 
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (error?.code === "42703") {
+    let fallbackQuery = supabase
+      .from("products")
+      .select(`
+        id,
+        name,
+        price,
+        cost,
+        stock,
+        is_active,
+        category_id,
+        categories (
+          id,
+          name
+        ),
+        product_variants (
+          id,
+          name,
+          price_adjustment
+        ),
+        product_addons (
+          id,
+          name,
+          price
+        )
+      `)
+      .order("created_at", { ascending: true });
+
+    if (!includeInactive) {
+      fallbackQuery = fallbackQuery.or("is_active.is.true,is_active.is.null");
+    }
+
+    const fallback = await fallbackQuery;
+    data = fallback.data as typeof data;
+    error = fallback.error as typeof error;
+  }
 
   if (error) {
     return NextResponse.json(
@@ -77,6 +115,7 @@ export async function GET(req: Request) {
     name: p.name,
     price: p.price,
     cost: p.cost,
+    image_url: p.image_url || null,
     stock: p.stock,
     category_id: p.category_id || null,
     category: pickCategoryName(p.categories),
@@ -92,7 +131,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const body = await req.json();
 
-  const { name, price, cost, stock, category_id } = body;
+  const { name, price, cost, stock, category_id, image_url } = body;
 
   if (!name || price == null || stock == null || !category_id) {
     return NextResponse.json(
@@ -114,13 +153,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const { data: createdProduct, error } = await supabase
+  let { data: createdProduct, error } = await supabase
     .from("products")
     .insert([
       {
         name,
         price,
         cost: cost ?? 0,
+        image_url: image_url || null,
         stock,
         category_id,
         is_active: true,
@@ -128,6 +168,25 @@ export async function POST(req: Request) {
     ])
     .select("id, name")
     .single();
+
+  if (error?.code === "42703") {
+    const fallback = await supabase
+      .from("products")
+      .insert([
+        {
+          name,
+          price,
+          cost: cost ?? 0,
+          stock,
+          category_id,
+          is_active: true,
+        },
+      ])
+      .select("id, name")
+      .single();
+    createdProduct = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     return NextResponse.json(
