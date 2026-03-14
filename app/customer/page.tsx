@@ -255,6 +255,7 @@ export default function CustomerOrderAppPage() {
     [availablePoints, maxRedeemPointsByRatio]
   );
   const canRedeemByMinRule = redeemPointsCap >= LOYALTY_REDEEM_MIN_POINTS;
+  const redeemEligibleMaxPoints = canRedeemByMinRule ? redeemPointsCap : 0;
   const appliedRedeemPoints = useMemo(() => {
     if (redeemPointsInputNumber <= 0 || !canRedeemByMinRule) return 0;
     const proposed = Math.min(redeemPointsInputNumber, redeemPointsCap);
@@ -447,7 +448,7 @@ export default function CustomerOrderAppPage() {
     setCheckoutMessage(null);
 
     try {
-      const redeemPointsNum = redeemPointsInputNumber;
+      const redeemPointsNum = appliedRedeemPoints;
       const res = await fetch("/api/customer/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -802,16 +803,18 @@ export default function CustomerOrderAppPage() {
                       <button
                         type="button"
                         onClick={() => setRedeemPoints(String(LOYALTY_REDEEM_MIN_POINTS))}
-                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-300"
+                        disabled={!canRedeemByMinRule}
+                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         Use 100
                       </button>
                       <button
                         type="button"
-                        onClick={() => setRedeemPoints(String(redeemPointsCap))}
-                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-300"
+                        onClick={() => setRedeemPoints(String(redeemEligibleMaxPoints))}
+                        disabled={!canRedeemByMinRule}
+                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        Use Max ({redeemPointsCap})
+                        Use Max ({redeemEligibleMaxPoints})
                       </button>
                       <button
                         type="button"
@@ -822,11 +825,11 @@ export default function CustomerOrderAppPage() {
                       </button>
                     </div>
                     <p className="mt-2 text-xs text-gray-400">
-                      100 pts = RM 5.00 • Max 30% order • Allowed now: {redeemPointsCap} pts
+                      100 pts = RM 5.00 • Max 30% order • Eligible now: {redeemEligibleMaxPoints} pts
                     </p>
                     {!canRedeemByMinRule && cartItems.length > 0 ? (
                       <p className="mt-1 text-xs text-amber-300">
-                        Subtotal terlalu rendah untuk min redeem 100 points (cap 30% sekarang {redeemPointsCap} pts).
+                        Belum boleh redeem. Minimum 100 points diperlukan (cap semasa: {redeemPointsCap} pts).
                       </p>
                     ) : null}
                     {redeemPointsInputNumber > 0 && appliedRedeemPoints === 0 && canRedeemByMinRule ? (
