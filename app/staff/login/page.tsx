@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import LoginForm from "@/app/login/login-form";
 import { getCurrentSessionUser, resolveCurrentUserRole } from "@/lib/auth";
-import Link from "next/link";
 
-export default async function LoginPage() {
+export default async function StaffLoginPage() {
   const user = await getCurrentSessionUser();
 
   if (user) {
@@ -23,15 +23,15 @@ export default async function LoginPage() {
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md items-center justify-center px-4 py-8">
         <section className="w-full rounded-xl border border-gray-800 bg-[#111] p-6 shadow-soft md:p-8">
           <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Loka POS</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">Customer Sign In</h1>
+          <h1 className="mt-2 text-2xl font-semibold text-white">Staff Sign In</h1>
           <p className="mt-1 text-sm text-gray-400">
-            Login atau daftar untuk order dan simpan loyalty points.
+            Log masuk untuk mula ambil pesanan. Signup staff perlu approval admin.
           </p>
-          <LoginForm audience="customer" />
+          <LoginForm audience="staff" />
           <p className="mt-4 text-center text-xs text-gray-500">
-            Staff portal:{" "}
-            <Link href="/staff/login" className="text-[#d1a28d] hover:underline">
-              /staff/login
+            Customer portal:{" "}
+            <Link href="/login" className="text-[#d1a28d] hover:underline">
+              /login
             </Link>
           </p>
         </section>

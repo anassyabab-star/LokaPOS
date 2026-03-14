@@ -28,7 +28,21 @@ type ListUsersResponse = {
 type ProfileRow = {
   id: string;
   role: string | null;
+  full_name: string | null;
 };
+
+function pickNonEmpty(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const trimmed = String(value || "").trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+}
+
+function emailPrefix(email: string) {
+  const localPart = String(email || "").split("@")[0] || "";
+  return localPart.trim();
+}
 
 function normalizeRole(value: string | null | undefined) {
   const role = String(value || "").toLowerCase();
@@ -63,12 +77,15 @@ export async function GET(req: Request) {
     }
 
     const userIds = users.map(user => user.id);
+    const emails = users.map(user => String(user.email || "").trim().toLowerCase()).filter(Boolean);
     const profileRoleMap = new Map<string, string>();
+    const profileNameMap = new Map<string, string>();
+    const requestNameMap = new Map<string, string>();
 
     if (userIds.length > 0) {
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
-        .select("id,role")
+        .select("id,role,full_name")
         .in("id", userIds);
 
       if (profilesError) {
@@ -77,13 +94,36 @@ export async function GET(req: Request) {
 
       for (const row of (profiles || []) as ProfileRow[]) {
         profileRoleMap.set(row.id, normalizeRole(row.role));
+        profileNameMap.set(row.id, String(row.full_name || "").trim());
+      }
+    }
+
+    if (emails.length > 0) {
+      const { data: signupRequests } = await supabase
+        .from("signup_requests")
+        .select("email,full_name,requested_at")
+        .in("email", emails)
+        .order("requested_at", { ascending: false });
+
+      for (const row of signupRequests || []) {
+        const email = String(row.email || "").trim().toLowerCase();
+        const fullName = String(row.full_name || "").trim();
+        if (!email || !fullName || requestNameMap.has(email)) continue;
+        requestNameMap.set(email, fullName);
       }
     }
 
     const mapped = users
       .map(user => {
-        const fullName = user.user_metadata?.full_name || "";
         const email = user.email || "";
+        const fullName = pickNonEmpty(
+          user.user_metadata?.full_name,
+          // Support users created with `name` key instead of `full_name`.
+          (user.user_metadata as { name?: string } | null)?.name,
+          profileNameMap.get(user.id),
+          requestNameMap.get(email.toLowerCase()),
+          emailPrefix(email)
+        );
         const role = normalizeRole(
           profileRoleMap.get(user.id) || user.app_metadata?.role || user.user_metadata?.role
         );

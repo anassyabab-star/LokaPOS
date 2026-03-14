@@ -3,6 +3,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type AppRole = "admin" | "cashier" | "customer";
 
+type RequireRoleOptions = {
+  loginPath?: string;
+};
+
 export async function getCurrentSessionUser() {
   const supabase = await createSupabaseServerClient();
   const {
@@ -31,11 +35,12 @@ export async function resolveCurrentUserRole(userId: string, fallbackRole?: stri
   return "cashier" as AppRole;
 }
 
-export async function requireRole(allowedRoles: AppRole[]) {
+export async function requireRole(allowedRoles: AppRole[], options?: RequireRoleOptions) {
+  const loginPath = options?.loginPath || "/login";
   const user = await getCurrentSessionUser();
 
   if (!user) {
-    redirect("/login");
+    redirect(loginPath);
   }
 
   const fallback =
@@ -48,7 +53,8 @@ export async function requireRole(allowedRoles: AppRole[]) {
   if (!allowedRoles.includes(role)) {
     if (role === "cashier") redirect("/pos");
     if (role === "admin") redirect("/dashboard");
-    redirect("/login");
+    if (role === "customer") redirect("/customer");
+    redirect(loginPath);
   }
 
   return { user, role };

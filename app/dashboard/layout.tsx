@@ -7,7 +7,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireRole(["admin"]);
+  await requireRole(["admin"], { loginPath: "/staff/login" });
 
   return (
     <div className="theme-scope min-h-screen bg-black text-gray-200 flex flex-col md:flex-row">

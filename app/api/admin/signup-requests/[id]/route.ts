@@ -97,6 +97,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
           [
             {
               id: userId,
+              full_name: requestRow.full_name,
               role: requestRow.requested_role,
             },
           ],

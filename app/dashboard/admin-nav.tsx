@@ -86,7 +86,7 @@ export default function AdminNav() {
                     Open POS
                   </Link>
                   <a
-                    href="/auth/logout?next=/login"
+                    href="/auth/logout?next=/staff/login"
                     className="rounded-md px-3 py-2 text-sm text-red-300 transition hover:bg-[#1b1b1b]"
                   >
                     Sign out

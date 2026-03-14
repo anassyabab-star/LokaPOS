@@ -474,7 +474,12 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                 <p className="mt-2 text-xs text-red-300">Order cancelled</p>
               ) : null}
 
-              <OrderStatusActions orderId={order.id} currentStatus={order.status} />
+              <OrderStatusActions
+                orderId={order.id}
+                currentStatus={order.status}
+                paymentStatus={order.payment_status}
+                total={Number(order.total || 0)}
+              />
 
               <details className="mt-3 rounded-lg border border-gray-800 bg-black/30">
                 <summary className="cursor-pointer list-none px-3 py-2 text-sm text-gray-300">

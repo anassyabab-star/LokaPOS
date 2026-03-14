@@ -49,7 +49,7 @@ export default function AccountMenu() {
                 Cancel
               </button>
               <a
-                href="/auth/logout?next=/login"
+                href="/auth/logout?next=/staff/login"
                 className="flex-1 rounded-md bg-[#7F1D1D] px-3 py-2 text-center text-sm font-medium text-white hover:opacity-95"
               >
                 Yes, Sign out

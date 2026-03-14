@@ -1061,7 +1061,7 @@ export default function POSPage() {
                 Cancel
               </button>
               <a
-                href="/auth/logout?next=/login"
+                href="/auth/logout?next=/staff/login"
                 className="flex-1 rounded-lg bg-[#7F1D1D] px-3 py-2 text-center text-sm font-medium text-white"
               >
                 Yes, Sign out
