@@ -40,7 +40,7 @@ export async function GET() {
         .or("is_active.is.true,is_active.is.null")
         .gt("stock", 0)
         .order("name", { ascending: true });
-      products = fb.data;
+      products = fb.data as typeof products;
       error = fb.error;
     }
 
