@@ -62,6 +62,7 @@ export default function UsersPage() {
   const [activeCounts, setActiveCounts] = useState<ActiveCounts>(EMPTY_ACTIVE_COUNTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -257,8 +258,64 @@ export default function UsersPage() {
                     Last sign in:{" "}
                     {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "-"}
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => setEditingUserId(editingUserId === user.id ? null : user.id)}
+                    className="mt-2 rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:bg-[#1b1b1b]"
+                  >
+                    {editingUserId === user.id ? "Cancel" : "Edit"}
+                  </button>
                 </div>
               </div>
+              {editingUserId === user.id && (
+                <div className="mt-3 space-y-2 border-t border-gray-800 pt-3">
+                  <input
+                    defaultValue={user.full_name}
+                    placeholder="Full name"
+                    id={`edit-name-${user.id}`}
+                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
+                  />
+                  <input
+                    defaultValue=""
+                    placeholder="Phone (optional)"
+                    id={`edit-phone-${user.id}`}
+                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
+                  />
+                  <select
+                    defaultValue={user.role}
+                    id={`edit-role-${user.id}`}
+                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="cashier">Cashier</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const nameEl = document.getElementById(`edit-name-${user.id}`) as HTMLInputElement;
+                      const phoneEl = document.getElementById(`edit-phone-${user.id}`) as HTMLInputElement;
+                      const roleEl = document.getElementById(`edit-role-${user.id}`) as HTMLSelectElement;
+                      try {
+                        await fetch("/api/admin/users", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            user_id: user.id,
+                            full_name: nameEl?.value || user.full_name,
+                            phone: phoneEl?.value || "",
+                            role: roleEl?.value || user.role,
+                          }),
+                        });
+                        setEditingUserId(null);
+                        void load();
+                      } catch {}
+                    }}
+                    className="w-full rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              )}
             </div>
           ))}
       </div>

@@ -170,3 +170,52 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+// ================= UPDATE USER (name, role) =================
+export async function PATCH(req: Request) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
+  try {
+    const body = await req.json();
+    const userId = String(body?.user_id || "").trim();
+    if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
+
+    const supabase = createSupabaseAdminClient();
+    const updates: Record<string, unknown> = {};
+
+    if (body.full_name !== undefined) {
+      const name = String(body.full_name || "").trim();
+      if (name) {
+        // Update profile table
+        await supabase.from("profiles").upsert({ id: userId, full_name: name }, { onConflict: "id" });
+        // Update auth user metadata
+        await supabase.auth.admin.updateUserById(userId, { user_metadata: { full_name: name } });
+        updates.full_name = name;
+      }
+    }
+
+    if (body.role !== undefined) {
+      const role = String(body.role || "").toLowerCase();
+      if (["admin", "cashier", "customer"].includes(role)) {
+        await supabase.from("profiles").upsert({ id: userId, role }, { onConflict: "id" });
+        await supabase.auth.admin.updateUserById(userId, { app_metadata: { role } });
+        updates.role = role;
+      }
+    }
+
+    if (body.phone !== undefined) {
+      const phone = String(body.phone || "").trim();
+      // Store phone in user metadata
+      const { data: currentUser } = await supabase.auth.admin.getUserById(userId);
+      const currentMeta = currentUser?.user?.user_metadata || {};
+      await supabase.auth.admin.updateUserById(userId, { user_metadata: { ...currentMeta, phone } });
+      updates.phone = phone;
+    }
+
+    return NextResponse.json({ success: true, updates });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update user";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
