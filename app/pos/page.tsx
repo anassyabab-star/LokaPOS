@@ -199,10 +199,18 @@ export default function POSPage() {
     } catch { setReportData(null); } finally { setReportLoading(false); }
   }
 
-  // ━━━ POS Sound ━━━
+  // ━━━ POS Sound (mobile/PWA compatible) ━━━
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  function getAudioCtx() {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    }
+    if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
+    return audioCtxRef.current;
+  }
   function playBeep() {
     try {
-      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const ctx = getAudioCtx();
       const osc = ctx.createOscillator(); const gain = ctx.createGain();
       osc.connect(gain); gain.connect(ctx.destination);
       osc.frequency.value = 800; osc.type = "sine";
@@ -210,6 +218,13 @@ export default function POSPage() {
       osc.start(); osc.stop(ctx.currentTime + 0.08);
     } catch {}
   }
+  // Unlock audio on first user touch (required for iOS/PWA)
+  useEffect(() => {
+    function unlock() { getAudioCtx(); document.removeEventListener("touchstart", unlock); document.removeEventListener("click", unlock); }
+    document.addEventListener("touchstart", unlock, { once: true });
+    document.addEventListener("click", unlock, { once: true });
+    return () => { document.removeEventListener("touchstart", unlock); document.removeEventListener("click", unlock); };
+  }, []);
 
   // ━━━ New order polling (every 15s) ━━━
   const lastOrderCount = useRef(0);
