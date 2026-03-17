@@ -27,12 +27,14 @@ export async function GET(req: Request) {
     query = query.eq("status", status);
   }
 
-  // Filter today's orders only (for POS frontend)
+  // Filter today's orders only (for POS frontend) using date_key
   if (today === "1") {
     const now = new Date();
-    const todayStr = now.toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
-    const startUtc = new Date(`${todayStr}T00:00:00+08:00`).toISOString();
-    query = query.gte("created_at", startUtc);
+    const year = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
+    const month = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
+    const day = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
+    const dateKey = `${year}-${month}-${day}`;
+    query = query.eq("date_key", dateKey);
   }
 
   const { data, error } = await query;

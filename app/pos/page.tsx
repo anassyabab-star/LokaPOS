@@ -200,31 +200,57 @@ export default function POSPage() {
   }
 
   // ━━━ POS Sound (mobile/PWA compatible) ━━━
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  function getAudioCtx() {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    }
-    if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
-    return audioCtxRef.current;
-  }
-  function playBeep() {
-    try {
-      const ctx = getAudioCtx();
-      const osc = ctx.createOscillator(); const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = 800; osc.type = "sine";
-      gain.gain.value = 0.15;
-      osc.start(); osc.stop(ctx.currentTime + 0.08);
-    } catch {}
-  }
-  // Unlock audio on first user touch (required for iOS/PWA)
+  const audioUnlocked = useRef(false);
+  const beepAudio = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
-    function unlock() { getAudioCtx(); document.removeEventListener("touchstart", unlock); document.removeEventListener("click", unlock); }
+    // Create a tiny beep WAV inline (300ms, 800Hz sine)
+    // This approach works on iOS Safari + PWA because we use <audio> element
+    const makeBeepDataUrl = () => {
+      const sampleRate = 8000; const duration = 0.1; const freq = 800;
+      const numSamples = Math.floor(sampleRate * duration);
+      const buffer = new ArrayBuffer(44 + numSamples * 2);
+      const view = new DataView(buffer);
+      // WAV header
+      const writeStr = (offset: number, str: string) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+      writeStr(0, "RIFF"); view.setUint32(4, 36 + numSamples * 2, true); writeStr(8, "WAVE");
+      writeStr(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+      writeStr(36, "data"); view.setUint32(40, numSamples * 2, true);
+      for (let i = 0; i < numSamples; i++) {
+        const t = i / sampleRate;
+        const val = Math.sin(2 * Math.PI * freq * t) * 0.3 * Math.max(0, 1 - t / duration);
+        view.setInt16(44 + i * 2, Math.floor(val * 32767), true);
+      }
+      const bytes = new Uint8Array(buffer);
+      let binary = ""; bytes.forEach(b => binary += String.fromCharCode(b));
+      return "data:audio/wav;base64," + btoa(binary);
+    };
+    try {
+      beepAudio.current = new Audio(makeBeepDataUrl());
+      beepAudio.current.volume = 0.4;
+    } catch {}
+    // Unlock on first interaction
+    function unlock() {
+      if (beepAudio.current) {
+        beepAudio.current.play().then(() => { beepAudio.current?.pause(); if (beepAudio.current) beepAudio.current.currentTime = 0; }).catch(() => {});
+      }
+      audioUnlocked.current = true;
+      document.removeEventListener("touchstart", unlock);
+      document.removeEventListener("click", unlock);
+    }
     document.addEventListener("touchstart", unlock, { once: true });
     document.addEventListener("click", unlock, { once: true });
     return () => { document.removeEventListener("touchstart", unlock); document.removeEventListener("click", unlock); };
   }, []);
+  function playBeep() {
+    try {
+      if (beepAudio.current) {
+        beepAudio.current.currentTime = 0;
+        beepAudio.current.play().catch(() => {});
+      }
+    } catch {}
+  }
 
   // ━━━ New order polling (every 15s) ━━━
   const lastOrderCount = useRef(0);
