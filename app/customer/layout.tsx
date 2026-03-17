@@ -7,5 +7,5 @@ export default async function CustomerLayout({
 }) {
   await requireRole(["customer", "admin"]);
 
-  return <div className="theme-scope min-h-screen bg-black text-gray-100">{children}</div>;
+  return <div className="min-h-screen bg-white text-gray-900" style={{ colorScheme: "light" }}>{children}</div>;
 }

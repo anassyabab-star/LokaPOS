@@ -12,9 +12,10 @@ import {
   getBillplzConfig,
   getBillplzConfigStatus,
 } from "@/lib/billplz";
+import { createChipPurchase, getChipConfigStatus } from "@/lib/chip";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 
-type Provider = "toyyibpay" | "billplz";
+type Provider = "toyyibpay" | "billplz" | "chip";
 
 type OrderRow = {
   id: string;
@@ -30,16 +31,19 @@ type OrderRow = {
 
 function resolveProvider(bodyProvider: unknown): Provider {
   const fromBody = String(bodyProvider || "").trim().toLowerCase();
-  if (fromBody === "billplz" || fromBody === "toyyibpay") return fromBody;
+  if (fromBody === "chip" || fromBody === "billplz" || fromBody === "toyyibpay") return fromBody as Provider;
   const fromEnv = String(process.env.PAYMENT_PROVIDER || "").trim().toLowerCase();
-  if (fromEnv === "billplz" || fromEnv === "toyyibpay") return fromEnv;
+  if (fromEnv === "chip" || fromEnv === "billplz" || fromEnv === "toyyibpay") return fromEnv as Provider;
 
+  // Auto-detect: prefer CHIP if configured
+  const chip = getChipConfigStatus();
+  if (chip.configured) return "chip";
   const billplz = getBillplzConfigStatus();
   const toyyib = getToyyibpayConfigStatus();
   if (billplz.configured && !toyyib.configured) return "billplz";
   if (toyyib.configured && !billplz.configured) return "toyyibpay";
   if (billplz.configured && toyyib.configured) return "billplz";
-  return "toyyibpay";
+  return "chip";
 }
 
 function appendQuery(url: string, entries: Record<string, string>) {
@@ -65,6 +69,7 @@ export async function POST(req: Request) {
 
   const provider = resolveProvider(body?.provider);
   const providerStatus =
+    provider === "chip" ? getChipConfigStatus() :
     provider === "billplz" ? getBillplzConfigStatus() : getToyyibpayConfigStatus();
   if (!providerStatus.configured) {
     return NextResponse.json(
@@ -105,9 +110,9 @@ export async function POST(req: Request) {
     }
 
     const paymentMethod = String(order.payment_method || "").toLowerCase();
-    if (paymentMethod !== "fpx") {
+    if (!["fpx", "card", "chip"].includes(paymentMethod)) {
       return NextResponse.json(
-        { error: "create-bill is only allowed for FPX payment method" },
+        { error: "create-bill is only allowed for online payment methods" },
         { status: 400 }
       );
     }
@@ -160,6 +165,31 @@ export async function POST(req: Request) {
     }
 
     const orderNumber = String(order.receipt_number || order.id.slice(0, 8));
+
+    // CHIP Collect
+    if (provider === "chip") {
+      const purchase = await createChipPurchase({
+        amount: total,
+        orderId: order.id,
+        orderNumber,
+        customerName: String(customer.name || order.customer_name || "Customer"),
+        customerEmail: customer.email || null,
+        customerPhone: customer.phone || null,
+      });
+
+      return NextResponse.json({
+        success: true,
+        provider: "chip",
+        order_id: order.id,
+        order_number: orderNumber,
+        payment: {
+          provider: "chip",
+          purchase_id: purchase.purchaseId,
+          payment_url: purchase.checkoutUrl,
+        },
+      });
+    }
+
     if (provider === "billplz") {
       const config = getBillplzConfig();
       const returnUrl = appendQuery(config.returnUrlDefault, {

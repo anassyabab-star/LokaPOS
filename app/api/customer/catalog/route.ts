@@ -57,6 +57,7 @@ export async function GET() {
         `
       )
       .or("is_active.is.true,is_active.is.null")
+      .gt("stock", 0)
       .order("name", { ascending: true });
     data = (withImage.data || null) as ProductRow[] | null;
     error = withImage.error
@@ -90,6 +91,7 @@ export async function GET() {
           `
         )
         .or("is_active.is.true,is_active.is.null")
+        .gt("stock", 0)
         .order("name", { ascending: true });
       data = (fallback.data || null) as ProductRow[] | null;
       error = fallback.error

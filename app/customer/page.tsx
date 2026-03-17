@@ -1,8 +1,8 @@
 "use client";
 
-import ThemeToggle from "@/components/theme-toggle";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isSugarSupportedCategory } from "@/app/pos/types";
 
 type CatalogCategory = {
   id: string;
@@ -473,7 +473,7 @@ export default function CustomerOrderAppPage() {
       const orderNumber = String(data?.order_number || "").trim();
       const paymentStatus = String(data?.payment?.status || "").trim().toLowerCase();
 
-      if (paymentMethod === "fpx" && paymentStatus !== "paid") {
+      if ((paymentMethod === "fpx" || paymentMethod === "card") && paymentStatus !== "paid") {
         if (!orderId) {
           throw new Error("Order created, but missing order id for payment");
         }
@@ -488,7 +488,7 @@ export default function CustomerOrderAppPage() {
           throw new Error(
             readErrorMessage(
               billData,
-              "Order created, but failed to initialize payment provider. Please contact staff."
+              "Order created, but failed to initialize payment. Please contact staff."
             )
           );
         }
@@ -571,9 +571,9 @@ export default function CustomerOrderAppPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-black text-gray-200">
-        <div className="mx-auto w-full max-w-3xl px-4 py-8">
-          <p className="text-sm text-gray-400">Loading customer app...</p>
+      <main className="min-h-screen bg-white">
+        <div className="mx-auto w-full max-w-lg px-4 py-12 text-center">
+          <div className="text-sm text-gray-400">Loading...</div>
         </div>
       </main>
     );
@@ -581,658 +581,332 @@ export default function CustomerOrderAppPage() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-black text-gray-200">
-        <div className="mx-auto w-full max-w-3xl px-4 py-8">
-          <div className="rounded-xl border border-red-900 bg-red-950/20 p-4 text-red-300">
-            {error}
-          </div>
-          <button
-            type="button"
-            onClick={() => void bootstrap()}
-            className="mt-3 rounded-lg bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white"
-          >
-            Retry
-          </button>
-        </div>
+      <main className="min-h-screen bg-white px-4 py-12">
+        <div className="mx-auto max-w-lg rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        <button type="button" onClick={() => void bootstrap()} className="mx-auto mt-4 block rounded-lg bg-[#7F1D1D] px-6 py-2.5 text-sm font-medium text-white">Retry</button>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-black text-gray-100">
-      <div className="mx-auto w-full max-w-3xl px-4 pb-24 pt-4">
-        <header className="mb-4 rounded-xl border border-gray-800 bg-[#111] p-4">
-          <div className="flex items-start justify-between gap-3">
+    <main className="min-h-screen bg-gray-50 text-gray-900">
+      <div className="mx-auto w-full max-w-lg pb-24">
+        {/* Header */}
+        <div className="sticky top-0 z-20 bg-white border-b border-gray-100 px-4 py-3">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">Loka POS</p>
-              <h1 className="text-xl font-semibold text-white">Customer Order</h1>
-              <p className="text-xs text-gray-400">{profile?.name || "Member"}</p>
+              <h1 className="text-lg font-bold text-gray-900">LOKA</h1>
+              <p className="text-xs text-gray-400">Hi, {profile?.name || "there"}</p>
             </div>
-            <div className="text-right">
-              <ThemeToggle className="mb-2" />
-              <p className="text-xs text-gray-500">Available Points</p>
-              <p className="text-lg font-semibold text-[#34d399]">
-                {Number(loyalty?.points_available || 0)}
-              </p>
+            <div className="flex items-center gap-3">
+              {loyalty?.points_available ? (
+                <div className="rounded-full bg-[#7F1D1D]/10 px-3 py-1">
+                  <span className="text-xs font-semibold text-[#7F1D1D]">{Number(loyalty.points_available)} pts</span>
+                </div>
+              ) : null}
             </div>
           </div>
-          {loyalty?.expiring_points_30d ? (
-            <p className="mt-2 text-xs text-amber-300">
-              {loyalty.expiring_points_30d} points expiring in 30 days.
-            </p>
-          ) : null}
-        </header>
+        </div>
 
-        {activeTab === "menu" ? (
-          <section className="space-y-4">
-            <div className="rounded-xl border border-gray-800 bg-[#111] p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Order Menu</p>
-                <p className="text-xs text-gray-400">{filteredProducts.length} items</p>
-              </div>
-              <input
-                value={menuSearch}
-                onChange={event => setMenuSearch(event.target.value)}
-                placeholder="Search drink or food"
-                className="mt-2 w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-              />
+        <div className="px-4 pt-4">
+        {/* ━━━ MENU TAB ━━━ */}
+        {activeTab === "menu" && (
+          <div className="space-y-4">
+            {/* Search */}
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input value={menuSearch} onChange={e => setMenuSearch(e.target.value)} placeholder="Cari menu..." className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm outline-none focus:border-[#7F1D1D]" />
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              <button
-                type="button"
-                onClick={() => setCategoryFilter("All")}
-                className={`shrink-0 rounded-full px-4 py-2 text-sm ${
-                  categoryFilter === "All"
-                    ? "bg-[#7F1D1D] text-white"
-                    : "border border-gray-700 bg-[#111] text-gray-300"
-                }`}
-              >
-                All
-              </button>
-              {categories.map(category => (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => setCategoryFilter(category.name)}
-                  className={`shrink-0 rounded-full px-4 py-2 text-sm ${
-                    categoryFilter === category.name
-                      ? "bg-[#7F1D1D] text-white"
-                      : "border border-gray-700 bg-[#111] text-gray-300"
-                  }`}
-                >
-                  {category.name}
+            {/* Category pills */}
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <button type="button" onClick={() => setCategoryFilter("All")} className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors ${categoryFilter === "All" ? "bg-[#7F1D1D] text-white" : "bg-white text-gray-600 border border-gray-200"}`}>All</button>
+              {categories.map(cat => (
+                <button key={cat.id} type="button" onClick={() => setCategoryFilter(cat.name)} className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors ${categoryFilter === cat.name ? "bg-[#7F1D1D] text-white" : "bg-white text-gray-600 border border-gray-200"}`}>{cat.name}</button>
+              ))}
+            </div>
+
+            {/* Product grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {filteredProducts.map(product => (
+                <button key={product.id} type="button" onClick={() => openConfigurator(product)} className="group overflow-hidden rounded-2xl bg-white border border-gray-100 text-left shadow-sm active:scale-[0.98] transition-transform">
+                  <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = "none"; }} />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-gray-100 to-gray-50">
+                        <span className="text-2xl font-bold text-gray-300">{productInitial(product.name)}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <p className="truncate text-sm font-semibold text-gray-900">{product.name}</p>
+                    <p className="text-xs text-gray-400">{product.category || ""}</p>
+                    <p className="mt-1 text-sm font-bold text-[#7F1D1D]">{formatMoney(product.price)}</p>
+                  </div>
                 </button>
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-              {filteredProducts.map(product => (
-                <article
-                  key={product.id}
-                  className="overflow-hidden rounded-xl border border-gray-800 bg-[#111]"
-                >
-                  <div className="relative aspect-[4/3] w-full overflow-hidden border-b border-gray-800 bg-gradient-to-br from-[#1f2937] to-[#111827]">
-                    {product.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="h-full w-full object-cover"
-                        onError={event => {
-                          event.currentTarget.style.display = "none";
-                        }}
-                      />
-                    ) : null}
-                    <span className="absolute left-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-black/45 text-xs font-semibold text-white">
-                      {productInitial(product.name)}
-                    </span>
-                  </div>
+            {filteredProducts.length === 0 && (
+              <div className="rounded-xl bg-white p-8 text-center text-sm text-gray-400">Tiada produk dijumpai</div>
+            )}
+          </div>
+        )}
 
-                  <div className="space-y-2 p-3">
-                    <div>
-                      <p className="truncate text-sm font-semibold text-white">{product.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-gray-400">
-                        {product.category || "Uncategorized"}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-base font-semibold text-gray-100">{formatMoney(product.price)}</p>
-                        <p className="text-[11px] text-gray-500">
-                          {product.variants.length} variant • {product.addons.length} addon
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => openConfigurator(product)}
-                        className="rounded-md bg-[#7F1D1D] px-3 py-1.5 text-xs font-semibold text-white"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {filteredProducts.length === 0 ? (
-              <div className="rounded-xl border border-gray-800 bg-[#111] p-4 text-sm text-gray-400">
-                No product found for current filter.
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {activeTab === "cart" ? (
-          <section className="space-y-3">
+        {/* ━━━ CART TAB ━━━ */}
+        {activeTab === "cart" && (
+          <div className="space-y-3">
+            <h2 className="text-lg font-bold">Cart</h2>
             {cartItems.length === 0 ? (
-              <div className="rounded-xl border border-gray-800 bg-[#111] p-4 text-sm text-gray-400">
-                Cart is empty.
+              <div className="rounded-xl bg-white p-8 text-center">
+                <p className="text-sm text-gray-400">Cart kosong</p>
+                <button type="button" onClick={() => setActiveTab("menu")} className="mt-3 text-sm font-medium text-[#7F1D1D]">Lihat Menu</button>
               </div>
             ) : (
               <>
                 {cartItems.map(item => (
-                  <div key={item.key} className="rounded-xl border border-gray-800 bg-[#111] p-3">
+                  <div key={item.key} className="rounded-xl bg-white border border-gray-100 p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">
-                          {item.product_name}
-                          {item.variant_name ? ` (${item.variant_name})` : ""}
-                        </p>
-                        {item.addon_names.length > 0 ? (
-                          <p className="mt-0.5 text-xs text-gray-400">
-                            Addon: {item.addon_names.join(", ")}
-                          </p>
-                        ) : null}
-                        <p className="mt-0.5 text-xs text-gray-400">
-                          Sugar: {SUGAR_OPTIONS.find(v => v.value === item.sugar_level)?.label || "Normal"}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-300">{formatMoney(item.unit_price)}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-gray-900">{item.product_name}{item.variant_name ? ` (${item.variant_name})` : ""}</p>
+                        {item.addon_names.length > 0 && <p className="text-xs text-gray-400">+ {item.addon_names.join(", ")}</p>}
+                        {item.sugar_level !== "normal" && <p className="text-xs text-gray-400">{SUGAR_OPTIONS.find(v => v.value === item.sugar_level)?.label || ""} sugar</p>}
+                        <p className="mt-1 text-sm font-semibold text-[#7F1D1D]">{formatMoney(item.unit_price)}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => decreaseCartQty(item.key)}
-                          className="h-8 w-8 rounded-md border border-gray-700 bg-black text-sm text-gray-200"
-                        >
-                          -
-                        </button>
-                        <span className="w-5 text-center text-sm">{item.qty}</span>
-                        <button
-                          type="button"
-                          onClick={() => increaseCartQty(item.key)}
-                          className="h-8 w-8 rounded-md border border-gray-700 bg-black text-sm text-gray-200"
-                        >
-                          +
-                        </button>
+                        <button type="button" onClick={() => decreaseCartQty(item.key)} className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 font-bold">−</button>
+                        <span className="w-6 text-center text-sm font-semibold">{item.qty}</span>
+                        <button type="button" onClick={() => increaseCartQty(item.key)} className="flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 text-gray-500 font-bold">+</button>
                       </div>
                     </div>
                   </div>
                 ))}
 
-                <div className="rounded-xl border border-gray-800 bg-[#111] p-4">
-                  <p className="text-sm text-gray-400">Payment Method</p>
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    {["fpx", "card", "qr"].map(method => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => setPaymentMethod(method)}
-                        className={`rounded-md px-3 py-2 text-sm ${
-                          paymentMethod === method
-                            ? "bg-[#7F1D1D] text-white"
-                            : "border border-gray-700 bg-black text-gray-300"
-                        }`}
-                      >
-                        {method.toUpperCase()}
-                      </button>
-                    ))}
+                {/* Order Summary */}
+                <div className="rounded-xl bg-white border border-gray-100 p-4 space-y-3">
+                  {/* Payment method */}
+                  <div>
+                    <p className="text-xs font-medium text-gray-400 mb-2">Kaedah Bayaran</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[["fpx", "Online Banking"], ["card", "Card / E-Wallet"]].map(([method, label]) => (
+                        <button key={method} type="button" onClick={() => setPaymentMethod(method)} className={`rounded-lg py-2.5 text-xs font-medium transition-colors ${paymentMethod === method ? "bg-[#7F1D1D] text-white" : "border border-gray-200 text-gray-600"}`}>{label}</button>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-gray-300">Powered by CHIP Collect</p>
                   </div>
 
-                  <div className="mt-3">
-                    <label className="mb-1 block text-xs text-gray-400">Redeem points (optional)</label>
-                    <input
-                      value={redeemPoints}
-                      onChange={event => setRedeemPoints(event.target.value)}
-                      placeholder={`Min ${LOYALTY_REDEEM_MIN_POINTS} • Available ${availablePoints}`}
-                      className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                    />
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setRedeemPoints(String(LOYALTY_REDEEM_MIN_POINTS))}
-                        disabled={!canRedeemByMinRule}
-                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Use 100
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRedeemPoints(String(redeemEligibleMaxPoints))}
-                        disabled={!canRedeemByMinRule}
-                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Use Max ({redeemEligibleMaxPoints})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRedeemPoints("")}
-                        className="rounded-md border border-gray-700 px-2 py-1 text-xs text-gray-300"
-                      >
-                        Clear
-                      </button>
+                  {/* Redeem points */}
+                  {availablePoints >= LOYALTY_REDEEM_MIN_POINTS && (
+                    <div>
+                      <p className="text-xs font-medium text-gray-400 mb-1">Tebus Points ({availablePoints} ada)</p>
+                      <div className="flex gap-2">
+                        <input value={redeemPoints} onChange={e => setRedeemPoints(e.target.value)} placeholder={`Min ${LOYALTY_REDEEM_MIN_POINTS}`} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-[#7F1D1D]" />
+                        <button type="button" onClick={() => setRedeemPoints(String(redeemEligibleMaxPoints))} className="shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600">Max</button>
+                      </div>
+                      {appliedRedeemPoints > 0 && <p className="mt-1 text-xs text-green-600">Diskaun: -{formatMoney(estimatedRedeemAmount)}</p>}
                     </div>
-                    <p className="mt-2 text-xs text-gray-400">
-                      100 pts = RM 5.00 • Max 30% order • Eligible now: {redeemEligibleMaxPoints} pts
-                    </p>
-                    {!canRedeemByMinRule && cartItems.length > 0 ? (
-                      <p className="mt-1 text-xs text-amber-300">
-                        Belum boleh redeem. Minimum 100 points diperlukan (cap semasa: {redeemPointsCap} pts).
-                      </p>
-                    ) : null}
-                    {redeemPointsInputNumber > 0 && appliedRedeemPoints === 0 && canRedeemByMinRule ? (
-                      <p className="mt-1 text-xs text-amber-300">
-                        Minimum redeem {LOYALTY_REDEEM_MIN_POINTS} points.
-                      </p>
-                    ) : null}
-                    {redeemPointsInputNumber > redeemPointsCap && canRedeemByMinRule ? (
-                      <p className="mt-1 text-xs text-amber-300">
-                        Input melebihi had semasa, sistem akan guna maksimum {redeemPointsCap} points.
-                      </p>
-                    ) : null}
+                  )}
+
+                  {/* Totals */}
+                  <div className="border-t border-gray-100 pt-3 space-y-1">
+                    <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>{formatMoney(cartSubtotal)}</span></div>
+                    {estimatedRedeemAmount > 0 && <div className="flex justify-between text-sm text-green-600"><span>Points Discount</span><span>-{formatMoney(estimatedRedeemAmount)}</span></div>}
+                    <div className="flex justify-between text-base font-bold"><span>Total</span><span className="text-[#7F1D1D]">{formatMoney(estimatedTotal)}</span></div>
                   </div>
 
-                  <div className="mt-3 space-y-1 text-sm">
-                    <div className="flex items-center justify-between text-gray-300">
-                      <span>Subtotal</span>
-                      <span>{formatMoney(cartSubtotal)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-gray-300">
-                      <span>Redeem Discount</span>
-                      <span>- {formatMoney(estimatedRedeemAmount)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-white">
-                      <span className="font-semibold">Estimated Total</span>
-                      <span className="font-semibold">{formatMoney(estimatedTotal)}</span>
-                    </div>
-                  </div>
+                  {checkoutError && <p className="text-xs text-red-500">{checkoutError}</p>}
+                  {checkoutMessage && <p className="text-xs text-green-600">{checkoutMessage}</p>}
 
-                  {checkoutError ? (
-                    <p className="mt-2 text-xs text-red-400">{checkoutError}</p>
-                  ) : null}
-                  {checkoutMessage ? (
-                    <p className="mt-2 text-xs text-green-400">{checkoutMessage}</p>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    onClick={() => void placeOrder()}
-                    disabled={placingOrder}
-                    className="mt-4 w-full rounded-lg bg-[#7F1D1D] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                  >
-                    {placingOrder ? "Placing..." : "Place Order"}
+                  <button type="button" onClick={() => void placeOrder()} disabled={placingOrder} className="w-full rounded-xl bg-[#7F1D1D] py-3.5 text-sm font-semibold text-white disabled:opacity-50 active:bg-[#6B1818]">
+                    {placingOrder ? "Memproses..." : `Bayar ${formatMoney(estimatedTotal)}`}
                   </button>
-                  <button
-                    type="button"
-                    onClick={clearCart}
-                    className="mt-2 w-full rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300"
-                  >
-                    Clear Cart
-                  </button>
+                  <button type="button" onClick={clearCart} className="w-full text-center text-xs text-gray-400 py-2">Kosongkan Cart</button>
                 </div>
               </>
             )}
-          </section>
-        ) : null}
+          </div>
+        )}
 
-        {activeTab === "orders" ? (
-          <section className="space-y-3">
-            <button
-              type="button"
-              onClick={() => void loadOrders()}
-              className="rounded-lg border border-gray-700 bg-[#111] px-3 py-2 text-xs text-gray-300"
-            >
-              Refresh Orders
-            </button>
-
+        {/* ━━━ ORDERS TAB ━━━ */}
+        {activeTab === "orders" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Pesanan Saya</h2>
+              <button type="button" onClick={() => void loadOrders()} className="text-xs font-medium text-[#7F1D1D]">Refresh</button>
+            </div>
             {orders.length === 0 ? (
-              <div className="rounded-xl border border-gray-800 bg-[#111] p-4 text-sm text-gray-400">
-                No orders yet.
-              </div>
+              <div className="rounded-xl bg-white p-8 text-center text-sm text-gray-400">Belum ada pesanan</div>
             ) : (
               orders.map(order => (
-                <div key={order.id} className="rounded-xl border border-gray-800 bg-[#111] p-4">
-                  <div className="flex items-start justify-between gap-3">
+                <div key={order.id} className="rounded-xl bg-white border border-gray-100 p-4">
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-white">#{order.order_number}</p>
+                      <p className="text-sm font-semibold text-gray-900">#{order.order_number}</p>
                       <p className="text-xs text-gray-400">{formatDateTime(order.created_at)}</p>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {order.item_count} items • {formatPayment(order.payment_method)}
-                      </p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${order.status === "completed" ? "bg-green-50 text-green-700" : order.status === "preparing" ? "bg-amber-50 text-amber-700" : order.status === "ready" ? "bg-blue-50 text-blue-700" : "bg-gray-50 text-gray-600"}`}>{order.status || "pending"}</span>
+                        <span className="text-[10px] text-gray-400">{order.item_count} items</span>
+                      </div>
                     </div>
-                    <p className="text-base font-semibold text-white">{formatMoney(order.total)}</p>
+                    <p className="text-base font-bold text-gray-900">{formatMoney(order.total)}</p>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
-                    <p>
-                      {String(order.status || "-")} • {String(order.payment_status || "-")}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => void openOrderDetail(order.id)}
-                      className="rounded-md border border-gray-700 px-2 py-1 text-gray-200"
-                    >
-                      {selectedOrderId === order.id ? "Hide" : "View"}
-                    </button>
-                  </div>
+                  <button type="button" onClick={() => void openOrderDetail(order.id)} className="mt-2 text-xs font-medium text-[#7F1D1D]">{selectedOrderId === order.id ? "Tutup" : "Lihat Detail"}</button>
 
-                  {selectedOrderId === order.id ? (
-                    <div className="mt-3 rounded-lg border border-gray-800 bg-black p-3">
-                      {orderLoading ? (
-                        <p className="text-xs text-gray-400">Loading detail...</p>
-                      ) : selectedOrder ? (
-                        <div className="space-y-2">
-                          <p className="text-xs text-gray-400">
-                            #{selectedOrder.order_number} • {formatDateTime(selectedOrder.created_at)}
-                          </p>
+                  {selectedOrderId === order.id && (
+                    <div className="mt-3 rounded-lg bg-gray-50 p-3 space-y-2">
+                      {orderLoading ? <p className="text-xs text-gray-400">Memuatkan...</p> : selectedOrder ? (
+                        <>
                           {selectedOrder.items.map(item => (
-                            <div
-                              key={item.id}
-                              className="flex items-start justify-between gap-2 rounded-md border border-gray-800 bg-[#0d0d0d] px-3 py-2"
-                            >
-                              <p className="text-xs text-gray-200">
-                                {item.name} x{item.qty}
-                              </p>
-                              <p className="text-xs text-gray-200">{formatMoney(item.line_total)}</p>
+                            <div key={item.id} className="flex justify-between text-xs">
+                              <span className="text-gray-600">{item.name} x{item.qty}</span>
+                              <span className="text-gray-900 font-medium">{formatMoney(item.line_total)}</span>
                             </div>
                           ))}
-                          <div className="border-t border-gray-800 pt-2 text-xs text-gray-300">
-                            <p>Subtotal: {formatMoney(selectedOrder.subtotal)}</p>
-                            <p>Discount: {formatMoney(selectedOrder.discount)}</p>
-                            <p className="font-semibold text-white">Total: {formatMoney(selectedOrder.total)}</p>
+                          <div className="border-t border-gray-200 pt-2 flex justify-between text-sm font-semibold">
+                            <span>Jumlah</span><span>{formatMoney(selectedOrder.total)}</span>
                           </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-400">Order detail unavailable.</p>
-                      )}
+                        </>
+                      ) : <p className="text-xs text-gray-400">Tidak dapat dimuatkan</p>}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               ))
             )}
-          </section>
-        ) : null}
+          </div>
+        )}
 
-        {activeTab === "account" ? (
-          <section className="space-y-3">
-            <div className="rounded-xl border border-gray-800 bg-[#111] p-4">
-              <h2 className="text-base font-semibold text-white">Profile</h2>
+        {/* ━━━ ACCOUNT TAB ━━━ */}
+        {activeTab === "account" && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold">Akaun Saya</h2>
 
-              <div className="mt-3 space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs text-gray-400">Name</label>
-                  <input
-                    value={accountName}
-                    onChange={event => setAccountName(event.target.value)}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-400">Phone</label>
-                  <input
-                    value={accountPhone}
-                    onChange={event => setAccountPhone(event.target.value)}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-400">Email</label>
-                  <input
-                    value={accountEmail}
-                    onChange={event => setAccountEmail(event.target.value)}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-400">Birth Date</label>
-                  <input
-                    type="date"
-                    value={accountBirthDate}
-                    onChange={event => setAccountBirthDate(event.target.value)}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-400">Marketing Consent</label>
-                  <select
-                    value={consentMode}
-                    onChange={event => setConsentMode(event.target.value as ConsentMode)}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  >
-                    <option value="none">No Marketing</option>
-                    <option value="whatsapp">WhatsApp Only</option>
-                    <option value="email">Email Only</option>
-                    <option value="both">WhatsApp + Email</option>
-                  </select>
-                </div>
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-xl bg-white border border-gray-100 p-3 text-center">
+                <p className="text-lg font-bold text-[#7F1D1D]">{Number(loyalty?.points_available || 0)}</p>
+                <p className="text-[10px] text-gray-400">Points</p>
               </div>
-
-              {accountError ? <p className="mt-2 text-xs text-red-400">{accountError}</p> : null}
-              {accountMessage ? <p className="mt-2 text-xs text-green-400">{accountMessage}</p> : null}
-
-              <button
-                type="button"
-                onClick={() => void saveAccount()}
-                disabled={accountSaving}
-                className="mt-4 w-full rounded-lg bg-[#7F1D1D] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {accountSaving ? "Saving..." : "Save Profile"}
-              </button>
+              <div className="rounded-xl bg-white border border-gray-100 p-3 text-center">
+                <p className="text-lg font-bold text-gray-900">{profile?.total_orders || 0}</p>
+                <p className="text-[10px] text-gray-400">Orders</p>
+              </div>
+              <div className="rounded-xl bg-white border border-gray-100 p-3 text-center">
+                <p className="text-lg font-bold text-gray-900">{formatMoney(profile?.total_spend || 0)}</p>
+                <p className="text-[10px] text-gray-400">Spent</p>
+              </div>
             </div>
 
-            <div className="rounded-xl border border-gray-800 bg-[#111] p-4 text-sm">
-              <p className="text-gray-400">Total Orders: {profile?.total_orders || 0}</p>
-              <p className="mt-1 text-gray-400">Total Spend: {formatMoney(profile?.total_spend || 0)}</p>
-              <p className="mt-2 text-gray-400">Points: {Number(loyalty?.points_available || 0)}</p>
-              <Link
-                href="/auth/logout?next=/login"
-                className="mt-4 inline-flex rounded-md border border-gray-700 px-3 py-2 text-xs text-red-300"
-              >
-                Sign out
-              </Link>
+            {/* Profile form */}
+            <div className="rounded-xl bg-white border border-gray-100 p-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-900">Profil</p>
+              <input value={accountName} onChange={e => setAccountName(e.target.value)} placeholder="Nama" className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#7F1D1D]" />
+              <input value={accountPhone} onChange={e => setAccountPhone(e.target.value)} placeholder="Telefon" className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#7F1D1D]" />
+              <input value={accountEmail} onChange={e => setAccountEmail(e.target.value)} placeholder="Email" className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#7F1D1D]" />
+              <input type="date" value={accountBirthDate} onChange={e => setAccountBirthDate(e.target.value)} className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#7F1D1D]" />
+              <select value={consentMode} onChange={e => setConsentMode(e.target.value as ConsentMode)} className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#7F1D1D] bg-white">
+                <option value="none">Tiada Marketing</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="email">Email</option>
+                <option value="both">WhatsApp + Email</option>
+              </select>
+              {accountError && <p className="text-xs text-red-500">{accountError}</p>}
+              {accountMessage && <p className="text-xs text-green-600">{accountMessage}</p>}
+              <button type="button" onClick={() => void saveAccount()} disabled={accountSaving} className="w-full rounded-xl bg-[#7F1D1D] py-2.5 text-sm font-semibold text-white disabled:opacity-50">{accountSaving ? "Menyimpan..." : "Simpan"}</button>
             </div>
-          </section>
-        ) : null}
+
+            <Link href="/auth/logout?next=/login" className="block text-center text-sm text-[#7F1D1D] py-3">Log Keluar</Link>
+          </div>
+        )}
+        </div>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-800 bg-[#111] px-2 py-2">
-        <div className="mx-auto grid w-full max-w-3xl grid-cols-4 gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab("menu")}
-            className={`rounded-md px-2 py-2 text-xs ${
-              activeTab === "menu"
-                ? "bg-[#7F1D1D] text-white"
-                : "text-gray-300 hover:bg-[#1b1b1b]"
-            }`}
-          >
-            Menu
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("cart")}
-            className={`rounded-md px-2 py-2 text-xs ${
-              activeTab === "cart"
-                ? "bg-[#7F1D1D] text-white"
-                : "text-gray-300 hover:bg-[#1b1b1b]"
-            }`}
-          >
-            Cart ({cartCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("orders")}
-            className={`rounded-md px-2 py-2 text-xs ${
-              activeTab === "orders"
-                ? "bg-[#7F1D1D] text-white"
-                : "text-gray-300 hover:bg-[#1b1b1b]"
-            }`}
-          >
-            Orders
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("account")}
-            className={`rounded-md px-2 py-2 text-xs ${
-              activeTab === "account"
-                ? "bg-[#7F1D1D] text-white"
-                : "text-gray-300 hover:bg-[#1b1b1b]"
-            }`}
-          >
-            Account
-          </button>
+      {/* ━━━ BOTTOM NAV ━━━ */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom,0px)]">
+        <div className="mx-auto grid w-full max-w-lg grid-cols-4">
+          {([["menu","Menu"],["cart",`Cart (${cartCount})`],["orders","Orders"],["account","Akaun"]] as [ActiveTab, string][]).map(([tab, label]) => (
+            <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`py-3 text-xs font-medium transition-colors ${activeTab === tab ? "text-[#7F1D1D]" : "text-gray-400"}`}>{label}</button>
+          ))}
         </div>
       </nav>
 
-      {configProduct ? (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4">
-          <div className="w-full max-w-md rounded-t-2xl border border-gray-800 bg-[#111] p-4 sm:rounded-2xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">Customize Item</h3>
-              <button type="button" onClick={closeConfigurator} className="text-sm text-gray-400">
-                Close
-              </button>
-            </div>
+      {/* ━━━ PRODUCT CONFIGURATOR MODAL ━━━ */}
+      {configProduct && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40" onClick={closeConfigurator}>
+          <div className="w-full max-w-lg rounded-t-3xl bg-white p-5 pb-8 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-200" />
 
-            <div className="mb-3 flex items-center gap-3 rounded-lg border border-gray-800 bg-black p-2">
-              <div className="relative h-14 w-14 overflow-hidden rounded-md bg-gradient-to-br from-[#1f2937] to-[#111827]">
+            {/* Product header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="relative h-16 w-16 overflow-hidden rounded-xl bg-gray-100 shrink-0">
                 {configProduct.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={configProduct.image_url}
-                    alt={configProduct.name}
-                    className="h-full w-full object-cover"
-                    onError={event => {
-                      event.currentTarget.style.display = "none";
-                    }}
-                  />
-                ) : null}
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-white/90">
-                  {productInitial(configProduct.name)}
-                </span>
+                  <img src={configProduct.image_url} alt={configProduct.name} className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = "none"; }} />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center"><span className="text-lg font-bold text-gray-300">{productInitial(configProduct.name)}</span></div>
+                )}
               </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">{configProduct.name}</p>
-                <p className="text-xs text-gray-400">{formatMoney(configProduct.price)}</p>
+              <div>
+                <p className="text-base font-bold text-gray-900">{configProduct.name}</p>
+                <p className="text-sm text-[#7F1D1D] font-semibold">{formatMoney(configProduct.price)}</p>
               </div>
             </div>
 
-            {configProduct.variants.length > 0 ? (
-              <div className="mb-3">
-                <p className="mb-1 text-xs text-gray-400">Variant</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {configProduct.variants.map(variant => (
-                    <button
-                      key={variant.id}
-                      type="button"
-                      onClick={() => setConfigVariantId(variant.id)}
-                      className={`rounded-md px-3 py-2 text-xs ${
-                        configVariantId === variant.id
-                          ? "bg-[#7F1D1D] text-white"
-                          : "border border-gray-700 bg-black text-gray-300"
-                      }`}
-                    >
-                      {variant.name} {variant.price_adjustment ? `(+RM${variant.price_adjustment})` : ""}
+            {/* Variants */}
+            {configProduct.variants.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-gray-400 mb-2">Pilih Saiz</p>
+                <div className="flex gap-2 flex-wrap">
+                  {configProduct.variants.map(v => (
+                    <button key={v.id} type="button" onClick={() => setConfigVariantId(v.id)} className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${configVariantId === v.id ? "bg-[#7F1D1D] text-white" : "border border-gray-200 text-gray-600"}`}>
+                      {v.name} {v.price_adjustment ? `+RM${v.price_adjustment}` : ""}
                     </button>
                   ))}
                 </div>
               </div>
-            ) : null}
+            )}
 
-            {configProduct.addons.length > 0 ? (
-              <div className="mb-3">
-                <p className="mb-1 text-xs text-gray-400">Addons</p>
+            {/* Addons */}
+            {configProduct.addons.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-gray-400 mb-2">Tambahan</p>
                 <div className="space-y-2">
                   {configProduct.addons.map(addon => {
                     const selected = configAddonIds.includes(addon.id);
                     return (
-                      <label
-                        key={addon.id}
-                        className="flex items-center justify-between rounded-md border border-gray-800 bg-black px-3 py-2 text-xs text-gray-200"
-                      >
-                        <span>
-                          {addon.name} (+RM{Number(addon.price || 0).toFixed(2)})
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={event => {
-                            if (event.target.checked) {
-                              setConfigAddonIds(prev => [...prev, addon.id]);
-                            } else {
-                              setConfigAddonIds(prev => prev.filter(id => id !== addon.id));
-                            }
-                          }}
-                        />
-                      </label>
+                      <button key={addon.id} type="button" onClick={() => setConfigAddonIds(prev => selected ? prev.filter(id => id !== addon.id) : [...prev, addon.id])} className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-sm transition-colors ${selected ? "bg-[#7F1D1D]/10 border border-[#7F1D1D]/20 text-[#7F1D1D]" : "border border-gray-200 text-gray-600"}`}>
+                        <span>{addon.name}</span>
+                        <span className="text-xs">+{formatMoney(addon.price)}</span>
+                      </button>
                     );
                   })}
                 </div>
               </div>
-            ) : null}
+            )}
 
-            <div className="mb-3">
-              <p className="mb-1 text-xs text-gray-400">Sugar</p>
-              <div className="grid grid-cols-2 gap-2">
-                {SUGAR_OPTIONS.map(option => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setConfigSugar(option.value)}
-                    className={`rounded-md px-3 py-2 text-xs ${
-                      configSugar === option.value
-                        ? "bg-[#7F1D1D] text-white"
-                        : "border border-gray-700 bg-black text-gray-300"
-                    }`}
-                  >
-                    {option.label}
-                  </button>
+            {/* Sugar - only for drinks */}
+            {isSugarSupportedCategory(configProduct.category) && (
+            <div className="mb-4">
+              <p className="text-xs font-medium text-gray-400 mb-2">Tahap Gula</p>
+              <div className="grid grid-cols-4 gap-2">
+                {SUGAR_OPTIONS.map(opt => (
+                  <button key={opt.value} type="button" onClick={() => setConfigSugar(opt.value)} className={`rounded-lg py-2 text-xs font-medium transition-colors ${configSugar === opt.value ? "bg-[#7F1D1D] text-white" : "border border-gray-200 text-gray-600"}`}>{opt.label}</button>
                 ))}
               </div>
             </div>
+            )}
 
-            <div className="mb-4">
-              <p className="mb-1 text-xs text-gray-400">Quantity</p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfigQty(prev => Math.max(1, prev - 1))}
-                  className="h-9 w-9 rounded-md border border-gray-700 bg-black text-gray-200"
-                >
-                  -
-                </button>
-                <span className="w-8 text-center text-sm">{configQty}</span>
-                <button
-                  type="button"
-                  onClick={() => setConfigQty(prev => prev + 1)}
-                  className="h-9 w-9 rounded-md border border-gray-700 bg-black text-gray-200"
-                >
-                  +
-                </button>
+            {/* Qty + Add button */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setConfigQty(prev => Math.max(1, prev - 1))} className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-lg font-bold text-gray-500">−</button>
+                <span className="w-8 text-center text-base font-bold">{configQty}</span>
+                <button type="button" onClick={() => setConfigQty(prev => prev + 1)} className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 text-lg font-bold text-gray-500">+</button>
               </div>
+              <button type="button" onClick={addConfiguredToCart} className="flex-1 rounded-xl bg-[#7F1D1D] py-3.5 text-sm font-semibold text-white active:bg-[#6B1818]">Tambah ke Cart</button>
             </div>
-
-            <button
-              type="button"
-              onClick={addConfiguredToCart}
-              className="w-full rounded-lg bg-[#7F1D1D] px-4 py-3 text-sm font-semibold text-white"
-            >
-              Add To Cart
-            </button>
           </div>
         </div>
-      ) : null}
+      )}
     </main>
   );
 }

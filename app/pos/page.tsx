@@ -30,7 +30,9 @@ type OrderRow = {
   customer_name: string;
   total: number;
   payment_method: string;
+  payment_status: string;
   status: string;
+  order_source: string | null;
   created_at: string;
 };
 
@@ -199,56 +201,36 @@ export default function POSPage() {
     } catch { setReportData(null); } finally { setReportLoading(false); }
   }
 
-  // ━━━ POS Sound (mobile/PWA compatible) ━━━
-  const audioUnlocked = useRef(false);
-  const beepAudio = useRef<HTMLAudioElement | null>(null);
+  // ━━━ POS Sound (zero-delay, mobile compatible) ━━━
+  const actxRef = useRef<AudioContext | null>(null);
+  const beepBufRef = useRef<AudioBuffer | null>(null);
   useEffect(() => {
-    // Create a tiny beep WAV inline (300ms, 800Hz sine)
-    // This approach works on iOS Safari + PWA because we use <audio> element
-    const makeBeepDataUrl = () => {
-      const sampleRate = 8000; const duration = 0.1; const freq = 800;
-      const numSamples = Math.floor(sampleRate * duration);
-      const buffer = new ArrayBuffer(44 + numSamples * 2);
-      const view = new DataView(buffer);
-      // WAV header
-      const writeStr = (offset: number, str: string) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
-      writeStr(0, "RIFF"); view.setUint32(4, 36 + numSamples * 2, true); writeStr(8, "WAVE");
-      writeStr(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-      view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
-      view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-      writeStr(36, "data"); view.setUint32(40, numSamples * 2, true);
-      for (let i = 0; i < numSamples; i++) {
-        const t = i / sampleRate;
-        const val = Math.sin(2 * Math.PI * freq * t) * 0.3 * Math.max(0, 1 - t / duration);
-        view.setInt16(44 + i * 2, Math.floor(val * 32767), true);
-      }
-      const bytes = new Uint8Array(buffer);
-      let binary = ""; bytes.forEach(b => binary += String.fromCharCode(b));
-      return "data:audio/wav;base64," + btoa(binary);
-    };
-    try {
-      beepAudio.current = new Audio(makeBeepDataUrl());
-      beepAudio.current.volume = 0.4;
-    } catch {}
-    // Unlock on first interaction
-    function unlock() {
-      if (beepAudio.current) {
-        beepAudio.current.play().then(() => { beepAudio.current?.pause(); if (beepAudio.current) beepAudio.current.currentTime = 0; }).catch(() => {});
-      }
-      audioUnlocked.current = true;
-      document.removeEventListener("touchstart", unlock);
-      document.removeEventListener("click", unlock);
+    function initAudio() {
+      try {
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AC();
+        actxRef.current = ctx;
+        // Pre-create beep buffer in memory — plays instantly, no decode delay
+        const sr = ctx.sampleRate; const len = Math.floor(sr * 0.07);
+        const buf = ctx.createBuffer(1, len, sr); const ch = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) { const t = i / sr; ch[i] = Math.sin(2 * Math.PI * 880 * t) * 0.2 * (1 - t / 0.07); }
+        beepBufRef.current = buf;
+        if (ctx.state === "suspended") ctx.resume();
+      } catch {}
     }
+    function unlock() { if (!actxRef.current) initAudio(); else if (actxRef.current.state === "suspended") actxRef.current.resume(); }
     document.addEventListener("touchstart", unlock, { once: true });
     document.addEventListener("click", unlock, { once: true });
+    // Also init immediately in case already interacted
+    initAudio();
     return () => { document.removeEventListener("touchstart", unlock); document.removeEventListener("click", unlock); };
   }, []);
   function playBeep() {
     try {
-      if (beepAudio.current) {
-        beepAudio.current.currentTime = 0;
-        beepAudio.current.play().catch(() => {});
-      }
+      const ctx = actxRef.current; const buf = beepBufRef.current;
+      if (!ctx || !buf) return;
+      if (ctx.state === "suspended") ctx.resume();
+      const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start(0);
     } catch {}
   }
 
@@ -480,7 +462,22 @@ export default function POSPage() {
     }
   }
   function paymentLabel(method: string) {
-    switch (method) { case "cash": return "Cash"; case "qr": return "QR"; case "card": return "Card"; default: return method; }
+    switch (method) { case "cash": return "Cash"; case "qr": return "QR"; case "card": return "Card"; case "fpx": return "FPX"; default: return method; }
+  }
+  function sourceTag(source: string | null) {
+    if (source === "customer_web") return { label: "Web", color: "bg-purple-100 text-purple-700" };
+    if (source === "pos") return { label: "POS", color: "bg-blue-100 text-blue-700" };
+    return { label: "POS", color: "bg-gray-100 text-gray-600" };
+  }
+  async function updateOrderStatus(orderId: string, newStatus: string) {
+    try {
+      await fetch(`/api/admin/orders/${orderId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      void loadOrders();
+    } catch {}
   }
 
   // ━━━━━━━━━━━━━━━━━━━━ RENDER ━━━━━━━━━━━━━━━━━━━━
@@ -628,30 +625,43 @@ export default function POSPage() {
             </div>
           ) : (
             <div>
-              {orders.map(order => (
+              {orders.map(order => {
+                const src = sourceTag(order.order_source);
+                const st = order.status?.toLowerCase() || "pending";
+                return (
                 <div key={order.id} className="border-b border-gray-200 px-4 py-3">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-semibold text-gray-900">#{order.receipt_number}</span>
-                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColor(order.status)}`}>
-                          {order.status}
-                        </span>
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColor(order.status)}`}>{order.status}</span>
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${src.color}`}>{src.label}</span>
+                        {order.payment_status === "pending" && <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-600">Belum Bayar</span>}
                       </div>
                       <div className="mt-0.5 text-xs text-gray-400">
                         {order.customer_name || "Walk-in"} · {paymentLabel(order.payment_method)} · {new Date(order.created_at).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit" })}
                       </div>
                     </div>
-                    <span className="text-sm font-bold tabular-nums text-gray-900">RM{Number(order.total).toFixed(2)}</span>
+                    <span className="text-sm font-bold tabular-nums text-gray-900 shrink-0">RM{Number(order.total).toFixed(2)}</span>
                   </div>
-                  {/* Reprint button */}
-                  <div className="mt-2 flex gap-2">
-                    <button onClick={() => { window.open(`/api/orders/receipt/${order.id}`, "_blank", "width=420,height=720"); }} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-600 active:bg-gray-100">
-                      Print Resit
+                  {/* Action buttons */}
+                  <div className="mt-2 flex gap-2 flex-wrap">
+                    {st === "pending" && (
+                      <button onClick={() => void updateOrderStatus(order.id, "preparing")} className="rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-medium text-white active:bg-amber-600">Preparing</button>
+                    )}
+                    {st === "preparing" && (
+                      <button onClick={() => void updateOrderStatus(order.id, "ready")} className="rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-medium text-white active:bg-blue-600">Ready</button>
+                    )}
+                    {st === "ready" && (
+                      <button onClick={() => void updateOrderStatus(order.id, "completed")} className="rounded-md bg-green-600 px-3 py-1.5 text-[11px] font-medium text-white active:bg-green-700">Completed</button>
+                    )}
+                    <button onClick={() => { window.open(`/api/orders/receipt/${order.id}`, "_blank", "width=420,height=720"); }} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 active:bg-gray-100">
+                      Print
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

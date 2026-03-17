@@ -52,7 +52,9 @@ function asValidPaymentMethod(value: unknown) {
 }
 
 function isPaymentPaid(paymentMethod: string) {
-  return paymentMethod === "cash" || paymentMethod === "card" || paymentMethod === "qr";
+  // For customer web orders, only cash is auto-paid (pickup at counter)
+  // card/fpx/qr all go through online payment gateway (CHIP)
+  return paymentMethod === "cash";
 }
 
 export async function GET(req: Request) {

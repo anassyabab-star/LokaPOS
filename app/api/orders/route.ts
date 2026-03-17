@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 
   let query = supabase
     .from("orders")
-    .select("id, receipt_number, customer_name, total, payment_method, status, created_at")
+    .select("id, receipt_number, customer_name, total, payment_method, payment_status, status, created_at, order_source")
     .order("created_at", { ascending: false })
     .limit(limit);
 
