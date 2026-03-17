@@ -182,11 +182,13 @@ export async function POST(req: Request) {
               for (const addonId of item.addon_ids) {
                 const { data: addon } = await supabase.from("product_addons").select("name, price").eq("id", addonId).single();
                 if (addon) {
-                  await supabase.from("order_item_addons").insert([{
-                    order_item_id: oiRow.id,
-                    addon_id: addonId,
-                    addon_name_snapshot: addon.name,
-                  }]).catch(() => {});
+                  try {
+                    await supabase.from("order_item_addons").insert([{
+                      order_item_id: oiRow.id,
+                      addon_id: addonId,
+                      addon_name_snapshot: addon.name,
+                    }]);
+                  } catch {}
                 }
               }
             }
