@@ -422,20 +422,23 @@ export default function POSPage() {
   async function closeShift() { if (items.length > 0) { alert("Kosongkan cart dulu."); return; } const val = Number(countedCash || 0); if (!Number.isFinite(val) || val < 0) { alert("Counted cash tak valid"); return; } setShiftSubmitting(true); setShiftError(null); try { const res = await fetch("/api/pos/shift", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "close", register_id: REGISTER_ID, counted_cash: val, closing_note: closingNote }) }); const data = await res.json(); if (!res.ok) { setShiftError(data?.error || "Gagal tutup shift"); return; } setCurrentShift(null); setCashSalesLive(0); setPaidOutTotalLive(0); setExpectedCashLive(0); setRecentPaidOuts([]); setCountedCash(""); setClosingNote(""); setShowCloseShiftModal(false); setShowOpenShiftModal(true); } finally { setShiftSubmitting(false); } }
   async function submitPaidOut() { if (!currentShift) { alert("Buka shift dulu"); return; } const amount = Number(paidOutAmount || 0); if (!Number.isFinite(amount) || amount <= 0) { alert("Amaun tak valid"); return; } if (!paidOutReason.trim()) { alert("Sebab diperlukan"); return; } if (!paidOutStaffName.trim()) { alert("Nama staf diperlukan"); return; } setPaidOutSubmitting(true); try { const res = await fetch("/api/pos/paid-outs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ register_id: REGISTER_ID, amount, staff_name: paidOutStaffName.trim(), reason: paidOutReason, vendor_name: paidOutVendor, invoice_number: paidOutInvoiceNumber, invoice_url: paidOutInvoiceUrl, notes: paidOutNotes }) }); const data = await res.json(); if (!res.ok) { alert(data?.error || "Gagal simpan"); return; } setPaidOutAmount(""); setPaidOutReason(""); setPaidOutVendor(""); setPaidOutInvoiceNumber(""); setPaidOutInvoiceUrl(""); setPaidOutNotes(""); setShowPaidOutModal(false); setCashSalesLive(Number(data.cash_sales || cashSalesLive)); setPaidOutTotalLive(Number(data.paid_out_total || paidOutTotalLive)); setExpectedCashLive(Number(data.expected_cash_live || expectedCashLive)); await loadPaidOuts(); } finally { setPaidOutSubmitting(false); } }
   async function lookupMember() { const phone = customerPhone.trim(); if (!phone) { setMemberLookupTone("warn"); setMemberLookupMessage("Masukkan nombor dulu"); return; } setMemberLookupLoading(true); setMemberLookupMessage(null); try { const res = await fetch(`/api/pos/customers/lookup?phone=${encodeURIComponent(phone)}`, { cache: "no-store" }); const data = await res.json(); if (!res.ok) { setMemberLookupTone("warn"); setMemberLookupMessage(data?.error || "Gagal cari"); return; } const c = data?.customer as MemberLookup | null; if (!c) { setLinkedCustomerId(null); setMemberPoints(0); setMemberExpiringPoints(0); setMemberLookupTone("warn"); setMemberLookupMessage("Tiada ahli dijumpai."); return; } setLinkedCustomerId(c.id); setCustomerName(c.name || customerName); setCustomerPhone(c.phone || phone); setCustomerEmail(c.email || ""); setConsentWhatsapp(Boolean(c.consent_whatsapp)); setConsentEmail(Boolean(c.consent_email)); setMemberPoints(Number(c.loyalty_points || 0)); setMemberExpiringPoints(Number(c.expiring_points_30d || 0)); setMemberLookupTone("success"); setMemberLookupMessage(`Ahli: ${c.total_orders} order · RM${c.total_spend.toFixed(2)} · ${Number(c.loyalty_points || 0)} pts`); } finally { setMemberLookupLoading(false); } }
+  const [submittingOrder, setSubmittingOrder] = useState(false);
   async function completePayment(overrideMethod?: "cash" | "qr" | "card", overrideCash?: number) {
+    if (submittingOrder) return; // prevent double submit
     const method = overrideMethod || paymentMethod;
     const cashVal = overrideCash ?? cashNum;
     if (!currentShift) { alert("Buka shift dulu"); return; } const finalName = customerName.trim() || "Walk-in";
     if (consentWhatsapp && !customerPhone.trim()) { alert("Telefon diperlukan"); return; } if (consentEmail && !customerEmail.trim()) { alert("Email diperlukan"); return; }
     if (method === "cash" && (!cashVal || cashVal < total)) { alert("Duit tak cukup"); return; }
     let pw: Window | null = null; if (autoPrintEnabled) { pw = window.open("", "_blank", "noopener,noreferrer,width=420,height=720"); if (!pw) { alert("Popup blocked."); return; } }
+    setSubmittingOrder(true);
     try { const res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: linkedCustomerId || undefined, name: finalName, phone: customerPhone, email: customerEmail, consent_whatsapp: consentWhatsapp, consent_email: consentEmail }, loyalty_redeem_points: appliedRedeemPoints, subtotal, discount_type: discountType, discount_value: discountAmount, total, payment_method: method, cash_received: method === "cash" ? cashVal : total, balance: method === "cash" ? cashVal - total : 0 }) }); const data = await res.json();
       if (!data.success) { pw?.close(); alert(data?.error || "Gagal"); return; }
       const receipt: ReceiptData = { order_id: String(data.order_id || ""), receipt_number: data.receipt_number, customerName: finalName, items, subtotal, discount: discountAmount + redeemAmount, total, payment_method: paymentMethod, created_at: new Date().toISOString() };
       setReceiptData(receipt); if (autoPrintEnabled) printReceipt(receipt, pw);
       setCart({}); setCustomPrices({}); setCustomNotes({}); setCustomerName(""); setCustomerPhone(""); setCustomerEmail(""); setConsentWhatsapp(false); setConsentEmail(false); setLinkedCustomerId(null); setMemberPoints(0); setMemberExpiringPoints(0); setRedeemPointsInput(""); setMemberLookupMessage(null); setDiscountType("none"); setDiscountValue(""); setCashReceived(""); setShowDiscountPanel(false);
       setOverlay("done"); void refreshShiftState({ autoPrompt: false });
-    } catch { pw?.close(); alert("Ralat pelayan"); }
+    } catch { pw?.close(); alert("Ralat pelayan"); } finally { setSubmittingOrder(false); }
   }
   function printReceipt(data: ReceiptData, ew?: Window | null) {
     if (data.order_id) { const url = `/api/orders/receipt/${encodeURIComponent(data.order_id)}`; if (ew && !ew.closed) { ew.location.replace(url); return; } window.open(url, "_blank", "width=420,height=720"); return; }
@@ -1079,15 +1082,15 @@ export default function POSPage() {
             <div className="mt-2 text-sm text-gray-400">Pilih kaedah pembayaran</div>
           </div>
           <div className="border-t border-gray-200">
-            <button onClick={() => { setCashReceived(String(total)); void completePayment("cash", total); }} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left">
-              <span className="text-base font-medium text-gray-900">Cash</span>
+            <button disabled={submittingOrder} onClick={() => { setCashReceived(String(total)); void completePayment("cash", total); }} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
+              <span className="text-base font-medium text-gray-900">{submittingOrder ? "Memproses..." : "Cash"}</span>
               <span className="text-gray-400">›</span>
             </button>
-            <button onClick={() => { void completePayment("qr"); }} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left">
+            <button disabled={submittingOrder} onClick={() => { void completePayment("qr"); }} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
               <span className="text-base font-medium text-gray-900">QR Payment</span>
               <span className="text-gray-400">›</span>
             </button>
-            <button onClick={() => { void completePayment("card"); }} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left">
+            <button disabled={submittingOrder} onClick={() => { void completePayment("card"); }} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
               <span className="text-base font-medium text-gray-900">Record Card Payment</span>
               <span className="text-gray-400">›</span>
             </button>
