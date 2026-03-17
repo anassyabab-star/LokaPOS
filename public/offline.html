@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Loka POS — Offline</title>
+  <style>
+    * { margin: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e5e7eb; display: flex; align-items: center; justify-content: center; min-height: 100dvh; padding: 2rem; }
+    .card { text-align: center; max-width: 360px; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; opacity: .6; }
+    h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: .5rem; }
+    p { font-size: .875rem; color: #9ca3af; line-height: 1.5; }
+    button { margin-top: 1.5rem; background: #7F1D1D; color: #fff; border: none; padding: .75rem 2rem; border-radius: .75rem; font-size: .875rem; font-weight: 500; cursor: pointer; }
+    button:active { opacity: .85; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">☕</div>
+    <h1>Tiada Internet</h1>
+    <p>Loka POS memerlukan sambungan internet untuk memproses pesanan. Sila semak WiFi atau data anda.</p>
+    <button onclick="location.reload()">Cuba Semula</button>
+  </div>
+</body>
+</html>
