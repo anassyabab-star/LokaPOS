@@ -674,7 +674,29 @@ export default function POSPage() {
       {mainTab === "reports" && overlay === "none" && (
         <div className="flex-1 overflow-y-auto pb-20">
           <div className="border-b border-gray-200 px-4 py-4">
-            <h1 className="text-xl font-bold text-gray-900">Sales Report</h1>
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold text-gray-900">Sales Report</h1>
+              <div className="flex gap-1">
+                <button onClick={() => {
+                  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
+                  const from = reportRange === "yesterday" ? (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" }); })()
+                    : reportRange === "7days" ? (() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" }); })()
+                    : reportRange === "month" ? (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" }); })()
+                    : today;
+                  window.open(`/api/admin/export?type=sales&from=${from}&to=${today}`, "_blank");
+                }} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-600 active:bg-gray-200">Sales CSV</button>
+                <button onClick={() => {
+                  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
+                  const from30 = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" }); })();
+                  window.open(`/api/admin/export?type=daily&from=${from30}&to=${today}`, "_blank");
+                }} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-600 active:bg-gray-200">Daily CSV</button>
+                <button onClick={() => {
+                  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
+                  const from30 = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" }); })();
+                  window.open(`/api/admin/export?type=expenses&from=${from30}&to=${today}`, "_blank");
+                }} className="rounded-lg bg-gray-100 px-3 py-1.5 text-[11px] font-medium text-gray-600 active:bg-gray-200">Expenses CSV</button>
+              </div>
+            </div>
             <div className="mt-3 flex gap-2">
               {([["today", "1D"], ["yesterday", "Yesterday"], ["7days", "1W"], ["month", "1M"]] as [ReportRange, string][]).map(([val, label]) => (
                 <button key={val} onClick={() => setReportRange(val)} className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${reportRange === val ? "bg-[#7F1D1D] text-white" : "bg-gray-100 text-gray-600"}`}>

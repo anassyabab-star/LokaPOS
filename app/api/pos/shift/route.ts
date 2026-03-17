@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
+import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
 
 type ShiftRow = {
   id: string;
@@ -215,6 +216,72 @@ export async function POST(req: Request) {
 
       if (closeError || !closed) {
         return NextResponse.json({ error: closeError?.message || "Failed to close shift" }, { status: 500 });
+      }
+
+      // ━━━ Send daily summary WhatsApp to admin ━━━
+      try {
+        const shiftDate = new Date(currentOpen.opened_at).toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
+
+        // Get today's orders
+        const { data: todayOrders } = await supabase
+          .from("orders")
+          .select("total, payment_method, status")
+          .eq("date_key", shiftDate)
+          .in("status", ["completed", "preparing", "ready"]);
+
+        const orders = todayOrders || [];
+        const totalSales = orders.reduce((s, o) => s + Number(o.total || 0), 0);
+        const orderCount = orders.length;
+        const cashOrders = orders.filter(o => o.payment_method === "cash");
+        const cashTotal = cashOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+        const nonCashTotal = totalSales - cashTotal;
+
+        // Get today's expenses
+        const { data: todayExpenses } = await supabase
+          .from("expenses")
+          .select("amount")
+          .eq("expense_date", shiftDate);
+        const expensesTotal = (todayExpenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
+
+        // Get today's paid outs
+        const { data: todayPaidOuts } = await supabase
+          .from("paid_outs")
+          .select("amount")
+          .eq("shift_id", currentOpen.id);
+        const paidOutTotal = (todayPaidOuts || []).reduce((s, p) => s + Number(p.amount || 0), 0);
+
+        const netSales = totalSales - expensesTotal - paidOutTotal;
+
+        const summary = `📊 *LOKA POS — Ringkasan Harian*
+📅 ${shiftDate}
+
+💰 *Jualan*
+• Jumlah Order: ${orderCount}
+• Gross Sales: RM ${totalSales.toFixed(2)}
+• Cash: RM ${cashTotal.toFixed(2)}
+• Non-Cash: RM ${nonCashTotal.toFixed(2)}
+
+📤 *Perbelanjaan*
+• Expenses: RM ${expensesTotal.toFixed(2)}
+• Paid Out: RM ${paidOutTotal.toFixed(2)}
+
+📈 *Net Sales: RM ${netSales.toFixed(2)}*
+
+💵 *Shift*
+• Opening Cash: RM ${Number(currentOpen.opening_cash || 0).toFixed(2)}
+• Expected Cash: RM ${expectedCash.toFixed(2)}
+• Counted Cash: RM ${countedCash.toFixed(2)}
+• Over/Short: RM ${overShort.toFixed(2)}
+
+_Auto-generated on shift close_`;
+
+        // Send to admin phone (from env or profiles)
+        const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || "";
+        if (adminPhone) {
+          await sendMurpatiText({ to: adminPhone, message: summary }).catch(() => {});
+        }
+      } catch (summaryErr) {
+        console.error("Daily summary WhatsApp failed:", summaryErr);
       }
 
       return NextResponse.json({
