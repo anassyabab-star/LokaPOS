@@ -32,7 +32,7 @@ function escapeHtml(value: string) {
 }
 
 function qrImageUrl(data: string, size = 200) {
-  return `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encodeURIComponent(data)}&choe=UTF-8&chld=M|2`;
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(data)}&format=svg`;
 }
 
 const LABEL_STYLES = `
