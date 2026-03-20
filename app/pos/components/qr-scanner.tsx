@@ -102,8 +102,8 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
               // Vibrate for haptic feedback
               if (navigator.vibrate) navigator.vibrate(100);
               // Stop scanner then callback
-              html5QrCode
-                .stop()
+              void html5QrCode
+                ?.stop()
                 .catch(() => {})
                 .finally(() => {
                   onScan(orderId);
