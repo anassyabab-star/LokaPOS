@@ -2,6 +2,29 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
+// Type for the html5-qrcode library loaded from CDN
+type Html5QrcodeScanner = {
+  start: (
+    camera: { facingMode: string },
+    config: { fps: number; qrbox: { width: number; height: number }; aspectRatio: number; disableFlip: boolean },
+    onSuccess: (decodedText: string) => void,
+    onFailure: () => void
+  ) => Promise<void>;
+  stop: () => Promise<void>;
+  clear: () => void;
+  getRunningTrackCameraCapabilities?: () => {
+    torchFeature?: () => {
+      isSupported?: () => boolean;
+      enable: () => Promise<void>;
+      disable: () => Promise<void>;
+    };
+  };
+};
+
+type WindowWithHtml5Qrcode = Window & typeof globalThis & {
+  Html5Qrcode: new (elementId: string) => Html5QrcodeScanner;
+};
+
 type QrScannerProps = {
   onScan: (orderId: string) => void;
   onClose: () => void;
@@ -14,7 +37,7 @@ type QrScannerProps = {
  * Expected QR format: https://pos.lokacafe.my/pos?order=<uuid>
  */
 export default function QrScanner({ onScan, onClose }: QrScannerProps) {
-  const scannerRef = useRef<any>(null);
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,12 +63,12 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
   }, []);
 
   useEffect(() => {
-    let html5QrCode: any = null;
+    let html5QrCode: Html5QrcodeScanner | null = null;
     let mounted = true;
 
     async function initScanner() {
       // Dynamically load html5-qrcode from CDN
-      if (!(window as any).Html5Qrcode) {
+      if (!(window as WindowWithHtml5Qrcode).Html5Qrcode) {
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement("script");
           script.src =
@@ -58,7 +81,7 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
 
       if (!mounted) return;
 
-      const Html5Qrcode = (window as any).Html5Qrcode;
+      const Html5Qrcode = (window as WindowWithHtml5Qrcode).Html5Qrcode;
       html5QrCode = new Html5Qrcode("qr-reader");
       scannerRef.current = html5QrCode;
 
@@ -92,21 +115,22 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
           }
         );
         if (mounted) setLoading(false);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!mounted) return;
         setLoading(false);
+        const error = err as { name?: string; message?: string };
         if (
-          err?.name === "NotAllowedError" ||
-          err?.message?.includes("NotAllowed")
+          error?.name === "NotAllowedError" ||
+          error?.message?.includes("NotAllowed")
         ) {
           setError("Kamera tidak dibenarkan. Sila beri kebenaran kamera dalam browser settings.");
         } else if (
-          err?.name === "NotFoundError" ||
-          err?.message?.includes("NotFound")
+          error?.name === "NotFoundError" ||
+          error?.message?.includes("NotFound")
         ) {
           setError("Tiada kamera dijumpai pada peranti ini.");
         } else {
-          setError(err?.message || "Gagal memulakan kamera.");
+          setError(error?.message || "Gagal memulakan kamera.");
         }
       }
     }
