@@ -64,8 +64,8 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
           },
           audio: false,
         });
@@ -162,7 +162,7 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
       try {
         await scanner.start(
           { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 220, height: 220 } },
+          { fps: 30, qrbox: { width: 250, height: 250 } },
           (text: string) => {
             handleDetected(text);
             isStarted = false;
