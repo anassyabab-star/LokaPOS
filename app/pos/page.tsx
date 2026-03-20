@@ -7,6 +7,8 @@ import {
   ModalShell, ModalTitle, ModalSubtitle, ModalActions,
   ModalBtnPrimary, ModalBtnSecondary, ModalInput, ModalTextArea, InfoCard,
 } from "./components/modal-primitives";
+import dynamic from "next/dynamic";
+const QrScanner = dynamic(() => import("./components/qr-scanner"), { ssr: false });
 import {
   Product, Shift, PaidOutEntry, CartItem, ReceiptData, SugarLevel,
   MarketingConsentMode, MemberLookup, DEFAULT_SUGAR_LEVEL, SUGAR_LEVEL_OPTIONS,
@@ -156,6 +158,7 @@ function POSPageInner() {
   const [orderDetailOpen, setOrderDetailOpen] = useState<string | null>(null);
   const [orderDetailItems, setOrderDetailItems] = useState<OrderDetailItem[]>([]);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
 
   // ───── Reports tab ─────
   const [reportRange, setReportRange] = useState<ReportRange>("today");
@@ -403,6 +406,15 @@ function POSPageInner() {
     // Clean URL param without reload
     window.history.replaceState({}, "", "/pos");
   }, [scannedOrderId]);
+
+  // ━━━ Built-in QR Scanner callback ━━━
+  function handleQrScan(orderId: string) {
+    setShowQrScanner(false);
+    setMainTab("orders");
+    setOverlay("none");
+    void loadOrders();
+    void loadOrderDetail(orderId);
+  }
 
   // ━━━ Cart actions ━━━
   function addToCart(productId: string, variantId?: string, addonIds?: string[], sugarLevel?: SugarLevel | null, feedbackLabel?: string, silent = false) {
@@ -673,9 +685,21 @@ function POSPageInner() {
         <div className="flex-1 overflow-y-auto pb-20">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4">
             <h1 className="text-xl font-bold text-gray-900">Orders</h1>
-            <button onClick={() => void loadOrders()} className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600 active:bg-gray-200">
-              ↻ Refresh
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setShowQrScanner(true)} className="rounded-lg bg-[#7F1D1D] px-3 py-1.5 text-xs font-medium text-white active:bg-[#6F1A1A] flex items-center gap-1.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="3" height="3" />
+                  <path d="M21 14h-3v3h3M21 21h-3m3 0v-3" />
+                </svg>
+                Scan
+              </button>
+              <button onClick={() => void loadOrders()} className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-600 active:bg-gray-200">
+                ↻ Refresh
+              </button>
+            </div>
           </div>
           {ordersLoading ? (
             <div className="flex items-center justify-center py-20">
@@ -1030,6 +1054,21 @@ function POSPageInner() {
           </div>
           {/* Menu rows */}
           <button onClick={() => setOverlay("products")} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left text-sm font-medium text-gray-900">Products / Items <span className="text-gray-400">›</span></button>
+          <button onClick={() => setShowQrScanner(true)} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left text-sm font-medium text-gray-900">
+            <span className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#7F1D1D]/10">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7F1D1D" strokeWidth="2.5" strokeLinecap="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="3" height="3" />
+                  <path d="M21 14h-3v3h3M21 21h-3m3 0v-3" />
+                </svg>
+              </span>
+              Scan QR
+            </span>
+            <span className="text-gray-400">›</span>
+          </button>
           {currentShift ? (
             <>
               <button onClick={() => setShowPaidOutModal(true)} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left text-sm font-medium text-gray-900">Paid Out <span className="text-gray-400">›</span></button>
@@ -1173,7 +1212,7 @@ function POSPageInner() {
         </div>
       )}
 
-      {/* ━━━ FIX #6: BOTTOM NAV BAR — 3 tabs with Orders ━━━ */}
+      {/* ━━━ BOTTOM NAV BAR — 4 tabs ━━━ */}
       {overlay === "none" && (
         <div className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom,0px)]">
           <button onClick={() => setMainTab("checkout")} className={`flex flex-1 flex-col items-center gap-0.5 py-3 text-xs font-medium ${mainTab === "checkout" ? "text-[#7F1D1D]" : "text-gray-400"}`}>
@@ -1383,6 +1422,13 @@ function POSPageInner() {
       {showCloseShiftModal && currentShift && (<ModalShell onClose={() => setShowCloseShiftModal(false)}><ModalTitle>Tutup Shift</ModalTitle><InfoCard><div className="space-y-0.5"><div>Permulaan: RM{Number(currentShift.opening_cash || 0).toFixed(2)}</div><div>Jualan: RM{cashSalesLive.toFixed(2)}</div><div>Paid out: RM{paidOutTotalLive.toFixed(2)}</div><div className="font-semibold">Jangkaan: RM{expectedCashLive.toFixed(2)}</div></div></InfoCard><div className="mt-3 space-y-3"><ModalInput type="number" value={countedCash} onChange={setCountedCash} placeholder="Duit dikira (RM)" /><div className="text-sm">Lebih/Kurang: <span className="font-semibold">RM{(Number(countedCash || 0) - expectedCashLive).toFixed(2)}</span></div><ModalTextArea value={closingNote} onChange={setClosingNote} placeholder="Nota penutup" /></div><ModalActions><ModalBtnSecondary onClick={() => setShowCloseShiftModal(false)}>Batal</ModalBtnSecondary><ModalBtnPrimary onClick={() => void closeShift()} disabled={shiftSubmitting}>{shiftSubmitting ? "Menutup..." : "Tutup"}</ModalBtnPrimary></ModalActions></ModalShell>)}
       {showPaidOutModal && currentShift && (<ModalShell onClose={() => setShowPaidOutModal(false)}><ModalTitle>Paid Out</ModalTitle><InfoCard><div>Tunai: RM{cashSalesLive.toFixed(2)} · Keluar: RM{paidOutTotalLive.toFixed(2)} · Baki: RM{expectedCashLive.toFixed(2)}</div></InfoCard><div className="mt-3 space-y-2"><ModalInput type="number" value={paidOutAmount} onChange={setPaidOutAmount} placeholder="Amaun (RM)" /><ModalInput value={paidOutReason} onChange={setPaidOutReason} placeholder="Sebab" /><ModalInput value={paidOutStaffName} onChange={setPaidOutStaffName} placeholder="Nama staf" /><ModalInput value={paidOutVendor} onChange={setPaidOutVendor} placeholder="Vendor (pilihan)" /></div>{recentPaidOuts.length > 0 && <div className="mt-2 max-h-20 overflow-auto rounded-lg bg-gray-50 p-2"><div className="mb-1 text-[11px] font-medium text-gray-500">Terkini</div>{recentPaidOuts.slice(0, 3).map(e => <div key={e.id} className="flex justify-between text-xs"><span className="truncate text-gray-600">{e.reason}</span><span className="text-red-600">RM{Number(e.amount || 0).toFixed(2)}</span></div>)}</div>}<ModalActions><ModalBtnSecondary onClick={() => setShowPaidOutModal(false)}>Batal</ModalBtnSecondary><ModalBtnPrimary onClick={() => void submitPaidOut()} disabled={paidOutSubmitting}>{paidOutSubmitting ? "Saving..." : "Simpan"}</ModalBtnPrimary></ModalActions></ModalShell>)}
       {showSignOutConfirm && (<ModalShell onClose={() => setShowSignOutConfirm(false)}><ModalTitle>Log keluar?</ModalTitle><ModalActions><ModalBtnSecondary onClick={() => setShowSignOutConfirm(false)}>Batal</ModalBtnSecondary><a href="/auth/logout?next=/staff/login" className="flex flex-1 items-center justify-center rounded-xl bg-[#7F1D1D] px-4 py-3 text-sm font-semibold text-white">Ya</a></ModalActions></ModalShell>)}
+      {/* ━━━ QR SCANNER OVERLAY ━━━ */}
+      {showQrScanner && (
+        <QrScanner
+          onScan={handleQrScan}
+          onClose={() => setShowQrScanner(false)}
+        />
+      )}
     </div>
   );
 }
