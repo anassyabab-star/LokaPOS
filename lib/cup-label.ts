@@ -56,8 +56,10 @@ export function buildCupLabelHtml(payload: CupLabelPayload) {
       : "";
   const qtyLabel = item.qty > 1 ? `×${item.qty}` : "";
 
-  // QR code data — encode order ID for scanning
-  const qrData = orderId;
+  // QR code data — encode full URL so scanning opens order in POS
+  const qrData = payload.siteUrl
+    ? `${payload.siteUrl}/pos?order=${orderId}`
+    : orderId;
 
   const autoPrintScript = payload.autoPrint
     ? `<script>window.addEventListener("load",()=>{window.print();window.onafterprint=()=>window.close();});</script>`
@@ -381,7 +383,7 @@ export function buildAllCupLabelsHtml(payload: {
 (function(){function g(t){var e=[];for(var r=0;r<t.length;r++){var n=t.charCodeAt(r);n<128?e.push(n):n<2048?e.push(192|n>>6,128|63&n):n<55296||n>=57344?e.push(224|n>>12,128|n>>6&63,128|63&n):(r++,n=65536+((1023&n)<<10|1023&t.charCodeAt(r)),e.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return e}function p(d){var b=1;for(var s=d.length;;b++){var c=16*b-12;if(c>=s)break}var z=b,v=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]][z-1]||[];var n=4*z+17;var m=[];for(var i=0;i<n;i++){m[i]=[];for(var j=0;j<n;j++)m[i][j]=null}function S(r,c,v){m[r][c]=v}function q(r,c){return m[r][c]}function R(row,col,size){for(var r=-1;r<=size;r++)for(var c=-1;c<=size;c++){var dr=row+r,dc=col+c;if(dr>=0&&dr<n&&dc>=0&&dc<n)S(dr,dc,r>=0&&r<size&&c>=0&&c<size&&(r==0||r==size-1||c==0||c==size-1||r==2&&c>=2&&c<=size-3||c==2&&r>=2&&r<=size-3)?1:0)}}R(0,0,7);R(n-7,0,7);R(0,n-7,7);for(var i=0;i<v.length;i++)for(var j=0;j<v.length;j++){if(q(v[i],v[j])!==null)continue;R(v[i]-2,v[j]-2,5)}for(var i=8;i<n-8;i++){if(q(6,i)===null)S(6,i,i%2==0?1:0);if(q(i,6)===null)S(i,6,i%2==0?1:0)}S(n-8,8,1);for(var i=0;i<15;i++){var bit=1;if(i<6)S(8,i,bit);else if(i<8)S(8,i+1,bit);else S(8,n-15+i,bit);if(i<8)S(n-1-i,8,bit);else if(i<9)S(15-i,8,bit);else S(14-i,8,bit)}var D=g(d);var capacity=16*z-12;while(D.length<capacity)D.push(236,17);var bits=[];for(var i=0;i<D.length;i++)for(var bit=7;bit>=0;bit--)bits.push((D[i]>>bit)&1);var bi=0;for(var right=n-1;right>=1;right-=2){if(right==6)right=5;for(var vert=0;vert<n;vert++){for(var j=0;j<2;j++){var col=right-j;var up=((right+1)>>1&1)==0;var row=up?n-1-vert:vert;if(q(row,col)===null){S(row,col,bi<bits.length?bits[bi]:0);bi++}}}}for(var r=0;r<n;r++)for(var c=0;c<n;c++)if(q(r,c)===null)S(r,c,0);return{size:n,get:function(r,c){return m[r]&&m[r][c]?1:0}}}
 try{
   var ids=${JSON.stringify(qrIds)};
-  var data="${payload.orderId.replace(/"/g, '\\"')}";
+  var data="${(payload.siteUrl ? `${payload.siteUrl}/pos?order=${payload.orderId}` : payload.orderId).replace(/"/g, '\\"')}";
   var qr=p(data);
   var svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+qr.size+" "+qr.size+'">';
   for(var r=0;r<qr.size;r++)for(var c=0;c<qr.size;c++)if(qr.get(r,c))svg+='<rect x="'+c+'" y="'+r+'" width="1" height="1"/>';

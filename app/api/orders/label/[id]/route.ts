@@ -125,12 +125,17 @@ export async function GET(
       qty: Number(item.qty || 1),
     }));
 
+    // Derive site URL from request for QR code
+    const requestUrl = new URL(_req.url);
+    const siteUrl = `${requestUrl.protocol}//${requestUrl.host}`;
+
     const html = buildAllCupLabelsHtml({
       receiptNumber: order.receipt_number || orderId.slice(0, 8),
       customerName: order.customer_name,
       createdAt: order.created_at,
       orderId: orderId,
       items: labelItems,
+      siteUrl,
       autoPrint: true,
     });
 

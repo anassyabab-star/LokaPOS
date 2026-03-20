@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { buildReceiptHtml } from "@/lib/receipt-print";
 import {
   ModalShell, ModalTitle, ModalSubtitle, ModalActions,
@@ -61,7 +62,10 @@ type DashboardData = {
   monthlyPL: { month: string; sales: number; expenses: number; paid_out: number; outflow: number; profit_loss: number };
 };
 
-export default function POSPage() {
+function POSPageInner() {
+  // ───── QR Scan: detect ?order= param from cup label scan ─────
+  const searchParams = useSearchParams();
+  const scannedOrderId = searchParams.get("order");
   // ───── Navigation ─────
   const [mainTab, setMainTab] = useState<MainTab>("checkout");
   const [checkoutSub, setCheckoutSub] = useState<CheckoutSubTab>("favourites");
@@ -389,6 +393,17 @@ export default function POSPage() {
   useEffect(() => { if (mainTab === "orders") void loadOrders(); }, [mainTab]);
   useEffect(() => { if (mainTab === "reports") void loadReport(reportRange); }, [mainTab, reportRange]);
 
+  // ━━━ QR Scan handler: auto-open order detail when ?order= detected ━━━
+  useEffect(() => {
+    if (!scannedOrderId) return;
+    setMainTab("orders");
+    setOverlay("none");
+    void loadOrders();
+    void loadOrderDetail(scannedOrderId);
+    // Clean URL param without reload
+    window.history.replaceState({}, "", "/pos");
+  }, [scannedOrderId]);
+
   // ━━━ Cart actions ━━━
   function addToCart(productId: string, variantId?: string, addonIds?: string[], sugarLevel?: SugarLevel | null, feedbackLabel?: string, silent = false) {
     const key = buildCartKey(productId, variantId, addonIds, sugarLevel); setCart(prev => ({ ...prev, [key]: (prev[key] || 0) + 1 }));
@@ -707,7 +722,7 @@ export default function POSPage() {
                       Print
                     </button>
                     <button onClick={() => printCupLabel(order.id)} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-[#7F1D1D] active:bg-red-50">
-                      🏷️ Label
+                      Label
                     </button>
                     <button onClick={() => void loadOrderDetail(order.id)} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-blue-600 active:bg-blue-50">
                       View Items
@@ -790,7 +805,7 @@ export default function POSPage() {
                     onClick={() => { if (orderDetailOpen) printCupLabel(orderDetailOpen); }}
                     className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-[#7F1D1D] active:bg-red-50"
                   >
-                    🏷️ Cup Label
+                    Cup Label
                   </button>
                   <button
                     onClick={() => setOrderDetailOpen(null)}
@@ -805,10 +820,12 @@ export default function POSPage() {
         );
       })()}
 
-      {/* ━━━ MAIN TAB: REPORTS (Square-style sales report) ━━━ */}
+
+      {/* ━━━ MAIN TAB: REPORTS ━━━ */}
       {mainTab === "reports" && overlay === "none" && (
-        <div className="flex-1 overflow-y-auto pb-20">
-          <div className="border-b border-gray-200 px-4 py-4">
+        <div className="flex-1 overflow-y-auto bg-gray-50/80 pb-20">
+          {/* Header */}
+          <div className="bg-white border-b border-gray-200 px-4 py-4">
             <div className="flex items-center justify-between">
               <h1 className="text-xl font-bold text-gray-900">Sales Report</h1>
               <div className="flex gap-1">
@@ -850,105 +867,150 @@ export default function POSPage() {
             const orderCount = reportData.orders.length;
             const avg = orderCount > 0 ? gross / orderCount : 0;
             const pl = reportData.monthlyPL;
+            const paymentEntries = Object.entries(reportData.paymentMix);
+            const paymentTotal = paymentEntries.reduce((s, [, v]) => s + v, 0);
             return (
-              <div className="px-4 py-4 space-y-6">
-                {/* Sales Summary */}
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Sales Summary</div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-2xl font-bold text-gray-900">RM{gross.toFixed(2)}</div>
-                      <div className="text-xs text-gray-400">Gross Sales</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-gray-900">RM{gross.toFixed(2)}</div>
-                      <div className="text-xs text-gray-400">Net Sales</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-gray-900">{orderCount}</div>
-                      <div className="text-xs text-gray-400">Sales</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-gray-900">RM{avg.toFixed(2)}</div>
-                      <div className="text-xs text-gray-400">Average Sale</div>
-                    </div>
+              <div className="px-4 py-4 space-y-3">
+
+                {/* Sales Summary — 2x2 grid cards */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="rounded-xl bg-white border border-gray-200/80 p-3.5">
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Gross Sales</div>
+                    <div className="mt-1 text-xl font-bold text-gray-900">RM{gross.toFixed(2)}</div>
+                  </div>
+                  <div className="rounded-xl bg-white border border-gray-200/80 p-3.5">
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Net Sales</div>
+                    <div className="mt-1 text-xl font-bold text-gray-900">RM{gross.toFixed(2)}</div>
+                  </div>
+                  <div className="rounded-xl bg-white border border-gray-200/80 p-3.5">
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Total Orders</div>
+                    <div className="mt-1 text-xl font-bold text-gray-900">{orderCount}</div>
+                  </div>
+                  <div className="rounded-xl bg-white border border-gray-200/80 p-3.5">
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Average Sale</div>
+                    <div className="mt-1 text-xl font-bold text-gray-900">RM{avg.toFixed(2)}</div>
                   </div>
                 </div>
 
-                {/* Payment Mix */}
-                {Object.keys(reportData.paymentMix).length > 0 && (
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Payment Breakdown</div>
-                    <div className="space-y-2">
-                      {Object.entries(reportData.paymentMix).map(([method, amount]) => (
-                        <div key={method} className="flex items-center justify-between">
-                          <span className="text-sm text-gray-700 capitalize">{method}</span>
-                          <span className="text-sm font-semibold tabular-nums text-gray-900">RM{amount.toFixed(2)}</span>
-                        </div>
-                      ))}
+                {/* Yesterday comparison pill */}
+                <div className="flex items-center gap-2 rounded-xl bg-white border border-gray-200/80 px-4 py-3">
+                  <span className="text-xs text-gray-400">vs Semalam</span>
+                  <span className="text-sm font-bold text-gray-700">RM{reportData.yesterdaySales.toFixed(2)}</span>
+                  {gross > 0 && reportData.yesterdaySales > 0 && (() => {
+                    const diff = ((gross - reportData.yesterdaySales) / reportData.yesterdaySales) * 100;
+                    return <span className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold ${diff >= 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>{diff >= 0 ? "+" : ""}{diff.toFixed(0)}%</span>;
+                  })()}
+                </div>
+
+                {/* Payment Breakdown — visual bars */}
+                {paymentEntries.length > 0 && (
+                  <div className="rounded-xl bg-white border border-gray-200/80 p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400 mb-3">Payment Breakdown</div>
+                    <div className="space-y-2.5">
+                      {paymentEntries.map(([method, amount]) => {
+                        const pct = paymentTotal > 0 ? (amount / paymentTotal) * 100 : 0;
+                        const colors: Record<string, string> = { qr: "bg-blue-500", cash: "bg-green-500", card: "bg-purple-500" };
+                        const barColor = colors[method.toLowerCase()] || "bg-gray-400";
+                        return (
+                          <div key={method}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-700 capitalize">{method}</span>
+                              <span className="text-sm font-bold tabular-nums text-gray-900">RM{amount.toFixed(2)}</span>
+                            </div>
+                            <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+                              <div className={`h-full rounded-full ${barColor} transition-all duration-500`} style={{ width: `${Math.max(pct, 2)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Top Products */}
+                {/* Top Products — numbered with rank badges and bars */}
                 {reportData.topProducts.length > 0 && (
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Top Products</div>
-                    <div className="space-y-2">
-                      {reportData.topProducts.map((p, i) => (
-                        <div key={p.product_name} className="flex items-center justify-between">
-                          <span className="text-sm text-gray-700">{i + 1}. {p.product_name}</span>
-                          <span className="text-sm font-semibold tabular-nums text-gray-500">{p.total_qty} sold</span>
-                        </div>
-                      ))}
+                  <div className="rounded-xl bg-white border border-gray-200/80 p-4">
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400 mb-3">Top Products</div>
+                    <div className="space-y-0">
+                      {reportData.topProducts.map((p, i) => {
+                        const maxQty = reportData.topProducts[0]?.total_qty || 1;
+                        const pct = (p.total_qty / maxQty) * 100;
+                        return (
+                          <div key={p.product_name} className={`flex items-center gap-3 px-1 py-2.5 ${i > 0 ? "border-t border-gray-100" : ""}`}>
+                            <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${i === 0 ? "bg-[#7F1D1D] text-white" : i === 1 ? "bg-[#7F1D1D]/20 text-[#7F1D1D]" : i === 2 ? "bg-[#7F1D1D]/10 text-[#7F1D1D]" : "bg-gray-100 text-gray-500"}`}>{i + 1}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium text-gray-800 truncate">{p.product_name}</div>
+                              <div className="mt-0.5 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                                <div className="h-full rounded-full bg-[#7F1D1D]/30 transition-all duration-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                            <span className="text-xs font-bold tabular-nums text-gray-500 shrink-0">{p.total_qty} sold</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Best Hour */}
+                {/* Peak Hour */}
                 {reportData.bestHour && (
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Peak Hour</div>
-                    <div className="text-sm text-gray-700">{reportData.bestHour}:00 — RM{reportData.bestHourSales.toFixed(2)}</div>
+                  <div className="flex items-center gap-3 rounded-xl bg-white border border-gray-200/80 px-4 py-3.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50 text-lg">⚡</span>
+                    <div>
+                      <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Peak Hour</div>
+                      <div className="text-sm font-bold text-gray-900">{reportData.bestHour}:00 <span className="font-normal text-gray-500">—</span> RM{reportData.bestHourSales.toFixed(2)}</div>
+                    </div>
                   </div>
                 )}
 
-                {/* Monthly P/L */}
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Monthly P&L ({pl.month})</div>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-sm"><span className="text-gray-600">Sales</span><span className="font-semibold text-gray-900">RM{pl.sales.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-gray-600">Expenses</span><span className="font-semibold text-red-600">-RM{pl.expenses.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-gray-600">Paid Out</span><span className="font-semibold text-red-600">-RM{pl.paid_out.toFixed(2)}</span></div>
-                    <div className="border-t border-gray-200 pt-1.5 flex justify-between text-sm"><span className="font-semibold text-gray-900">Profit/Loss</span><span className={`font-bold ${pl.profit_loss >= 0 ? "text-green-700" : "text-red-700"}`}>RM{pl.profit_loss.toFixed(2)}</span></div>
+                {/* Monthly P&L — zebra table */}
+                <div className="rounded-xl bg-white border border-gray-200/80 overflow-hidden">
+                  <div className="px-4 pt-4 pb-2">
+                    <div className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Monthly P&L ({pl.month})</div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50/50">
+                      <span className="text-sm text-gray-600">Sales</span>
+                      <span className="text-sm font-semibold tabular-nums text-gray-900">RM{pl.sales.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <span className="text-sm text-gray-600">Expenses</span>
+                      <span className="text-sm font-semibold tabular-nums text-red-600">-RM{pl.expenses.toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50/50">
+                      <span className="text-sm text-gray-600">Paid Out</span>
+                      <span className="text-sm font-semibold tabular-nums text-red-600">-RM{pl.paid_out.toFixed(2)}</span>
+                    </div>
+                    <div className={`flex items-center justify-between px-4 py-3 border-t-2 ${pl.profit_loss >= 0 ? "border-green-200 bg-green-50/50" : "border-red-200 bg-red-50/50"}`}>
+                      <span className="text-sm font-bold text-gray-900">Profit/Loss</span>
+                      <span className={`text-base font-bold tabular-nums ${pl.profit_loss >= 0 ? "text-green-700" : "text-red-700"}`}>RM{pl.profit_loss.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Low Stock */}
+                {/* Low Stock Alert */}
                 {reportData.lowStock.length > 0 && (
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Low Stock Alert</div>
-                    <div className="space-y-1.5">
-                      {reportData.lowStock.map(p => (
-                        <div key={p.id} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-700">{p.name}</span>
-                          <span className="font-semibold text-amber-600">{p.stock} left</span>
+                  <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
+                    <div className="flex items-center gap-2 bg-amber-50 px-4 py-2.5 border-b border-amber-200">
+                      <span className="text-sm">⚠️</span>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-700">Low Stock Alert</span>
+                    </div>
+                    <div>
+                      {reportData.lowStock.map((p, i) => (
+                        <div key={p.id} className={`flex items-center justify-between px-4 py-2.5 ${i % 2 === 0 ? "" : "bg-gray-50/50"}`}>
+                          <span className="text-sm text-gray-700">{p.name}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${p.stock === 0 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{p.stock} left</span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* Yesterday comparison */}
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <div className="text-xs text-gray-400">vs Yesterday</div>
-                  <div className="text-sm font-semibold text-gray-700">RM{reportData.yesterdaySales.toFixed(2)}</div>
-                </div>
               </div>
             );
           })() : (
             <div className="flex items-center justify-center py-20">
-              <div className="text-sm text-gray-400">Gagal load report</div>
+              <div className="text-sm text-gray-400">Tiada data</div>
             </div>
           )}
         </div>
@@ -1282,7 +1344,7 @@ export default function POSPage() {
             <div className="mt-1 text-sm text-gray-500">#{receiptData.receipt_number} · {receiptData.customerName}</div>
             <div className="mt-6 flex gap-3">
               <button onClick={() => printReceipt(receiptData)} className="rounded-full border border-gray-200 px-6 py-2.5 text-sm font-medium text-gray-700">Print Receipt</button>
-              {receiptData.order_id && <button onClick={() => printCupLabel(receiptData.order_id!)} className="rounded-full border border-gray-200 px-6 py-2.5 text-sm font-medium text-[#7F1D1D]">🏷️ Cup Label</button>}
+              {receiptData.order_id && <button onClick={() => printCupLabel(receiptData.order_id!)} className="rounded-full border border-gray-200 px-6 py-2.5 text-sm font-medium text-[#7F1D1D]">Cup Label</button>}
               <button onClick={() => { setReceiptData(null); setOverlay("none"); }} className="rounded-full bg-[#7F1D1D] px-6 py-2.5 text-sm font-medium text-white">New Sale</button>
             </div>
           </div>
@@ -1322,5 +1384,13 @@ export default function POSPage() {
       {showPaidOutModal && currentShift && (<ModalShell onClose={() => setShowPaidOutModal(false)}><ModalTitle>Paid Out</ModalTitle><InfoCard><div>Tunai: RM{cashSalesLive.toFixed(2)} · Keluar: RM{paidOutTotalLive.toFixed(2)} · Baki: RM{expectedCashLive.toFixed(2)}</div></InfoCard><div className="mt-3 space-y-2"><ModalInput type="number" value={paidOutAmount} onChange={setPaidOutAmount} placeholder="Amaun (RM)" /><ModalInput value={paidOutReason} onChange={setPaidOutReason} placeholder="Sebab" /><ModalInput value={paidOutStaffName} onChange={setPaidOutStaffName} placeholder="Nama staf" /><ModalInput value={paidOutVendor} onChange={setPaidOutVendor} placeholder="Vendor (pilihan)" /></div>{recentPaidOuts.length > 0 && <div className="mt-2 max-h-20 overflow-auto rounded-lg bg-gray-50 p-2"><div className="mb-1 text-[11px] font-medium text-gray-500">Terkini</div>{recentPaidOuts.slice(0, 3).map(e => <div key={e.id} className="flex justify-between text-xs"><span className="truncate text-gray-600">{e.reason}</span><span className="text-red-600">RM{Number(e.amount || 0).toFixed(2)}</span></div>)}</div>}<ModalActions><ModalBtnSecondary onClick={() => setShowPaidOutModal(false)}>Batal</ModalBtnSecondary><ModalBtnPrimary onClick={() => void submitPaidOut()} disabled={paidOutSubmitting}>{paidOutSubmitting ? "Saving..." : "Simpan"}</ModalBtnPrimary></ModalActions></ModalShell>)}
       {showSignOutConfirm && (<ModalShell onClose={() => setShowSignOutConfirm(false)}><ModalTitle>Log keluar?</ModalTitle><ModalActions><ModalBtnSecondary onClick={() => setShowSignOutConfirm(false)}>Batal</ModalBtnSecondary><a href="/auth/logout?next=/staff/login" className="flex flex-1 items-center justify-center rounded-xl bg-[#7F1D1D] px-4 py-3 text-sm font-semibold text-white">Ya</a></ModalActions></ModalShell>)}
     </div>
+  );
+}
+
+export default function POSPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center text-gray-400">Loading...</div>}>
+      <POSPageInner />
+    </Suspense>
   );
 }
