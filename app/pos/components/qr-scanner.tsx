@@ -65,6 +65,7 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
   useEffect(() => {
     let html5QrCode: Html5QrcodeScanner | null = null;
     let mounted = true;
+    let isStarted = false;
 
     async function initScanner() {
       // Dynamically load html5-qrcode from CDN
@@ -99,6 +100,7 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
             const orderId = extractOrderId(decodedText);
             if (orderId) {
               hasScannedRef.current = true;
+              isStarted = false;
               // Vibrate for haptic feedback
               if (navigator.vibrate) navigator.vibrate(100);
               // Stop scanner then callback
@@ -114,6 +116,7 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
             // QR code not detected in this frame — ignore
           }
         );
+        isStarted = true;
         if (mounted) setLoading(false);
       } catch (err: unknown) {
         if (!mounted) return;
@@ -139,8 +142,11 @@ export default function QrScanner({ onScan, onClose }: QrScannerProps) {
 
     return () => {
       mounted = false;
-      if (html5QrCode) {
-        html5QrCode.stop().catch(() => {});
+      if (html5QrCode && isStarted) {
+        html5QrCode.stop().catch(() => {}).finally(() => {
+          html5QrCode?.clear();
+        });
+      } else if (html5QrCode) {
         html5QrCode.clear();
       }
     };
