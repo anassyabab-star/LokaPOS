@@ -16,6 +16,7 @@ import {
 
 const REGISTER_ID = "main";
 const POS_AUTO_PRINT_KEY = "pos_auto_print_enabled";
+const POS_AUTO_LABEL_KEY = "pos_auto_label_enabled";
 const POS_PAID_OUT_STAFF_NAME_KEY = "pos_paid_out_staff_name";
 
 // ━━━ Navigation types ━━━
@@ -139,6 +140,7 @@ export default function POSPage() {
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "qr" | "card">("cash");
   const [cashReceived, setCashReceived] = useState("");
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
+  const [autoPrintLabel, setAutoPrintLabel] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
 
   // ───── Discount UI ─────
@@ -380,6 +382,8 @@ export default function POSPage() {
   useEffect(() => { if (!addedToast) return; const t = setTimeout(() => setAddedToast(null), 1200); return () => clearTimeout(t); }, [addedToast]);
   useEffect(() => { try { setAutoPrintEnabled(window.localStorage.getItem(POS_AUTO_PRINT_KEY) === "1"); } catch {} }, []);
   useEffect(() => { try { window.localStorage.setItem(POS_AUTO_PRINT_KEY, autoPrintEnabled ? "1" : "0"); } catch {} }, [autoPrintEnabled]);
+  useEffect(() => { try { setAutoPrintLabel(window.localStorage.getItem(POS_AUTO_LABEL_KEY) === "1"); } catch {} }, []);
+  useEffect(() => { try { window.localStorage.setItem(POS_AUTO_LABEL_KEY, autoPrintLabel ? "1" : "0"); } catch {} }, [autoPrintLabel]);
   useEffect(() => { try { setPaidOutStaffName(window.localStorage.getItem(POS_PAID_OUT_STAFF_NAME_KEY) || ""); } catch {} }, []);
   useEffect(() => { try { window.localStorage.setItem(POS_PAID_OUT_STAFF_NAME_KEY, paidOutStaffName); } catch {} }, [paidOutStaffName]);
   useEffect(() => { if (mainTab === "orders") void loadOrders(); }, [mainTab]);
@@ -471,6 +475,7 @@ export default function POSPage() {
       if (!data.success) { pw?.close(); alert(data?.error || "Gagal"); return; }
       const receipt: ReceiptData = { order_id: String(data.order_id || ""), receipt_number: data.receipt_number, customerName: finalName, items, subtotal, discount: discountAmount + redeemAmount, total, payment_method: paymentMethod, created_at: new Date().toISOString() };
       setReceiptData(receipt); if (autoPrintEnabled) printReceipt(receipt, pw);
+      if (autoPrintLabel && data.order_id) printCupLabel(String(data.order_id));
       setCart({}); setCustomPrices({}); setCustomNotes({}); setCustomerName(""); setCustomerPhone(""); setCustomerEmail(""); setConsentWhatsapp(false); setConsentEmail(false); setLinkedCustomerId(null); setMemberPoints(0); setMemberExpiringPoints(0); setRedeemPointsInput(""); setMemberLookupMessage(null); setDiscountType("none"); setDiscountValue(""); setCashReceived(""); setShowDiscountPanel(false);
       setOverlay("done"); void refreshShiftState({ autoPrompt: false });
     } catch { pw?.close(); alert("Ralat pelayan"); } finally { setSubmittingOrder(false); }
@@ -479,6 +484,11 @@ export default function POSPage() {
     if (data.order_id) { const url = `/api/orders/receipt/${encodeURIComponent(data.order_id)}`; if (ew && !ew.closed) { ew.location.replace(url); return; } window.open(url, "_blank", "width=420,height=720"); return; }
     const html = buildReceiptHtml({ receiptNumber: data.receipt_number, createdAt: data.created_at, customerName: data.customerName, paymentMethod: data.payment_method, subtotal: data.subtotal, discount: data.discount, total: data.total, items: data.items.map(i => ({ name: i.name + (i.supports_sugar ? ` · ${sugarLabel(i.sugar_level)}` : ""), qty: i.qty, unitPrice: i.price, lineTotal: i.price * i.qty })), autoPrint: true });
     const w = ew && !ew.closed ? ew : window.open("", "_blank", "width=420,height=720"); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
+  }
+  function printCupLabel(orderId: string) {
+    if (!orderId) return;
+    const url = `/api/orders/label/${encodeURIComponent(orderId)}`;
+    window.open(url, "_blank", "width=300,height=250");
   }
 
   // ━━━ Filtered products for Library ━━━
@@ -696,6 +706,9 @@ export default function POSPage() {
                     <button onClick={() => { window.open(`/api/orders/receipt/${order.id}`, "_blank", "width=420,height=720"); }} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 active:bg-gray-100">
                       Print
                     </button>
+                    <button onClick={() => printCupLabel(order.id)} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-[#7F1D1D] active:bg-red-50">
+                      🏷️ Label
+                    </button>
                     <button onClick={() => void loadOrderDetail(order.id)} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-blue-600 active:bg-blue-50">
                       View Items
                     </button>
@@ -772,6 +785,12 @@ export default function POSPage() {
                     className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-700 active:bg-gray-100"
                   >
                     Print Receipt
+                  </button>
+                  <button
+                    onClick={() => { if (orderDetailOpen) printCupLabel(orderDetailOpen); }}
+                    className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-[#7F1D1D] active:bg-red-50"
+                  >
+                    🏷️ Cup Label
                   </button>
                   <button
                     onClick={() => setOrderDetailOpen(null)}
@@ -958,6 +977,19 @@ export default function POSPage() {
             <button onClick={() => setShowOpenShiftModal(true)} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left text-sm font-medium text-gray-900">Buka Shift <span className="text-gray-400">›</span></button>
           )}
           <a href="/dashboard" className="flex items-center justify-between border-b border-gray-200 px-4 py-4 text-sm font-medium text-gray-400">Admin Panel <span>›</span></a>
+          {/* Print settings */}
+          <div className="mx-4 my-3 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Print Settings</div>
+            <label className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Auto Print Receipt</span>
+              <input type="checkbox" checked={autoPrintEnabled} onChange={e => setAutoPrintEnabled(e.target.checked)} className="h-4 w-4 accent-[#7F1D1D]" />
+            </label>
+            <label className="flex items-center justify-between">
+              <span className="text-sm text-gray-700">Auto Print Cup Label</span>
+              <input type="checkbox" checked={autoPrintLabel} onChange={e => setAutoPrintLabel(e.target.checked)} className="h-4 w-4 accent-[#7F1D1D]" />
+            </label>
+            <div className="text-[11px] text-gray-400">Label auto-print buka popup untuk setiap item. Guna sticker 50×30mm.</div>
+          </div>
           <button onClick={() => setShowSignOutConfirm(true)} className="px-4 py-4 text-left text-sm font-medium text-[#7F1D1D]">Sign out</button>
         </div>
       )}
@@ -1250,6 +1282,7 @@ export default function POSPage() {
             <div className="mt-1 text-sm text-gray-500">#{receiptData.receipt_number} · {receiptData.customerName}</div>
             <div className="mt-6 flex gap-3">
               <button onClick={() => printReceipt(receiptData)} className="rounded-full border border-gray-200 px-6 py-2.5 text-sm font-medium text-gray-700">Print Receipt</button>
+              {receiptData.order_id && <button onClick={() => printCupLabel(receiptData.order_id!)} className="rounded-full border border-gray-200 px-6 py-2.5 text-sm font-medium text-[#7F1D1D]">🏷️ Cup Label</button>}
               <button onClick={() => { setReceiptData(null); setOverlay("none"); }} className="rounded-full bg-[#7F1D1D] px-6 py-2.5 text-sm font-medium text-white">New Sale</button>
             </div>
           </div>
