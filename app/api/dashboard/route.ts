@@ -1,10 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
+import { requireStaffApi } from "@/lib/staff-api-auth";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string
-);
+const supabase = createSupabaseAdminClient();
 
 type ProductJoin = { name?: string | null } | Array<{ name?: string | null }> | null;
 type OrderItemJoinRow = {
@@ -39,6 +37,10 @@ function plusDays(dateStr: string, days: number) {
 }
 
 export async function GET(req: NextRequest) {
+  // BUG-11 FIX: Require staff auth for dashboard data
+  const auth = await requireStaffApi();
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const range = searchParams.get("range") || "today";

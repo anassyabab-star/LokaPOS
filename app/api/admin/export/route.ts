@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-api-auth";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string
-);
+const supabase = createSupabaseAdminClient();
 
 function getMYDate(date: Date) {
   return date.toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
