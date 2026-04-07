@@ -99,7 +99,7 @@ export async function GET() {
 
   // Fetch addons for all items
   const itemIds = (allItems || []).map(i => i.id);
-  let addonsByItemId = new Map<string, string[]>();
+  const addonsByItemId = new Map<string, string[]>();
   if (itemIds.length > 0) {
     try {
       const { data: addons } = await supabase

@@ -11,7 +11,8 @@ type CustomerApiErrorCode =
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "STOCK_ERROR";
 
 type CustomerDbRow = {
   id: string;
