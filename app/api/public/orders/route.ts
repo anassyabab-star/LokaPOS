@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
+import {
+  calculateCustomerOrderItems,
+  generateOrderNumber,
+  insertOrderItemAddonsWithFallback,
+} from "@/lib/customer-orders";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -157,5 +162,161 @@ export async function GET(req: Request) {
     console.error("POS order detail error:", error);
     const message = error instanceof Error ? error.message : "Failed to load order detail";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// ── PUBLIC: Guest order creation (no auth required) ──────────────────────────
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const customerName = String(body.customer_name || "").trim();
+  const customerPhone = String(body.customer_phone || "").trim();
+  const paymentMethod = String(body.payment_method || "fpx").trim().toLowerCase();
+
+  if (!customerName) return NextResponse.json({ error: "Nama diperlukan" }, { status: 400 });
+  if (!customerPhone || customerPhone.replace(/[^\d]/g, "").length < 8) {
+    return NextResponse.json({ error: "No telefon tidak sah" }, { status: 400 });
+  }
+  const requestItems = Array.isArray(body.items) ? body.items : null;
+  if (!requestItems || requestItems.length === 0) {
+    return NextResponse.json({ error: "Sekurang-kurangnya satu item diperlukan" }, { status: 400 });
+  }
+
+  try {
+    const parsedItems = (requestItems as Record<string, unknown>[]).map(raw => ({
+      product_id: String(raw.product_id || "").trim(),
+      variant_id: String(raw.variant_id || "").trim() || null,
+      addon_ids: Array.isArray(raw.addon_ids)
+        ? (raw.addon_ids as unknown[]).map(v => String(v || "").trim()).filter(Boolean)
+        : [],
+      sugar_level: String(raw.sugar_level || "").trim() || null,
+      qty: Number(raw.qty || 0),
+    }));
+
+    const calculated = await calculateCustomerOrderItems(parsedItems);
+    const numbering = await generateOrderNumber();
+    const supabase = createSupabaseAdminClient();
+
+    // Find or create customer by phone
+    const normalizedPhone = customerPhone.replace(/[^\d+]/g, "");
+    const { data: existingCustomer } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("phone", normalizedPhone)
+      .maybeSingle();
+
+    let customerId: string | null = existingCustomer?.id || null;
+
+    if (!customerId) {
+      const { data: newCustomer } = await supabase
+        .from("customers")
+        .insert([{ name: customerName, phone: normalizedPhone }])
+        .select("id")
+        .maybeSingle();
+      customerId = newCustomer?.id || null;
+    }
+
+    const orderBase = {
+      receipt_number: numbering.orderNumber,
+      date_key: numbering.dateKey,
+      customer_name: customerName,
+      customer_id: customerId,
+      subtotal: calculated.subtotal,
+      discount_type: "none",
+      discount_value: 0,
+      total: calculated.subtotal,
+      payment_method: paymentMethod,
+      cash_received: 0,
+      balance: 0,
+      status: "pending",
+      payment_status: "pending",
+    };
+
+    let orderInsert = await supabase
+      .from("orders")
+      .insert([{ ...orderBase, order_source: "customer_web" }])
+      .select("id")
+      .single();
+
+    if (orderInsert.error?.message?.toLowerCase().includes("order_source")) {
+      orderInsert = await supabase.from("orders").insert([orderBase]).select("id").single();
+    }
+
+    const { data: order, error: orderError } = orderInsert;
+    if (orderError || !order) {
+      return NextResponse.json({ error: orderError?.message || "Gagal buat order" }, { status: 500 });
+    }
+
+    for (const item of calculated.items) {
+      let itemInsert = await supabase
+        .from("order_items")
+        .insert([{
+          order_id: order.id,
+          product_id: item.product_id,
+          product_name_snapshot: item.product_name_snapshot,
+          variant_id: item.variant_id,
+          sugar_level: item.sugar_level,
+          price: item.unit_price,
+          qty: item.qty,
+          line_total: item.line_total,
+        }])
+        .select("id")
+        .single();
+
+      if (itemInsert.error?.message?.toLowerCase().includes("sugar_level")) {
+        itemInsert = await supabase
+          .from("order_items")
+          .insert([{
+            order_id: order.id,
+            product_id: item.product_id,
+            product_name_snapshot: item.product_name_snapshot,
+            variant_id: item.variant_id,
+            price: item.unit_price,
+            qty: item.qty,
+            line_total: item.line_total,
+          }])
+          .select("id")
+          .single();
+      }
+
+      if (itemInsert.error) {
+        return NextResponse.json({ error: itemInsert.error.message }, { status: 500 });
+      }
+
+      if (itemInsert.data && item.addon_snapshots.length > 0) {
+        await insertOrderItemAddonsWithFallback(itemInsert.data.id, item.addon_snapshots);
+      }
+    }
+
+    // Decrement stock
+    for (const [productId, requestedQty] of calculated.requestedQtyByProductId.entries()) {
+      const { error: rpcError } = await supabase.rpc("decrement_stock", {
+        p_product_id: productId,
+        p_qty: requestedQty,
+      });
+      if (rpcError && (rpcError.message?.includes("does not exist") || rpcError.message?.includes("schema cache"))) {
+        const { data: product } = await supabase.from("products").select("stock").eq("id", productId).single();
+        const updatedStock = Math.max(0, Number(product?.stock || 0) - requestedQty);
+        await supabase.from("products").update({ stock: updatedStock }).eq("id", productId);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      order_id: order.id,
+      order_number: numbering.orderNumber,
+      total: calculated.subtotal,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Gagal buat order";
+    const status = message.toLowerCase().includes("stock")
+      ? 400
+      : message.toLowerCase().includes("not found") || message.toLowerCase().includes("not available")
+      ? 404
+      : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -16,6 +16,7 @@ const QrScanner = dynamic(() => import("./components/qr-scanner"), {
     </div>
   ),
 });
+import { useState } from "react";
 import { ReceiptData, SUGAR_LEVEL_OPTIONS, sugarLabel } from "./types";
 import { PosErrorBoundary } from "./components/pos-error-boundary";
 import { usePosState } from "./hooks/use-pos-state";
@@ -32,6 +33,7 @@ function POSPageInner() {
   const searchParams = useSearchParams();
   const scannedOrderId = searchParams.get("order");
   const s = usePos();
+  const [lastCashChange, setLastCashChange] = useState<number>(0);
 
   // ━━━ Init ━━━
   useEffect(() => { fetch("/api/products").then(r => r.json()).then(d => s.setProducts(Array.isArray(d) ? d : [])).catch(() => s.setProducts([])); void s.refreshShiftState(); }, [s.refreshShiftState]);
@@ -69,8 +71,9 @@ function POSPageInner() {
     s.setSubmittingOrder(true);
     try { const res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountAmount, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) }); const data = await res.json();
       if (!data.success) { pw?.close(); alert(data?.error || "Gagal"); return; }
-      const receipt: ReceiptData = { order_id: String(data.order_id || ""), receipt_number: data.receipt_number, customerName: finalName, items: s.items, subtotal: s.subtotal, discount: s.discountAmount + s.redeemAmount, total: s.total, payment_method: s.paymentMethod, created_at: new Date().toISOString() };
+      const receipt: ReceiptData = { order_id: String(data.order_id || ""), receipt_number: data.receipt_number, customerName: finalName, items: s.items, subtotal: s.subtotal, discount: s.discountAmount + s.redeemAmount, total: s.total, payment_method: method, created_at: new Date().toISOString() };
       s.setReceiptData(receipt); if (s.autoPrintEnabled) printReceipt(receipt, pw); if (s.autoPrintLabel && data.order_id) printCupLabel(String(data.order_id));
+      setLastCashChange(method === "cash" ? cashVal - s.total : 0);
       s.clearCart(); s.resetCustomerState(); s.setOverlay("done"); void s.refreshShiftState({ autoPrompt: false });
     } catch { pw?.close(); alert("Ralat pelayan"); } finally { s.setSubmittingOrder(false); }
   }
@@ -90,7 +93,7 @@ function POSPageInner() {
       {s.overlay === "cart" && <CartOverlay />}
       {s.overlay === "customer" && <CustomerOverlay />}
       {s.overlay === "payment" && <PaymentOverlay onCompletePayment={completePayment} />}
-      {s.overlay === "done" && s.receiptData && <DoneOverlay onPrintReceipt={() => printReceipt(s.receiptData!)} onPrintLabel={() => s.receiptData?.order_id && printCupLabel(s.receiptData.order_id)} />}
+      {s.overlay === "done" && s.receiptData && <DoneOverlay onPrintReceipt={() => printReceipt(s.receiptData!)} onPrintLabel={() => s.receiptData?.order_id && printCupLabel(s.receiptData.order_id)} lastCashChange={lastCashChange} />}
       {s.addedToast && <div className="animate-toast fixed bottom-20 left-1/2 z-[60] -translate-x-1/2 rounded-lg bg-[#7F1D1D] px-4 py-2 text-sm text-white shadow-lg">{s.addedToast}</div>}
 
       {/* Modals */}

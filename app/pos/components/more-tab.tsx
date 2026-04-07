@@ -34,6 +34,13 @@ export default function MoreTab() {
         <button onClick={() => s.setShowOpenShiftModal(true)} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left text-sm font-medium text-gray-900">Buka Shift <span className="text-gray-400">›</span></button>
       )}
       <a href="/dashboard" className="flex items-center justify-between border-b border-gray-200 px-4 py-4 text-sm font-medium text-gray-400">Admin Panel <span>›</span></a>
+      <a href="/kds" target="_blank" className="flex items-center justify-between border-b border-gray-200 px-4 py-4 text-sm font-medium text-gray-900">
+        <span className="flex items-center gap-3">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-sm">🍳</span>
+          Kitchen Display (KDS)
+        </span>
+        <span className="text-gray-400">›</span>
+      </a>
       <div className="mx-4 my-3 rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 space-y-3">
         <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Print Settings</div>
         <label className="flex items-center justify-between">

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { usePos } from "../pos-context";
 
 function statusColor(status: string) {
@@ -25,6 +26,7 @@ function sourceTag(source: string | null) {
 
 export default function OrdersTab() {
   const s = usePos();
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   function printCupLabel(orderId: string) {
     if (!orderId) return;
@@ -32,19 +34,33 @@ export default function OrdersTab() {
   }
 
   async function updateOrderStatus(orderId: string, newStatus: string) {
+    setStatusError(null);
     try {
-      await fetch(`/api/admin/orders/${orderId}/status`, {
+      const res = await fetch(`/api/admin/orders/${orderId}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setStatusError(data.error || `Gagal kemaskini status (${res.status})`);
+        return;
+      }
       void s.loadOrders();
-    } catch {}
+    } catch {
+      setStatusError("Tiada sambungan. Cuba lagi.");
+    }
   }
 
   return (
     <>
       <div className="flex-1 overflow-y-auto pb-20">
+        {statusError && (
+          <div className="flex items-center justify-between bg-red-50 border-b border-red-200 px-4 py-2">
+            <span className="text-xs text-red-700">{statusError}</span>
+            <button onClick={() => setStatusError(null)} className="text-red-400 text-sm ml-2">×</button>
+          </div>
+        )}
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-4">
           <h1 className="text-xl font-bold text-gray-900">Orders</h1>
           <div className="flex gap-2">

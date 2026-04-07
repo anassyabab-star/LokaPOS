@@ -3,6 +3,7 @@ import { requireAdminApi } from "@/lib/admin-api-auth";
 import { getMurpatiConfigStatus, getMurpatiSessionStatus } from "../../campaigns/murpati";
 import { getToyyibpayConfigStatus } from "@/lib/toyyibpay";
 import { getBillplzConfigStatus } from "@/lib/billplz";
+import { getChipConfigStatus } from "@/lib/chip";
 
 type IntegrationCheck = {
   key: string;
@@ -21,27 +22,40 @@ type IntegrationSummary = {
   hint?: string | null;
 };
 
-function normalizePaymentProvider() {
-  const value = String(process.env.PAYMENT_PROVIDER || "").trim().toLowerCase();
-  if (value === "toyyibpay" || value === "billplz") return value;
+type PaymentProvider = "chip" | "toyyibpay" | "billplz";
 
+function normalizePaymentProvider(): PaymentProvider {
+  const value = String(process.env.PAYMENT_PROVIDER || "").trim().toLowerCase();
+  if (value === "chip" || value === "toyyibpay" || value === "billplz") return value;
+
+  // Auto-detect: prefer CHIP if configured
+  const chip = getChipConfigStatus();
+  if (chip.configured) return "chip";
   const billplz = getBillplzConfigStatus();
   const toyyib = getToyyibpayConfigStatus();
   if (billplz.configured && !toyyib.configured) return "billplz";
   if (toyyib.configured && !billplz.configured) return "toyyibpay";
   if (billplz.configured && toyyib.configured) return "billplz";
-  return "toyyibpay";
+  return "chip";
 }
 
-function buildPaymentGatewaySummary(activeProvider: "toyyibpay" | "billplz") {
+function buildPaymentGatewaySummary(activeProvider: PaymentProvider) {
+  const chip = getChipConfigStatus();
   const toyyib = getToyyibpayConfigStatus();
   const billplz = getBillplzConfigStatus();
-  const activeConfigured = activeProvider === "toyyibpay" ? toyyib.configured : billplz.configured;
+  const activeConfigured =
+    activeProvider === "chip" ? chip.configured :
+    activeProvider === "toyyibpay" ? toyyib.configured : billplz.configured;
   const checks: IntegrationCheck[] = [
     {
       key: "provider",
       label: `Active Provider (${activeProvider})`,
       ok: true,
+    },
+    {
+      key: "chip",
+      label: "CHIP keys",
+      ok: chip.configured,
     },
     {
       key: "toyyibpay",
@@ -57,6 +71,7 @@ function buildPaymentGatewaySummary(activeProvider: "toyyibpay" | "billplz") {
 
   return {
     activeProvider,
+    chip,
     toyyib,
     billplz,
     summary: {
@@ -173,6 +188,19 @@ export async function GET() {
     const integrations: IntegrationSummary[] = [
       payment.summary,
       murpati,
+      {
+        id: "chip",
+        name: "CHIP Collect",
+        category: "payment",
+        configured: payment.chip.configured,
+        healthy: payment.chip.configured,
+        status: payment.chip.configured ? "Configured" : "Not configured",
+        checks: [
+          { key: "brandId", label: "Brand ID", ok: payment.chip.hasBrandId },
+          { key: "secretKey", label: "Secret Key", ok: payment.chip.hasSecretKey },
+        ],
+        hint: payment.chip.configured ? null : "Set CHIP_BRAND_ID and CHIP_SECRET_KEY",
+      },
       {
         id: "toyyibpay",
         name: "ToyyibPay",

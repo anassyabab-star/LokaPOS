@@ -389,9 +389,10 @@ export async function POST(req: Request) {
 
     let subtotal = 0;
 
-    // CHECK STOCK
+    // CHECK STOCK (skip custom keypad items)
     for (const item of body.items) {
       const productId = item.product_id;
+      if (productId === "custom") continue;
 
       const { data: product } = await supabase
         .from("products")
@@ -425,7 +426,7 @@ export async function POST(req: Request) {
       payment_method: body.payment_method,
       cash_received: body.cash_received,
       balance: 0,
-      status: "completed",
+      status: "pending",
       payment_status: "paid",
     };
 
@@ -463,6 +464,28 @@ export async function POST(req: Request) {
         typeof item.name === "string" && item.name.trim().length > 0
           ? item.name.trim()
           : null;
+
+      // Handle custom keypad amounts (no real product)
+      if (productId === "custom") {
+        const customPrice = Number(item.price || 0);
+        const customQty = Number(item.qty || 1);
+        const lineTotal = customPrice * customQty;
+        subtotal += lineTotal;
+
+        const customPayload = {
+          order_id: order.id,
+          product_id: null as string | null,
+          product_name_snapshot: snapshotName || "Custom amount",
+          variant_id: null,
+          sugar_level: null,
+          price: customPrice,
+          qty: customQty,
+          line_total: lineTotal,
+        };
+
+        await supabase.from("order_items").insert([customPayload]);
+        continue;
+      }
 
       const { data: product } = await supabase
         .from("products")
@@ -542,10 +565,22 @@ export async function POST(req: Request) {
         await insertOrderItemAddons(orderItem.id, addonSnapshots);
       }
 
-      await supabase
-        .from("products")
-        .update({ stock: (product.stock || 0) - item.qty })
-        .eq("id", productId);
+      // Atomic stock decrement (race-condition safe)
+      const qty = Number(item.qty || 1);
+      const { error: rpcError } = await supabase.rpc("decrement_stock", {
+        p_product_id: productId,
+        p_qty: qty,
+      });
+      if (rpcError) {
+        // Fallback to non-atomic if RPC not yet deployed
+        if (rpcError.message?.includes("does not exist") || rpcError.message?.includes("schema cache")) {
+          await supabase
+            .from("products")
+            .update({ stock: Math.max((product.stock || 0) - qty, 0) })
+            .eq("id", productId);
+        }
+        // Ignore other RPC errors (e.g. insufficient stock already checked above)
+      }
     }
 
     let total = subtotal;

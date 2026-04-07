@@ -67,6 +67,7 @@ async function getCashSalesSince(
     .select("total")
     .eq("status", "completed")
     .eq("payment_method", "cash")
+    .eq("payment_status", "paid")
     .gte("created_at", openedAt);
 
   if (error) throw error;

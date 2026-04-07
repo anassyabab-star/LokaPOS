@@ -277,26 +277,33 @@ export async function POST(req: Request) {
 
     // Reserve stock immediately to avoid oversell while payment integration is pending.
     for (const [productId, requestedQty] of calculated.requestedQtyByProductId.entries()) {
-      const { data: product, error: productError } = await supabase
-        .from("products")
-        .select("stock")
-        .eq("id", productId)
-        .single();
-      if (productError || !product) {
-        return customerApiError(
-          500,
-          productError?.message || "Failed to update stock",
-          "INTERNAL_ERROR"
-        );
-      }
-
-      const updatedStock = Math.max(0, Number(product.stock || 0) - requestedQty);
-      const { error: updateStockError } = await supabase
-        .from("products")
-        .update({ stock: updatedStock })
-        .eq("id", productId);
-      if (updateStockError) {
-        return customerApiError(500, updateStockError.message, "INTERNAL_ERROR");
+      // Try atomic decrement first
+      const { error: rpcError } = await supabase.rpc("decrement_stock", {
+        p_product_id: productId,
+        p_qty: requestedQty,
+      });
+      if (rpcError) {
+        // Fallback to non-atomic if RPC not yet deployed
+        if (rpcError.message?.includes("does not exist") || rpcError.message?.includes("schema cache")) {
+          const { data: product, error: productError } = await supabase
+            .from("products")
+            .select("stock")
+            .eq("id", productId)
+            .single();
+          if (productError || !product) {
+            return customerApiError(500, productError?.message || "Failed to update stock", "INTERNAL_ERROR");
+          }
+          const updatedStock = Math.max(0, Number(product.stock || 0) - requestedQty);
+          const { error: updateStockError } = await supabase
+            .from("products")
+            .update({ stock: updatedStock })
+            .eq("id", productId);
+          if (updateStockError) {
+            return customerApiError(500, updateStockError.message, "INTERNAL_ERROR");
+          }
+        } else if (rpcError.message?.includes("Insufficient stock")) {
+          return customerApiError(400, rpcError.message, "STOCK_ERROR");
+        }
       }
     }
 

@@ -110,7 +110,7 @@ export async function POST(req: Request) {
     }
 
     const paymentMethod = String(order.payment_method || "").toLowerCase();
-    if (!["fpx", "card", "chip"].includes(paymentMethod)) {
+    if (!["fpx", "card", "chip", "qr"].includes(paymentMethod)) {
       return NextResponse.json(
         { error: "create-bill is only allowed for online payment methods" },
         { status: 400 }
