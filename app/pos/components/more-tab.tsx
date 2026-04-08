@@ -52,6 +52,22 @@ export default function MoreTab() {
           <input type="checkbox" checked={s.autoPrintLabel} onChange={e => s.setAutoPrintLabel(e.target.checked)} className="h-4 w-4 accent-[#7F1D1D]" />
         </label>
         <div className="text-[11px] text-gray-400">Label auto-print buka popup untuk setiap item. Guna sticker 50×30mm.</div>
+        <div className="pt-1 border-t border-gray-200 space-y-1">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Printer IP (LAN/WiFi)</div>
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="cth: 192.168.1.100"
+            value={s.printerIp}
+            onChange={e => s.setPrinterIp(e.target.value.trim())}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-[#7F1D1D] focus:outline-none"
+          />
+          <div className="text-[11px] text-gray-400">
+            {s.printerIp
+              ? "Print terus ke printer via IP — tiada popup diperlukan."
+              : "Kosongkan untuk print via browser (popup). Isi IP untuk print terus ke printer 80mm."}
+          </div>
+        </div>
       </div>
       <button onClick={() => s.setShowSignOutConfirm(true)} className="px-4 py-4 text-left text-sm font-medium text-[#7F1D1D]">Sign out</button>
     </div>

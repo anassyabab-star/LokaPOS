@@ -76,7 +76,7 @@ export function buildReceiptHtml(payload: ReceiptPayload) {
     <style>
       :root { color-scheme: light; }
       body { margin: 0; padding: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; background: #fff; }
-      .receipt { width: 58mm; margin: 0 auto; padding: 8px; color: #111; font-size: 11px; line-height: 1.35; }
+      .receipt { width: 80mm; margin: 0 auto; padding: 8px; color: #111; font-size: 11px; line-height: 1.35; }
       .center { text-align: center; }
       .title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
       .muted { color: #555; font-size: 10px; }
@@ -89,7 +89,7 @@ export function buildReceiptHtml(payload: ReceiptPayload) {
       .grand { font-size: 13px; font-weight: 700; margin-top: 5px; border-top: 1px dashed #ccc; padding-top: 6px; }
       .footer { margin-top: 10px; text-align: center; font-size: 10px; color: #666; }
       @media print {
-        @page { size: 58mm auto; margin: 0; }
+        @page { size: 80mm auto; margin: 0; }
         body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       }
     </style>

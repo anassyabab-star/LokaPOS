@@ -12,6 +12,7 @@ const REGISTER_ID = "main";
 const POS_AUTO_PRINT_KEY = "pos_auto_print_enabled";
 const POS_AUTO_LABEL_KEY = "pos_auto_label_enabled";
 const POS_PAID_OUT_STAFF_NAME_KEY = "pos_paid_out_staff_name";
+const POS_PRINTER_IP_KEY = "pos_printer_ip";
 
 // ━━━ Navigation types ━━━
 export type MainTab = "checkout" | "orders" | "reports" | "more";
@@ -137,6 +138,7 @@ export function usePosState() {
   const [cashReceived, setCashReceived] = useState("");
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [autoPrintLabel, setAutoPrintLabel] = useState(false);
+  const [printerIp, setPrinterIp] = useState("");
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [showDiscountPanel, setShowDiscountPanel] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
@@ -404,6 +406,8 @@ export function usePosState() {
   useEffect(() => { try { window.localStorage.setItem(POS_AUTO_LABEL_KEY, autoPrintLabel ? "1" : "0"); } catch {} }, [autoPrintLabel]);
   useEffect(() => { try { setPaidOutStaffName(window.localStorage.getItem(POS_PAID_OUT_STAFF_NAME_KEY) || ""); } catch {} }, []);
   useEffect(() => { try { window.localStorage.setItem(POS_PAID_OUT_STAFF_NAME_KEY, paidOutStaffName); } catch {} }, [paidOutStaffName]);
+  useEffect(() => { try { setPrinterIp(window.localStorage.getItem(POS_PRINTER_IP_KEY) || ""); } catch {} }, []);
+  useEffect(() => { try { window.localStorage.setItem(POS_PRINTER_IP_KEY, printerIp); } catch {} }, [printerIp]);
 
   // Toast auto-dismiss
   useEffect(() => { if (!addedToast) return; const t = setTimeout(() => setAddedToast(null), 1200); return () => clearTimeout(t); }, [addedToast]);
@@ -449,6 +453,7 @@ export function usePosState() {
     discountType, setDiscountType, discountValue, setDiscountValue,
     paymentMethod, setPaymentMethod, cashReceived, setCashReceived,
     autoPrintEnabled, setAutoPrintEnabled, autoPrintLabel, setAutoPrintLabel,
+    printerIp, setPrinterIp,
     receiptData, setReceiptData, showDiscountPanel, setShowDiscountPanel,
     submittingOrder, setSubmittingOrder,
     // Pricing derived

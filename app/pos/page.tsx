@@ -67,7 +67,7 @@ function POSPageInner() {
     if (!s.currentShift) { alert("Buka shift dulu"); return; } const finalName = s.customerName.trim() || "Walk-in";
     if (s.consentWhatsapp && !s.customerPhone.trim()) { alert("Telefon diperlukan"); return; } if (s.consentEmail && !s.customerEmail.trim()) { alert("Email diperlukan"); return; }
     if (method === "cash" && (!cashVal || cashVal < s.total)) { alert("Duit tak cukup"); return; }
-    let pw: Window | null = null; if (s.autoPrintEnabled) { pw = window.open("", "_blank", "noopener,noreferrer,width=420,height=720"); if (!pw) { alert("Popup blocked."); return; } }
+    let pw: Window | null = null; if (s.autoPrintEnabled && !s.printerIp) { pw = window.open("", "_blank", "noopener,noreferrer,width=420,height=720"); if (!pw) { alert("Popup blocked. Isi Printer IP dalam More > Print Settings untuk print tanpa popup."); return; } }
     s.setSubmittingOrder(true);
     try { const res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountAmount, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) }); const data = await res.json();
       if (!data.success) { pw?.close(); alert(data?.error || "Gagal"); return; }
@@ -78,7 +78,16 @@ function POSPageInner() {
     } catch { pw?.close(); alert("Ralat pelayan"); } finally { s.setSubmittingOrder(false); }
   }
 
-  function printReceipt(data: ReceiptData, ew?: Window | null) { if (data.order_id) { const url = `/api/orders/receipt/${encodeURIComponent(data.order_id)}`; if (ew && !ew.closed) { ew.location.replace(url); return; } window.open(url, "_blank", "width=420,height=720"); return; } const html = buildReceiptHtml({ receiptNumber: data.receipt_number, createdAt: data.created_at, customerName: data.customerName, paymentMethod: data.payment_method, subtotal: data.subtotal, discount: data.discount, total: data.total, items: data.items.map(i => ({ name: i.name + (i.supports_sugar ? ` · ${sugarLabel(i.sugar_level)}` : ""), qty: i.qty, unitPrice: i.price, lineTotal: i.price * i.qty })), autoPrint: true }); const w = ew && !ew.closed ? ew : window.open("", "_blank", "width=420,height=720"); if (!w) return; w.document.open(); w.document.write(html); w.document.close(); }
+  function printReceipt(data: ReceiptData, ew?: Window | null) {
+    if (data.order_id && s.printerIp) {
+      fetch("/api/print/receipt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: data.order_id, printerIp: s.printerIp }) })
+        .then(r => r.json()).then(r => { if (!r.ok) alert(`Print gagal: ${r.error || "Cuba semula"}`); });
+      return;
+    }
+    if (data.order_id) { const url = `/api/orders/receipt/${encodeURIComponent(data.order_id)}`; if (ew && !ew.closed) { ew.location.replace(url); return; } window.open(url, "_blank", "width=420,height=720"); return; }
+    const html = buildReceiptHtml({ receiptNumber: data.receipt_number, createdAt: data.created_at, customerName: data.customerName, paymentMethod: data.payment_method, subtotal: data.subtotal, discount: data.discount, total: data.total, items: data.items.map(i => ({ name: i.name + (i.supports_sugar ? ` · ${sugarLabel(i.sugar_level)}` : ""), qty: i.qty, unitPrice: i.price, lineTotal: i.price * i.qty })), autoPrint: true });
+    const w = ew && !ew.closed ? ew : window.open("", "_blank", "width=420,height=720"); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
+  }
   function printCupLabel(orderId: string) { if (!orderId) return; window.open(`/api/orders/label/${encodeURIComponent(orderId)}`, "_blank", "width=300,height=250"); }
 
   // ━━━ RENDER ━━━
