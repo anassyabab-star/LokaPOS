@@ -24,32 +24,13 @@ export async function GET(req: Request) {
     query = query.eq("status", status);
   }
 
-  // Filter today's orders only (for POS frontend) using date_key.
-  // If there's an open shift, use the shift's opened_at date so orders
-  // from an overnight shift still appear even after midnight.
+  // Filter today's orders only (for POS frontend) using actual current date.
   if (today === "1") {
-    let dateKey: string;
-    const { data: openShift } = await supabase
-      .from("pos_shifts")
-      .select("opened_at")
-      .eq("status", "open")
-      .order("opened_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (openShift?.opened_at) {
-      const shiftDate = new Date(openShift.opened_at);
-      const y = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
-      const m = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
-      const d = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
-      dateKey = `${y}-${m}-${d}`;
-    } else {
-      const now = new Date();
-      const year = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
-      const month = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
-      const day = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
-      dateKey = `${year}-${month}-${day}`;
-    }
+    const now = new Date();
+    const year = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
+    const month = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
+    const day = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
+    const dateKey = `${year}-${month}-${day}`;
     query = query.eq("date_key", dateKey);
   }
 
@@ -368,14 +349,12 @@ export async function POST(req: Request) {
       });
     }
 
-    // Use shift opened_at date as date_key so orders continue
-    // past midnight as long as the shift is still open.
-    // Receipt numbering stays consistent within the shift's business day.
+    // Use actual order date (not shift opening date) so receipt numbers and
+    // reports reflect the real business day each order was placed.
     const now = new Date();
-    const shiftDate = new Date(openShift.opened_at || now.toISOString());
-    const _y = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
-    const _m = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
-    const _d = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
+    const _y = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
+    const _m = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
+    const _d = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
     const dateKey = `${_y}-${_m}-${_d}`;
 
     const { count } = await supabase
@@ -386,10 +365,7 @@ export async function POST(req: Request) {
     const orderNumber = (count || 0) + 1;
     const formattedNumber = String(orderNumber).padStart(3, "0");
 
-    const datePart = shiftDate
-      .toLocaleDateString("en-GB")
-      .split("/")
-      .join("");
+    const datePart = `${_d}${_m}${_y}`;
 
     const receiptNumber = `${datePart}-${formattedNumber}`;
 
