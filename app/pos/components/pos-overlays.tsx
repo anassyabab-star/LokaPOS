@@ -54,7 +54,7 @@ async function lookupMember(s: ReturnType<typeof usePos>) {
     s.setLinkedCustomerId(c.id); s.setCustomerName(c.name || s.customerName); s.setCustomerPhone(c.phone || phone); s.setCustomerEmail(c.email || "");
     s.setConsentWhatsapp(Boolean(c.consent_whatsapp)); s.setConsentEmail(Boolean(c.consent_email));
     s.setMemberPoints(Number(c.loyalty_points || 0)); s.setMemberExpiringPoints(Number(c.expiring_points_30d || 0));
-    s.setMemberLookupTone("success"); s.setMemberLookupMessage(`Ahli: ${c.total_orders} order · RM${c.total_spend.toFixed(2)} · ${Number(c.loyalty_points || 0)} pts`);
+    s.setMemberLookupTone("success"); s.setMemberLookupMessage(`Ahli: ${c.total_orders ?? 0} order · RM${Number(c.total_spend || 0).toFixed(2)} · ${Number(c.loyalty_points || 0)} pts`);
   } finally { s.setMemberLookupLoading(false); }
 }
 

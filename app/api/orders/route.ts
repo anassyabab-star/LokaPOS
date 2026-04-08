@@ -39,7 +39,10 @@ export async function GET(req: Request) {
 
     if (openShift?.opened_at) {
       const shiftDate = new Date(openShift.opened_at);
-      dateKey = shiftDate.toISOString().slice(0, 10);
+      const y = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
+      const m = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
+      const d = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
+      dateKey = `${y}-${m}-${d}`;
     } else {
       const now = new Date();
       const year = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
@@ -370,7 +373,10 @@ export async function POST(req: Request) {
     // Receipt numbering stays consistent within the shift's business day.
     const now = new Date();
     const shiftDate = new Date(openShift.opened_at || now.toISOString());
-    const dateKey = shiftDate.toISOString().slice(0, 10);
+    const _y = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
+    const _m = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
+    const _d = shiftDate.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
+    const dateKey = `${_y}-${_m}-${_d}`;
 
     const { count } = await supabase
       .from("orders")
@@ -407,7 +413,11 @@ export async function POST(req: Request) {
         });
       }
 
-      if ((product.stock || 0) < Number(item.qty)) {
+      const itemQty = Math.floor(Number(item.qty));
+      if (!Number.isFinite(itemQty) || itemQty <= 0) {
+        return NextResponse.json({ success: false, error: `Invalid quantity for ${product.name}` });
+      }
+      if ((product.stock || 0) < itemQty) {
         return NextResponse.json({
           success: false,
           error: `Stock not enough for ${product.name}`,

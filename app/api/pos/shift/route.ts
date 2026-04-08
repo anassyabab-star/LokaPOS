@@ -279,7 +279,7 @@ _Auto-generated on shift close_`;
         // Send to admin phone (from env or profiles)
         const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || "";
         if (adminPhone) {
-          await sendMurpatiText({ to: adminPhone, message: summary }).catch(() => {});
+          await sendMurpatiText({ to: adminPhone, message: summary });
         }
       } catch (summaryErr) {
         console.error("Daily summary WhatsApp failed:", summaryErr);

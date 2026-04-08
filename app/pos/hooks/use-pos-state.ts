@@ -149,6 +149,7 @@ export function usePosState() {
   const [orderDetailOpen, setOrderDetailOpen] = useState<string | null>(null);
   const [orderDetailItems, setOrderDetailItems] = useState<OrderDetailItem[]>([]);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
+  const [orderDetailError, setOrderDetailError] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
 
   // ───── Reports tab ─────
@@ -270,14 +271,15 @@ export function usePosState() {
   async function loadOrderDetail(orderId: string) {
     setOrderDetailOpen(orderId);
     setOrderDetailItems([]);
+    setOrderDetailError(false);
     setOrderDetailLoading(true);
     try {
       const res = await fetch(`/api/pos/orders?order_id=${encodeURIComponent(orderId)}`, { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok) { setOrderDetailItems([]); return; }
+      if (!res.ok) { setOrderDetailError(true); return; }
       if (data?.items && Array.isArray(data.items)) setOrderDetailItems(data.items);
       else setOrderDetailItems([]);
-    } catch { setOrderDetailItems([]); } finally { setOrderDetailLoading(false); }
+    } catch { setOrderDetailError(true); } finally { setOrderDetailLoading(false); }
   }
 
   // ━━━ Reports ━━━
@@ -461,7 +463,7 @@ export function usePosState() {
     appliedRedeemPoints, redeemAmount, redeemStatusMessage,
     // Orders
     orders, setOrders, ordersLoading, loadOrders,
-    orderDetailOpen, setOrderDetailOpen, orderDetailItems, orderDetailLoading, loadOrderDetail,
+    orderDetailOpen, setOrderDetailOpen, orderDetailItems, orderDetailLoading, orderDetailError, loadOrderDetail,
     showQrScanner, setShowQrScanner,
     // Reports
     reportRange, setReportRange, reportData, reportLoading, loadReport,

@@ -69,13 +69,20 @@ function POSPageInner() {
     if (method === "cash" && (!cashVal || cashVal < s.total)) { alert("Duit tak cukup"); return; }
     let pw: Window | null = null; if (s.autoPrintEnabled && !s.printerIp) { pw = window.open("", "_blank", "noopener,noreferrer,width=420,height=720"); if (!pw) { alert("Popup blocked. Isi Printer IP dalam More > Print Settings untuk print tanpa popup."); return; } }
     s.setSubmittingOrder(true);
-    try { const res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountAmount, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) }); const data = await res.json();
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      let res: Response;
+      try {
+        res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountAmount, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) });
+      } finally { clearTimeout(timeout); }
+      const data = await res.json();
       if (!data.success) { pw?.close(); alert(data?.error || "Gagal"); return; }
       const receipt: ReceiptData = { order_id: String(data.order_id || ""), receipt_number: data.receipt_number, customerName: finalName, items: s.items, subtotal: s.subtotal, discount: s.discountAmount + s.redeemAmount, total: s.total, payment_method: method, created_at: new Date().toISOString() };
       s.setReceiptData(receipt); if (s.autoPrintEnabled) printReceipt(receipt, pw); if (s.autoPrintLabel && data.order_id) printCupLabel(String(data.order_id));
       setLastCashChange(method === "cash" ? cashVal - s.total : 0);
       s.clearCart(); s.resetCustomerState(); s.setOverlay("done"); void s.refreshShiftState({ autoPrompt: false });
-    } catch { pw?.close(); alert("Ralat pelayan"); } finally { s.setSubmittingOrder(false); }
+    } catch (err) { pw?.close(); alert(err instanceof Error && err.name === "AbortError" ? "Timeout — server lambat respond. Cuba semula." : "Ralat pelayan"); } finally { s.setSubmittingOrder(false); }
   }
 
   function printReceipt(data: ReceiptData, ew?: Window | null) {

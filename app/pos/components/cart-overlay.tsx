@@ -54,7 +54,23 @@ export default function CartOverlay() {
                 ))}
               </div>
               {s.discountType !== "none" && (
-                <input type="number" value={s.discountValue} onChange={e => s.setDiscountValue(e.target.value)} placeholder={s.discountType === "percent" ? "Masukkan % (cth: 10)" : "Masukkan RM (cth: 5.00)"} className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20" />
+                <input
+                  type="number"
+                  min="0"
+                  max={s.discountType === "percent" ? 100 : s.subtotal}
+                  value={s.discountValue}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    const num = parseFloat(raw);
+                    if (raw === "" || raw === ".") { s.setDiscountValue(raw); return; }
+                    if (isNaN(num) || num < 0) { s.setDiscountValue("0"); return; }
+                    if (s.discountType === "percent" && num > 100) { s.setDiscountValue("100"); return; }
+                    if (s.discountType === "fixed" && num > s.subtotal) { s.setDiscountValue(s.subtotal.toFixed(2)); return; }
+                    s.setDiscountValue(raw);
+                  }}
+                  placeholder={s.discountType === "percent" ? "Masukkan % (cth: 10)" : "Masukkan RM (cth: 5.00)"}
+                  className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20"
+                />
               )}
             </div>
           )}

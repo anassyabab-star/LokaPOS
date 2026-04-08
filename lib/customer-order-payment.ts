@@ -1,5 +1,4 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { LOYALTY_REDEEM_RM_PER_POINT } from "@/lib/customer-orders";
 
 const LOYALTY_EARN_PER_RM = 1;
 
@@ -19,25 +18,18 @@ export async function applyCustomerOrderPaidSettlement(
 
   const supabase = createSupabaseAdminClient();
   const total = Number(order.total || 0);
-  const redeemAmount = Math.max(0, Number(order.discount_value || 0));
-  const redeemPoints = Math.max(0, Math.round(redeemAmount / LOYALTY_REDEEM_RM_PER_POINT));
   const earnPoints = Math.max(0, Math.floor(total * LOYALTY_EARN_PER_RM));
   const orderLabel = String(order.receipt_number || order.id.slice(0, 8));
 
-  if (redeemPoints > 0) {
-    const { error: redeemError } = await supabase.from("loyalty_ledger").insert([
-      {
-        customer_id: order.customer_id,
-        order_id: order.id,
-        entry_type: "redeem",
-        points_change: -Math.abs(redeemPoints),
-        created_by: createdBy,
-        note: `Customer redeem on order ${orderLabel}`,
-      },
-    ]);
-    if (redeemError) throw new Error(redeemError.message);
-  }
+  // Check if loyalty entries already exist for this order to prevent double-processing
+  const { data: existingEntries } = await supabase
+    .from("loyalty_ledger")
+    .select("id")
+    .eq("order_id", order.id)
+    .limit(1);
+  if (existingEntries && existingEntries.length > 0) return;
 
+  // Only write earn entry — redeem was already written at order creation time
   if (earnPoints > 0) {
     const { error: earnError } = await supabase.from("loyalty_ledger").insert([
       {

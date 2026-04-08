@@ -138,6 +138,11 @@ export default function OrdersTab() {
               <div className="flex-1 overflow-y-auto px-4 py-3">
                 {s.orderDetailLoading ? (
                   <div className="flex items-center justify-center py-10"><div className="text-sm text-gray-400">Memuatkan...</div></div>
+                ) : s.orderDetailError ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-2">
+                    <div className="text-sm text-red-500">Gagal muatkan item. Cuba semula.</div>
+                    <button onClick={() => s.orderDetailOpen && s.loadOrderDetail(s.orderDetailOpen)} className="text-xs text-[#7F1D1D] underline">Cuba semula</button>
+                  </div>
                 ) : s.orderDetailItems.length === 0 ? (
                   <div className="flex items-center justify-center py-10"><div className="text-sm text-gray-400">Tiada item dijumpai</div></div>
                 ) : (
