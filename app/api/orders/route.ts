@@ -572,11 +572,13 @@ export async function POST(req: Request) {
     let total = subtotal;
 
     if (body.discount_type === "percent") {
-      total = subtotal - (subtotal * body.discount_value) / 100;
+      const pct = Math.min(Math.max(Number(body.discount_value || 0), 0), 100);
+      total = subtotal - (subtotal * pct) / 100;
     }
 
     if (body.discount_type === "fixed") {
-      total = subtotal - body.discount_value;
+      const fixed = Math.min(Math.max(Number(body.discount_value || 0), 0), subtotal);
+      total = subtotal - fixed;
     }
 
     const totalAfterDiscount = Math.max(Number(total || 0), 0);

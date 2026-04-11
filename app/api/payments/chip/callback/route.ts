@@ -54,7 +54,7 @@ export async function POST(req: Request) {
             total: Number(order.total || 0),
             discount_value: Number(order.discount_value || 0),
           },
-          order.customer_id || "system"
+          null
         );
       } catch (e) {
         console.error("CHIP callback settlement error:", e);

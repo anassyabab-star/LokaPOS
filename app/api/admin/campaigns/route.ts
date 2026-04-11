@@ -59,7 +59,7 @@ export async function GET() {
         .from("crm_campaign_recipients")
         .select("campaign_id,send_status")
         .in("campaign_id", campaignIds)
-        .limit(20000);
+        .limit(5000);
 
       if (recipientError) {
         if (isMissingRelationError(recipientError.message)) {
@@ -70,11 +70,7 @@ export async function GET() {
 
       for (const row of (recipientRows || []) as RecipientStatusRow[]) {
         const current = countsByCampaign.get(row.campaign_id) || {
-          queued: 0,
-          sent: 0,
-          failed: 0,
-          skipped: 0,
-          total: 0,
+          queued: 0, sent: 0, failed: 0, skipped: 0, total: 0,
         };
         current.total += 1;
         if (row.send_status === "queued") current.queued += 1;
