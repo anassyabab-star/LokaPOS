@@ -440,7 +440,8 @@ export async function POST(req: Request) {
     const { data: order, error } = orderInsert;
 
     if (error || !order) {
-      return NextResponse.json({ success: false, error });
+      console.error("[orders] Order insert failed:", error);
+      return NextResponse.json({ success: false, error: error?.message || "Gagal simpan order" });
     }
 
     // PROCESS ITEMS
