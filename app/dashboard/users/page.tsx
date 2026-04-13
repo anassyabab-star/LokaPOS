@@ -84,6 +84,12 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState<"cashier" | "admin">("cashier");
+  const [inviting, setInviting] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -124,6 +130,30 @@ export default function UsersPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  async function sendInvite() {
+    if (!inviteEmail.trim()) return;
+    setInviting(true); setInviteResult(null);
+    try {
+      const res = await fetch("/api/admin/users/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail.trim(), full_name: inviteName.trim(), role: inviteRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setInviteResult({ ok: false, msg: data?.error || "Gagal hantar jemputan" });
+      } else {
+        setInviteResult({ ok: true, msg: `Jemputan dihantar ke ${inviteEmail.trim()}` });
+        setInviteEmail(""); setInviteName(""); setInviteRole("cashier");
+        await load();
+      }
+    } catch {
+      setInviteResult({ ok: false, msg: "Ralat rangkaian" });
+    } finally {
+      setInviting(false);
+    }
+  }
+
   async function reviewRequest(id: string, action: "approve" | "reject") {
     setProcessingId(id); setError(null);
     try {
@@ -156,12 +186,83 @@ export default function UsersPage() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Users</h1>
-        <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
-          Semak akaun aktif + signup request, approve/reject akaun, dan track growth pengguna.
-        </p>
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Users</h1>
+          <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
+            Semak akaun aktif + signup request, approve/reject akaun, dan track growth pengguna.
+          </p>
+        </div>
+        <button
+          onClick={() => { setShowInviteModal(true); setInviteResult(null); }}
+          style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--d-accent)", color: "#fff", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}
+        >
+          + Jemput Staf
+        </button>
       </div>
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--d-surface)", borderRadius: 16, padding: 24, width: "100%", maxWidth: 420, border: "1px solid var(--d-border)" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 4 }}>Jemput Staf</h2>
+            <p style={{ fontSize: 13, color: "var(--d-text-3)", marginBottom: 20 }}>
+              Email jemputan akan dihantar. Staf klik link dan set password sendiri.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Email *</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="staff@email.com"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Nama penuh</label>
+                <input
+                  type="text"
+                  value={inviteName}
+                  onChange={e => setInviteName(e.target.value)}
+                  placeholder="cth: Ahmad bin Ali"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Role</label>
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "cashier" | "admin")} style={inputStyle}>
+                  <option value="cashier">Cashier (Staf)</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+
+            {inviteResult && (
+              <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, fontSize: 13, background: inviteResult.ok ? "var(--d-success-soft)" : "var(--d-error-soft)", color: inviteResult.ok ? "var(--d-success)" : "var(--d-error)", border: `1px solid ${inviteResult.ok ? "var(--d-success)" : "var(--d-error)"}` }}>
+                {inviteResult.ok ? "✓ " : "✗ "}{inviteResult.msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => { setShowInviteModal(false); setInviteResult(null); }}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid var(--d-border)", background: "transparent", color: "var(--d-text-2)", fontSize: 13, cursor: "pointer" }}
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => void sendInvite()}
+                disabled={inviting || !inviteEmail.trim()}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: inviting || !inviteEmail.trim() ? 0.6 : 1 }}
+              >
+                {inviting ? "Menghantar..." : "Hantar Jemputan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Active accounts stats */}
       <p style={{ fontSize: 11, fontWeight: 600, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Active Accounts</p>
