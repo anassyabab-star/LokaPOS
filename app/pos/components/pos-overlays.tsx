@@ -26,10 +26,11 @@ export function CustomerOverlay() {
     s.setRedeemPointsInput("");
     s.setMemberLookupMessage(null);
     // Auto-lookup when phone looks complete (≥10 digits)
+    // Pass val directly to avoid stale closure on s.customerPhone
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const digits = val.replace(/\D/g, "");
     if (digits.length >= 10) {
-      debounceRef.current = setTimeout(() => void lookupMember(s), 700);
+      debounceRef.current = setTimeout(() => void lookupMember(s, val), 700);
     }
   }
 
@@ -127,8 +128,8 @@ export function CustomerOverlay() {
   );
 }
 
-async function lookupMember(s: ReturnType<typeof usePos>) {
-  const phone = s.customerPhone.trim();
+async function lookupMember(s: ReturnType<typeof usePos>, phoneOverride?: string) {
+  const phone = (phoneOverride !== undefined ? phoneOverride : s.customerPhone).trim();
   if (!phone) { s.setMemberLookupTone("warn"); s.setMemberLookupMessage("Masukkan nombor dulu"); return; }
   s.setMemberLookupLoading(true); s.setMemberLookupMessage(null);
   try {
