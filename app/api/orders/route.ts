@@ -681,12 +681,27 @@ export async function POST(req: Request) {
             const redeemRm = (balanceNum * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2);
             const custName = String(body?.customer_name || "").trim();
 
+            const nowMyt = new Date();
+            const fmtDate = (d: Date) =>
+              d.toLocaleDateString("ms-MY", {
+                timeZone: "Asia/Kuala_Lumpur",
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              });
+            const purchaseDate = fmtDate(nowMyt);
+            const expiryDate = fmtDate(
+              new Date(nowMyt.getTime() + LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+            );
+
             let msg = `Terima kasih${custName ? `, ${custName}` : ""}! 🎉\n\n`;
+            msg += `📅 ${purchaseDate}\n`;
             msg += `Pembelian: RM ${Number(total).toFixed(2)}\n`;
             if (earnPoints > 0) msg += `Points diterima: +${earnPoints} pts ✅\n`;
             if (appliedRedeemPoints > 0) msg += `Points ditukar: -${appliedRedeemPoints} pts\n`;
             msg += `\n🏆 *Jumlah points: ${balanceNum} pts*\n`;
-            msg += `_(Boleh ditukar: RM ${redeemRm})_\n\n`;
+            msg += `_(Boleh ditukar: RM ${redeemRm})_\n`;
+            msg += `⏳ _Luput: ${expiryDate}_\n\n`;
             msg += `— ${storeName}`;
 
             console.log("[orders] Sending loyalty WA to", customerPhone, "| msg:", msg);
