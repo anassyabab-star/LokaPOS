@@ -675,17 +675,20 @@ export async function POST(req: Request) {
               newBalance = await getLoyaltyPointsBalanceLegacyView(linkedCustomerId);
             }
 
-            const storeName = process.env.STORE_NAME || "Loka";
-            const redeemRm = (newBalance * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2);
+            const storeName = String(process.env.STORE_NAME || "Loka");
+            const balanceNum = Number(newBalance || 0);
+            const redeemRm = (balanceNum * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2);
+            const custName = String(body?.customer_name || "").trim();
 
-            let msg = `Terima kasih, ${body.customer_name || ""}! 🎉\n\n`;
+            let msg = `Terima kasih${custName ? `, ${custName}` : ""}! 🎉\n\n`;
             msg += `Pembelian: RM ${Number(total).toFixed(2)}\n`;
             if (earnPoints > 0) msg += `Points diterima: +${earnPoints} pts ✅\n`;
             if (appliedRedeemPoints > 0) msg += `Points ditukar: -${appliedRedeemPoints} pts\n`;
-            msg += `\n🏆 *Jumlah points: ${newBalance} pts*\n`;
+            msg += `\n🏆 *Jumlah points: ${balanceNum} pts*\n`;
             msg += `_(Boleh ditukar: RM ${redeemRm})_\n\n`;
             msg += `— ${storeName}`;
 
+            console.log("[orders] Sending loyalty WA to", customerPhone, "| msg:", msg);
             await sendMurpatiText({ to: customerPhone, message: msg });
           }
         } catch (waErr) {
@@ -706,7 +709,8 @@ export async function POST(req: Request) {
     });
 
   } catch (err) {
-    console.log("SERVER ERROR:", err);
-    return NextResponse.json({ success: false, error: err });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("SERVER ERROR:", err);
+    return NextResponse.json({ success: false, error: errMsg });
   }
 }
