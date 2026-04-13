@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
+import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
 
 const supabase = createSupabaseAdminClient();
 
@@ -71,8 +72,8 @@ type CustomerPayload = {
 
 const LOYALTY_EARN_PER_RM = 1;
 const LOYALTY_REDEEM_RM_PER_POINT = 0.05; // 100 pts = RM 5
-const LOYALTY_REDEEM_MIN_POINTS = 100;
-const LOYALTY_REDEEM_MAX_RATIO = 0.3; // max 30% of order total
+const LOYALTY_REDEEM_MIN_POINTS = 50;
+const LOYALTY_REDEEM_MAX_RATIO = 0.5; // max 50% of order total
 const LOYALTY_POINTS_EXPIRY_DAYS = 365;
 
 function normalizePhone(value: string) {
@@ -271,7 +272,7 @@ async function upsertCustomerAndTrackOrder(payload: CustomerPayload | undefined,
     const wasWhatsapp = Boolean(existing.consent_whatsapp);
     const wasEmail = Boolean(existing.consent_email);
 
-    await supabase
+    const { error: updateErr } = await supabase
       .from("customers")
       .update({
         name: name || existing.name,
@@ -297,6 +298,7 @@ async function upsertCustomerAndTrackOrder(payload: CustomerPayload | undefined,
         updated_at: nowIso,
       })
       .eq("id", existing.id);
+    if (updateErr) console.error("[orders] Customer update failed:", updateErr.message);
     return existing.id;
   }
 
@@ -657,6 +659,39 @@ export async function POST(req: Request) {
           createdBy: auth.user.id,
           note: `Redeem on order ${receiptNumber}`,
         });
+      }
+
+      // ── WhatsApp loyalty notification ─────────────────────
+      if (earnPoints > 0 || appliedRedeemPoints > 0) {
+        try {
+          const customerPhone = normalizePhone(String(body?.customer?.phone || "").trim());
+          const customerConsentWa = body?.customer?.consent_whatsapp === true;
+
+          if (customerPhone && customerConsentWa) {
+            let newBalance = 0;
+            try {
+              newBalance = await getLoyaltyPointsBalance(linkedCustomerId);
+            } catch {
+              newBalance = await getLoyaltyPointsBalanceLegacyView(linkedCustomerId);
+            }
+
+            const storeName = process.env.STORE_NAME || "Loka";
+            const redeemRm = (newBalance * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2);
+
+            let msg = `Terima kasih, ${body.customer_name || ""}! 🎉\n\n`;
+            msg += `Pembelian: RM ${Number(total).toFixed(2)}\n`;
+            if (earnPoints > 0) msg += `Points diterima: +${earnPoints} pts ✅\n`;
+            if (appliedRedeemPoints > 0) msg += `Points ditukar: -${appliedRedeemPoints} pts\n`;
+            msg += `\n🏆 *Jumlah points: ${newBalance} pts*\n`;
+            msg += `_(Boleh ditukar: RM ${redeemRm})_\n\n`;
+            msg += `— ${storeName}`;
+
+            await sendMurpatiText({ to: customerPhone, message: msg });
+          }
+        } catch (waErr) {
+          // Never fail the order if WhatsApp fails
+          console.error("[orders] Loyalty WhatsApp failed:", waErr);
+        }
       }
     }
 

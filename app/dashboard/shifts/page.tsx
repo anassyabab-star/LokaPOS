@@ -34,14 +34,36 @@ type Summary = {
   paid_out_total: number;
 };
 
-const EMPTY_SUMMARY: Summary = {
-  total: 0,
-  open: 0,
-  closed: 0,
-  short_count: 0,
-  short_total: 0,
-  paid_out_total: 0,
+const EMPTY_SUMMARY: Summary = { total: 0, open: 0, closed: 0, short_count: 0, short_total: 0, paid_out_total: 0 };
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  fontSize: 13,
+  color: "var(--d-text-1)",
+  background: "var(--d-input-bg)",
+  border: "1px solid var(--d-border)",
+  outline: "none",
+  boxSizing: "border-box",
 };
+
+function MiniStatCard({ label, value, accent }: { label: string; value: number | string; accent?: string }) {
+  return (
+    <div
+      style={{
+        minWidth: 140,
+        background: "var(--d-surface)",
+        border: "1px solid var(--d-border)",
+        borderRadius: 12,
+        padding: "12px 14px",
+      }}
+    >
+      <p style={{ fontSize: 10, fontWeight: 500, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</p>
+      <p style={{ fontSize: 20, fontWeight: 700, color: accent ?? "var(--d-text-1)", marginTop: 4, lineHeight: 1 }}>{value}</p>
+    </div>
+  );
+}
 
 export default function ShiftsPage() {
   const [status, setStatus] = useState("all");
@@ -55,226 +77,224 @@ export default function ShiftsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
       const params = new URLSearchParams();
       params.set("status", status);
       if (shortOnly) params.set("short_only", "1");
       if (query.trim()) params.set("q", query.trim());
-
-      const res = await fetch(`/api/admin/pos-shifts?${params.toString()}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(`/api/admin/pos-shifts?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to load shifts");
-
       setShifts(data.shifts || []);
       setSummary(data.summary || EMPTY_SUMMARY);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load shifts");
-      setShifts([]);
-      setSummary(EMPTY_SUMMARY);
+      setShifts([]); setSummary(EMPTY_SUMMARY);
     } finally {
       setLoading(false);
     }
   }, [query, shortOnly, status]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const displayRows = useMemo(() => shifts, [shifts]);
 
   return (
-    <div className="min-h-screen bg-black p-4 text-gray-200 md:p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold">Shift History</h1>
-        <p className="mt-1 text-sm text-gray-400">
+    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Shift History</h1>
+        <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
           Audit opening/closing shift dan semak staff yang ada cash short.
         </p>
       </div>
 
-      <div className="-mx-1 mb-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 md:mx-0 md:grid md:grid-cols-6 md:overflow-visible md:px-0">
-        <Stat label="Total" value={summary.total} />
-        <Stat label="Open" value={summary.open} color="text-amber-300" />
-        <Stat label="Closed" value={summary.closed} color="text-green-400" />
-        <Stat label="Short Cases" value={summary.short_count} color="text-red-400" />
-        <Stat
-          label="Short Total"
-          value={`RM ${summary.short_total.toFixed(2)}`}
-          color="text-red-400"
-        />
-        <Stat
-          label="Paid Out Total"
-          value={`RM ${summary.paid_out_total.toFixed(2)}`}
-          color="text-amber-300"
-        />
+      {/* Stats */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        <MiniStatCard label="Total" value={summary.total} />
+        <MiniStatCard label="Open" value={summary.open} accent="var(--d-warning)" />
+        <MiniStatCard label="Closed" value={summary.closed} accent="var(--d-success)" />
+        <MiniStatCard label="Short Cases" value={summary.short_count} accent="var(--d-error)" />
+        <MiniStatCard label="Short Total" value={`RM ${summary.short_total.toFixed(2)}`} accent="var(--d-error)" />
+        <MiniStatCard label="Paid Out Total" value={`RM ${summary.paid_out_total.toFixed(2)}`} accent="var(--d-warning)" />
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl border border-gray-800 bg-[#111] p-3 md:grid-cols-4">
+      {/* Filter bar */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+          gap: 10,
+          background: "var(--d-surface)",
+          border: "1px solid var(--d-border)",
+          borderRadius: 14,
+          padding: "14px 16px",
+          marginBottom: 16,
+        }}
+      >
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search staff / register"
-          className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
+          style={inputStyle}
         />
-
-        <select
-          value={status}
-          onChange={e => setStatus(e.target.value)}
-          className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-        >
+        <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
           <option value="all">All status</option>
           <option value="open">Open</option>
           <option value="closed">Closed</option>
         </select>
-
-        <label className="flex items-center gap-2 rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-200">
-          <input
-            type="checkbox"
-            checked={shortOnly}
-            onChange={e => setShortOnly(e.target.checked)}
-          />
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "9px 12px",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "var(--d-text-2)",
+            background: "var(--d-input-bg)",
+            border: "1px solid var(--d-border)",
+            cursor: "pointer",
+          }}
+        >
+          <input type="checkbox" checked={shortOnly} onChange={e => setShortOnly(e.target.checked)} />
           Short only
         </label>
-
         <button
           type="button"
           onClick={() => void load()}
-          className="rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
+          style={{
+            padding: "9px 18px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#fff",
+            background: "var(--d-accent)",
+            border: "none",
+            cursor: "pointer",
+          }}
         >
           Refresh
         </button>
       </div>
 
-      {error ? (
-        <div className="mb-4 rounded-md border border-red-900 bg-red-950/20 px-3 py-2 text-sm text-red-300">
+      {error && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, fontSize: 13, color: "var(--d-error)", background: "var(--d-error-soft)", border: "1px solid var(--d-error)" }}>
           {error}
         </div>
-      ) : null}
+      )}
 
-      {loading ? (
-        <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
+      {loading && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "20px 18px", fontSize: 13, color: "var(--d-text-3)" }}>
           Loading shifts...
         </div>
-      ) : null}
+      )}
 
-      {!loading && displayRows.length === 0 ? (
-        <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
+      {!loading && displayRows.length === 0 && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
           No shifts found.
         </div>
-      ) : null}
+      )}
 
-      <div className="space-y-3">
-        {!loading &&
-          displayRows.map(row => {
-            const expected = Number(row.expected_cash || row.opening_cash || 0);
-            const counted = row.counted_cash == null ? null : Number(row.counted_cash);
-            const overShort = row.over_short == null ? null : Number(row.over_short);
-            const paidOutTotal = Number(row.paid_out_total || 0);
-            const short = (overShort || 0) < 0;
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {!loading && displayRows.map(row => {
+          const expected = Number(row.expected_cash || row.opening_cash || 0);
+          const counted = row.counted_cash == null ? null : Number(row.counted_cash);
+          const overShort = row.over_short == null ? null : Number(row.over_short);
+          const paidOutTotal = Number(row.paid_out_total || 0);
+          const isShort = (overShort || 0) < 0;
 
-            return (
-              <div key={row.id} className="rounded-xl border border-gray-800 bg-[#111] p-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-[#1d1d1d] px-2 py-1 text-xs uppercase tracking-wide text-gray-300">
-                        Register: {row.register_id}
+          return (
+            <div
+              key={row.id}
+              style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+                {/* Left */}
+                <div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: "var(--d-surface-hover)", color: "var(--d-text-3)", border: "1px solid var(--d-border)" }}>
+                      Register: {row.register_id}
+                    </span>
+                    <span style={{
+                      padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, textTransform: "capitalize",
+                      color: row.status === "open" ? "var(--d-warning)" : "var(--d-success)",
+                      background: row.status === "open" ? "var(--d-warning-soft)" : "var(--d-success-soft)",
+                      border: `1px solid ${row.status === "open" ? "var(--d-warning)" : "var(--d-success)"}`,
+                    }}>
+                      {row.status}
+                    </span>
+                    {isShort && (
+                      <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, color: "var(--d-error)", background: "var(--d-error-soft)", border: "1px solid var(--d-error)" }}>
+                        Cash Short
                       </span>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs capitalize ${
-                          row.status === "open"
-                            ? "bg-amber-500/15 text-amber-300"
-                            : "bg-green-500/15 text-green-300"
-                        }`}
-                      >
-                        {row.status}
-                      </span>
-                      {short ? (
-                        <span className="rounded-full bg-red-500/15 px-2 py-1 text-xs text-red-300">
-                          Cash Short
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <p className="mt-2 text-sm text-gray-100">
-                      Opened by: <span className="font-medium">{row.opened_by_name}</span>
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {row.opened_by_email || "—"} • {new Date(row.opened_at).toLocaleString()}
-                    </p>
-
-                    {row.closed_by_name ? (
-                      <>
-                        <p className="mt-1 text-sm text-gray-100">
-                          Closed by: <span className="font-medium">{row.closed_by_name}</span>
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {row.closed_by_email || "—"} •{" "}
-                          {row.closed_at ? new Date(row.closed_at).toLocaleString() : "—"}
-                        </p>
-                      </>
-                    ) : null}
+                    )}
                   </div>
 
-                  <div className="w-full max-w-[260px] rounded-lg border border-gray-800 bg-black/30 p-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Opening</span>
-                      <span>RM {Number(row.opening_cash || 0).toFixed(2)}</span>
-                    </div>
-                    <div className="mt-1 flex justify-between">
-                      <span className="text-gray-400">Expected</span>
-                      <span>RM {expected.toFixed(2)}</span>
-                    </div>
-                    <div className="mt-1 flex justify-between">
-                      <span className="text-gray-400">Paid Out</span>
-                      <span>RM {paidOutTotal.toFixed(2)}</span>
-                    </div>
-                    <div className="mt-1 flex justify-between">
-                      <span className="text-gray-400">Counted</span>
-                      <span>{counted == null ? "-" : `RM ${counted.toFixed(2)}`}</span>
-                    </div>
-                    <div className="mt-1 flex justify-between font-semibold">
-                      <span className="text-gray-300">Over/Short</span>
-                      <span className={short ? "text-red-400" : "text-green-400"}>
-                        {overShort == null ? "-" : `RM ${overShort.toFixed(2)}`}
-                      </span>
-                    </div>
-                  </div>
+                  <p style={{ fontSize: 13, color: "var(--d-text-1)" }}>
+                    Opened by: <strong>{row.opened_by_name}</strong>
+                  </p>
+                  <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>
+                    {row.opened_by_email || "—"} · {new Date(row.opened_at).toLocaleString()}
+                  </p>
+
+                  {row.closed_by_name && (
+                    <>
+                      <p style={{ fontSize: 13, color: "var(--d-text-1)", marginTop: 6 }}>
+                        Closed by: <strong>{row.closed_by_name}</strong>
+                      </p>
+                      <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>
+                        {row.closed_by_email || "—"} · {row.closed_at ? new Date(row.closed_at).toLocaleString() : "—"}
+                      </p>
+                    </>
+                  )}
                 </div>
 
-                {row.opening_note ? (
-                  <p className="mt-3 rounded-md border border-gray-800 bg-black/30 px-3 py-2 text-xs text-gray-400">
-                    Opening note: {row.opening_note}
-                  </p>
-                ) : null}
-                {row.closing_note ? (
-                  <p className="mt-2 rounded-md border border-gray-800 bg-black/30 px-3 py-2 text-xs text-gray-400">
-                    Closing note: {row.closing_note}
-                  </p>
-                ) : null}
+                {/* Right: cash summary */}
+                <div
+                  style={{
+                    minWidth: 200,
+                    background: "var(--d-surface-hover)",
+                    border: "1px solid var(--d-border-soft)",
+                    borderRadius: 10,
+                    padding: "12px 14px",
+                    fontSize: 13,
+                  }}
+                >
+                  {[
+                    ["Opening", `RM ${Number(row.opening_cash || 0).toFixed(2)}`],
+                    ["Expected", `RM ${expected.toFixed(2)}`],
+                    ["Paid Out", `RM ${paidOutTotal.toFixed(2)}`],
+                    ["Counted", counted == null ? "—" : `RM ${counted.toFixed(2)}`],
+                  ].map(([label, val]) => (
+                    <div key={String(label)} style={{ display: "flex", justifyContent: "space-between", gap: 16, marginBottom: 4 }}>
+                      <span style={{ color: "var(--d-text-3)" }}>{label}</span>
+                      <span style={{ color: "var(--d-text-1)" }}>{val}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 16, marginTop: 4, paddingTop: 4, borderTop: "1px solid var(--d-border-soft)", fontWeight: 700 }}>
+                    <span style={{ color: "var(--d-text-2)" }}>Over/Short</span>
+                    <span style={{ color: isShort ? "var(--d-error)" : "var(--d-success)" }}>
+                      {overShort == null ? "—" : `RM ${overShort.toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
               </div>
-            );
-          })}
-      </div>
-    </div>
-  );
-}
 
-function Stat({
-  label,
-  value,
-  color = "text-white",
-}: {
-  label: string;
-  value: number | string;
-  color?: string;
-}) {
-  return (
-    <div className="min-w-[155px] rounded-xl border border-gray-800 bg-[#111] p-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`mt-1 text-xl font-semibold ${color}`}>{value}</p>
+              {row.opening_note && (
+                <p style={{ marginTop: 12, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--d-border-soft)", background: "var(--d-surface-hover)", fontSize: 12, color: "var(--d-text-3)" }}>
+                  Opening note: {row.opening_note}
+                </p>
+              )}
+              {row.closing_note && (
+                <p style={{ marginTop: 8, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--d-border-soft)", background: "var(--d-surface-hover)", fontSize: 12, color: "var(--d-text-3)" }}>
+                  Closing note: {row.closing_note}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

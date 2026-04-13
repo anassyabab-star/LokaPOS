@@ -1,7 +1,7 @@
 "use client";
 
 import { usePos } from "../pos-context";
-import { sugarLabel } from "../types";
+import { sugarLabel, LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO, LOYALTY_REDEEM_RM_PER_POINT } from "../types";
 
 export default function CartOverlay() {
   const s = usePos();
@@ -19,6 +19,42 @@ export default function CartOverlay() {
           <span className="flex-1 text-left text-sm text-gray-700">{s.linkedCustomerId ? s.customerName || "Customer linked" : "Add a customer"}</span>
           <span className="text-gray-400">›</span>
         </button>
+
+        {/* Points quick-action banner */}
+        {(() => {
+          if (!s.linkedCustomerId || s.memberPoints <= 0) return null;
+          const maxByAmt = Math.floor((s.totalAfterDiscount * LOYALTY_REDEEM_MAX_RATIO) / LOYALTY_REDEEM_RM_PER_POINT);
+          const eligibleMax = Math.min(s.memberPoints, maxByAmt);
+          const canRedeem = eligibleMax >= LOYALTY_REDEEM_MIN_POINTS;
+          const applied = s.appliedRedeemPoints > 0;
+          return (
+            <div className={`flex items-center justify-between border-b px-4 py-2.5 ${applied ? "border-green-200 bg-green-50" : "border-blue-100 bg-blue-50"}`}>
+              <div className="text-xs">
+                {applied ? (
+                  <span className="font-semibold text-green-700">✓ -{s.appliedRedeemPoints} pts (−RM{s.redeemAmount.toFixed(2)})</span>
+                ) : (
+                  <span className="text-blue-700">🏆 {s.memberPoints} pts tersedia</span>
+                )}
+              </div>
+              {canRedeem && !applied && (
+                <button
+                  onClick={() => s.setRedeemPointsInput(String(eligibleMax))}
+                  className="rounded-full bg-blue-600 px-3 py-1 text-[11px] font-semibold text-white active:bg-blue-700"
+                >
+                  Guna Points
+                </button>
+              )}
+              {applied && (
+                <button
+                  onClick={() => s.setRedeemPointsInput("")}
+                  className="rounded-full bg-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-600 active:bg-gray-300"
+                >
+                  Batalkan
+                </button>
+              )}
+            </div>
+          );
+        })()}
         <div className="px-4">
           {s.items.map(item => (
             <div key={item.id} className="flex items-center gap-2 border-b border-gray-200 py-3">

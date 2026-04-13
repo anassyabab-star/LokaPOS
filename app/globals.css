@@ -10,6 +10,32 @@
   --app-border: #1f2937;
   --app-text: #e5e7eb;
   --app-muted: #9ca3af;
+
+  /* Dashboard design tokens */
+  --d-bg: #0d0d0f;
+  --d-sidebar: #111113;
+  --d-surface: #18181b;
+  --d-surface-hover: #1e1e22;
+  --d-border: #27272a;
+  --d-border-soft: #222226;
+  --d-text-1: #fafafa;
+  --d-text-2: #a1a1aa;
+  --d-text-3: #71717a;
+  --d-accent: #7f1d1d;
+  --d-accent-hover: #6b1818;
+  --d-accent-soft: rgba(127, 29, 29, 0.14);
+  --d-success: #16a34a;
+  --d-success-soft: rgba(22, 163, 74, 0.12);
+  --d-warning: #d97706;
+  --d-warning-soft: rgba(217, 119, 6, 0.12);
+  --d-error: #dc2626;
+  --d-error-soft: rgba(220, 38, 38, 0.12);
+  --d-info: #2563eb;
+  --d-info-soft: rgba(37, 99, 235, 0.12);
+  --d-nav-active-bg: rgba(127, 29, 29, 0.14);
+  --d-input-bg: #0d0d0f;
+  --d-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --d-shadow-md: 0 4px 12px rgba(0,0,0,0.5);
 }
 
 /* ━━━ POS-specific design tokens ━━━ */
@@ -111,6 +137,32 @@
   --app-border: #d1d5db;
   --app-text: #111827;
   --app-muted: #6b7280;
+
+  /* Dashboard design tokens — light */
+  --d-bg: #f4f4f6;
+  --d-sidebar: #ffffff;
+  --d-surface: #ffffff;
+  --d-surface-hover: #f9f9fb;
+  --d-border: #e4e4e7;
+  --d-border-soft: #ececef;
+  --d-text-1: #09090b;
+  --d-text-2: #52525b;
+  --d-text-3: #a1a1aa;
+  --d-accent: #7f1d1d;
+  --d-accent-hover: #6b1818;
+  --d-accent-soft: rgba(127, 29, 29, 0.08);
+  --d-success: #15803d;
+  --d-success-soft: rgba(21, 128, 61, 0.1);
+  --d-warning: #b45309;
+  --d-warning-soft: rgba(180, 83, 9, 0.1);
+  --d-error: #b91c1c;
+  --d-error-soft: rgba(185, 28, 28, 0.08);
+  --d-info: #1d4ed8;
+  --d-info-soft: rgba(29, 78, 216, 0.08);
+  --d-nav-active-bg: rgba(127, 29, 29, 0.08);
+  --d-input-bg: #fafafa;
+  --d-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+  --d-shadow-md: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 body {

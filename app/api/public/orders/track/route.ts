@@ -43,7 +43,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ orders: [], loyalty_points: 0 });
     }
 
-    const [{ data: orders }, { data: ledgerRows }] = await Promise.all([
+    const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysFromNow = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [{ data: orders }, { data: ledgerRows }, { data: expiringRows }] = await Promise.all([
       supabase
         .from("orders")
         .select("id, receipt_number, customer_name, status, payment_status, total, created_at")
@@ -55,7 +58,14 @@ export async function GET(req: Request) {
         .from("loyalty_ledger")
         .select("points_change")
         .eq("customer_id", customer.id)
-        .gte("created_at", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()),
+        .gte("created_at", oneYearAgo),
+      supabase
+        .from("loyalty_ledger")
+        .select("points_change, expires_at")
+        .eq("customer_id", customer.id)
+        .gt("points_change", 0)
+        .lte("expires_at", thirtyDaysFromNow)
+        .gte("expires_at", new Date().toISOString()),
     ]);
 
     const loyaltyPoints = (ledgerRows || []).reduce(
@@ -63,7 +73,16 @@ export async function GET(req: Request) {
       0
     );
 
-    return NextResponse.json({ orders: orders || [], loyalty_points: Math.max(0, loyaltyPoints) });
+    const expiringPoints30d = (expiringRows || []).reduce(
+      (sum: number, row: { points_change: number | null }) => sum + Number(row.points_change || 0),
+      0
+    );
+
+    return NextResponse.json({
+      orders: orders || [],
+      loyalty_points: Math.max(0, loyaltyPoints),
+      expiring_points_30d: Math.max(0, expiringPoints30d),
+    });
   }
 
   return NextResponse.json({ orders: [] });

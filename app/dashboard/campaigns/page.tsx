@@ -30,10 +30,7 @@ type PreviewResponse = {
   considered_customers: number;
   matched_customers: number;
   eligible_recipients: number;
-  by_channel: {
-    whatsapp: number;
-    email: number;
-  };
+  by_channel: { whatsapp: number; email: number };
   preview: Array<{
     customer_id: string;
     customer_name: string;
@@ -54,11 +51,7 @@ type MurpatiStatus = {
 
 type IntegrationCategory = "messaging" | "payment" | "email" | "system" | "storage";
 
-type IntegrationStatusCheck = {
-  key: string;
-  label: string;
-  ok: boolean;
-};
+type IntegrationStatusCheck = { key: string; label: string; ok: boolean };
 
 type IntegrationStatusRow = {
   id: string;
@@ -89,21 +82,188 @@ const CHANNEL_OPTIONS: Array<{ value: CampaignChannel; label: string }> = [
   { value: "multi", label: "WhatsApp + Email" },
 ];
 
-function formatSegment(value: CampaignSegment) {
-  if (value === "active_30d") return "Active 30D";
-  if (value === "inactive_60d") return "Inactive 60D";
-  if (value === "birthday_month") return "Birthday Month";
+function formatSegment(v: CampaignSegment) {
+  if (v === "active_30d") return "Active 30D";
+  if (v === "inactive_60d") return "Inactive 60D";
+  if (v === "birthday_month") return "Birthday Month";
   return "Manual";
 }
 
-function formatStatus(value: CampaignRow["status"]) {
-  if (value === "draft") return "Draft";
-  if (value === "scheduled") return "Scheduled";
-  if (value === "running") return "Running";
-  if (value === "sent") return "Sent";
-  return "Cancelled";
+function statusBadge(s: CampaignRow["status"]) {
+  const map: Record<string, { label: string; color: string; bg: string }> = {
+    draft:     { label: "Draft",     color: "var(--d-warning)", bg: "var(--d-warning-soft)" },
+    scheduled: { label: "Scheduled", color: "var(--d-info)",    bg: "var(--d-info-soft)" },
+    running:   { label: "Running",   color: "var(--d-info)",    bg: "var(--d-info-soft)" },
+    sent:      { label: "Sent",      color: "var(--d-success)", bg: "var(--d-success-soft)" },
+    cancelled: { label: "Cancelled", color: "var(--d-text-3)",  bg: "var(--d-surface-hover)" },
+  };
+  return map[s] ?? map.draft;
 }
 
+/* ── Shared UI primitives ─────────────────────────────── */
+function Card({ children, style = {} }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div
+      style={{
+        background: "var(--d-surface)",
+        border: "1px solid var(--d-border)",
+        borderRadius: 14,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SectionHeader({ title, desc, action }: { title: string; desc?: string; action?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
+      <div>
+        <p style={{ fontSize: 15, fontWeight: 700, color: "var(--d-text-1)" }}>{title}</p>
+        {desc && <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 3 }}>{desc}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function GhostBtn({ onClick, children, disabled }: { onClick?: () => void; children: React.ReactNode; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: "6px 14px",
+        borderRadius: 8,
+        fontSize: 12,
+        fontWeight: 500,
+        color: "var(--d-text-2)",
+        background: "transparent",
+        border: "1px solid var(--d-border)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+        transition: "background 0.15s",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PrimaryBtn({ onClick, children, disabled }: { onClick?: () => void; children: React.ReactNode; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: "7px 16px",
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: 600,
+        color: "#fff",
+        background: disabled ? "var(--d-text-3)" : "var(--d-accent)",
+        border: "none",
+        cursor: disabled ? "not-allowed" : "pointer",
+        transition: "background 0.15s",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      style={{
+        width: "100%",
+        padding: "9px 12px",
+        borderRadius: 8,
+        fontSize: 13,
+        color: "var(--d-text-1)",
+        background: "var(--d-input-bg)",
+        border: "1px solid var(--d-border)",
+        outline: "none",
+        boxSizing: "border-box",
+        ...props.style,
+      }}
+    />
+  );
+}
+
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      style={{
+        width: "100%",
+        padding: "9px 12px",
+        borderRadius: 8,
+        fontSize: 13,
+        color: "var(--d-text-1)",
+        background: "var(--d-input-bg)",
+        border: "1px solid var(--d-border)",
+        outline: "none",
+        boxSizing: "border-box",
+        ...props.style,
+      }}
+    />
+  );
+}
+
+function Alert({ type, children }: { type: "error" | "success" | "info"; children: React.ReactNode }) {
+  const colors = {
+    error:   { color: "var(--d-error)",   bg: "var(--d-error-soft)",   border: "var(--d-error)" },
+    success: { color: "var(--d-success)", bg: "var(--d-success-soft)", border: "var(--d-success)" },
+    info:    { color: "var(--d-info)",    bg: "var(--d-info-soft)",    border: "var(--d-info)" },
+  }[type];
+  return (
+    <div
+      style={{
+        padding: "10px 14px",
+        borderRadius: 10,
+        fontSize: 13,
+        color: colors.color,
+        background: colors.bg,
+        border: `1px solid ${colors.border}`,
+        opacity: 0.9,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function StatCard({ label, value, color }: { label: string; value: number | string; color?: string }) {
+  return (
+    <Card style={{ padding: "14px 16px" }}>
+      <p style={{ fontSize: 11, fontWeight: 500, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</p>
+      <p style={{ fontSize: 26, fontWeight: 700, color: color ?? "var(--d-text-1)", marginTop: 6, lineHeight: 1 }}>{value}</p>
+    </Card>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        borderRadius: 8,
+        background: "var(--d-surface-hover)",
+        border: "1px solid var(--d-border-soft)",
+      }}
+    >
+      <p style={{ fontSize: 10, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</p>
+      <p style={{ fontSize: 15, fontWeight: 600, color: "var(--d-text-1)", marginTop: 3 }}>{value}</p>
+    </div>
+  );
+}
+
+/* ── Main component ───────────────────────────────────── */
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,19 +295,19 @@ export default function CampaignsPage() {
   const [integrationsError, setIntegrationsError] = useState<string | null>(null);
   const [expandedIntegrationId, setExpandedIntegrationId] = useState<string | null>(null);
 
-  const summary = useMemo(() => {
-    return campaigns.reduce(
-      (acc, campaign) => {
-        acc.total += 1;
-        if (campaign.status === "draft") acc.draft += 1;
-        if (campaign.status === "running") acc.running += 1;
-        if (campaign.status === "sent") acc.sent += 1;
-        acc.queuedRecipients += Number(campaign.counts?.queued || 0);
-        return acc;
-      },
-      { total: 0, draft: 0, running: 0, sent: 0, queuedRecipients: 0 }
-    );
-  }, [campaigns]);
+  const [showNewForm, setShowNewForm] = useState(false);
+
+  const summary = useMemo(() => campaigns.reduce(
+    (acc, c) => {
+      acc.total += 1;
+      if (c.status === "draft") acc.draft += 1;
+      if (c.status === "running") acc.running += 1;
+      if (c.status === "sent") acc.sent += 1;
+      acc.queuedRecipients += Number(c.counts?.queued || 0);
+      return acc;
+    },
+    { total: 0, draft: 0, running: 0, sent: 0, queuedRecipients: 0 }
+  ), [campaigns]);
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
@@ -170,7 +330,7 @@ export default function CampaignsPage() {
     try {
       const res = await fetch("/api/admin/campaigns/murpati/status", { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load Murpati status");
+      if (!res.ok) throw new Error(data?.error || "Failed");
       setMurpatiStatus(data as MurpatiStatus);
     } catch (e) {
       setMurpatiStatus({
@@ -193,7 +353,7 @@ export default function CampaignsPage() {
     try {
       const res = await fetch("/api/admin/integrations/status", { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load integrations status");
+      if (!res.ok) throw new Error(data?.error || "Failed");
       setIntegrations(data as IntegrationsStatusResponse);
     } catch (e) {
       setIntegrations(null);
@@ -213,21 +373,14 @@ export default function CampaignsPage() {
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewData(null);
-
     try {
-      const params = new URLSearchParams({
-        channel,
-        segment_type: segmentType,
-        limit: "40",
-      });
-      const res = await fetch(`/api/admin/campaigns/preview?${params.toString()}`, {
-        cache: "no-store",
-      });
+      const params = new URLSearchParams({ channel, segment_type: segmentType, limit: "40" });
+      const res = await fetch(`/api/admin/campaigns/preview?${params}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to preview segment");
       setPreviewData(data as PreviewResponse);
     } catch (e) {
-      setPreviewError(e instanceof Error ? e.message : "Failed to preview segment");
+      setPreviewError(e instanceof Error ? e.message : "Failed");
     } finally {
       setPreviewLoading(false);
     }
@@ -241,21 +394,13 @@ export default function CampaignsPage() {
       const res = await fetch("/api/admin/campaigns", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          channel,
-          segment_type: segmentType,
-          message_template: messageTemplate,
-          scheduled_at: scheduledAt || null,
-        }),
+        body: JSON.stringify({ name, channel, segment_type: segmentType, message_template: messageTemplate, scheduled_at: scheduledAt || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to create campaign");
-
-      setName("");
-      setMessageTemplate("");
-      setScheduledAt("");
-      setInfo("Campaign created.");
+      setName(""); setMessageTemplate(""); setScheduledAt("");
+      setInfo("Campaign created successfully.");
+      setShowNewForm(false);
       await loadCampaigns();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create campaign");
@@ -266,19 +411,12 @@ export default function CampaignsPage() {
 
   async function handleQueueRecipients(campaignId: string) {
     setQueueLoadingById(prev => ({ ...prev, [campaignId]: true }));
-    setError(null);
-    setInfo(null);
+    setError(null); setInfo(null);
     try {
-      const res = await fetch(`/api/admin/campaigns/${campaignId}/queue`, {
-        method: "POST",
-      });
+      const res = await fetch(`/api/admin/campaigns/${campaignId}/queue`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to queue recipients");
-      setInfo(
-        `Queue updated: ${Number(data.newly_queued || 0)} newly queued, ${Number(
-          data.already_queued || 0
-        )} already queued.`
-      );
+      setInfo(`Queue updated: ${Number(data.newly_queued || 0)} newly queued, ${Number(data.already_queued || 0)} already queued.`);
       await loadCampaigns();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to queue recipients");
@@ -289,8 +427,7 @@ export default function CampaignsPage() {
 
   async function handleSendCampaign(campaignId: string) {
     setSendLoadingById(prev => ({ ...prev, [campaignId]: true }));
-    setError(null);
-    setInfo(null);
+    setError(null); setInfo(null);
     try {
       const res = await fetch(`/api/admin/campaigns/${campaignId}/send`, {
         method: "POST",
@@ -299,11 +436,7 @@ export default function CampaignsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to send campaign");
-      setInfo(
-        `Send batch done: processed ${Number(data.processed || 0)}, sent ${Number(
-          data.sent || 0
-        )}, failed ${Number(data.failed || 0)}, remaining ${Number(data.remaining_queued || 0)}.`
-      );
+      setInfo(`Sent: ${Number(data.sent || 0)} messages, ${Number(data.remaining_queued || 0)} remaining.`);
       await loadCampaigns();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to send campaign");
@@ -314,20 +447,16 @@ export default function CampaignsPage() {
 
   async function handleTestSend() {
     setTestLoading(true);
-    setError(null);
-    setInfo(null);
+    setError(null); setInfo(null);
     try {
       const res = await fetch("/api/admin/campaigns/murpati/test-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: testTo,
-          message: testMessage,
-        }),
+        body: JSON.stringify({ to: testTo, message: testMessage }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Test send failed");
-      setInfo(`Test message sent successfully. Message ID: ${data.message_id || "-"}`);
+      setInfo(`Test message sent. ID: ${data.message_id || "-"}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Test send failed");
     } finally {
@@ -335,384 +464,447 @@ export default function CampaignsPage() {
     }
   }
 
+  /* ── Render ─────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-black p-4 text-gray-200 md:p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold">Campaigns</h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Queue CRM recipients, then send WhatsApp in controlled batches via Murpati.
-        </p>
+    <div style={{ padding: "28px 28px 40px", maxWidth: 900 }}>
+
+      {/* Page header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 16 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--d-text-1)", letterSpacing: "-0.02em" }}>Campaigns</h1>
+          <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
+            Queue CRM recipients, then send WhatsApp in controlled batches via Murpati.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowNewForm(p => !p)}
+          style={{
+            padding: "9px 18px",
+            borderRadius: 10,
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#fff",
+            background: "var(--d-accent)",
+            border: "none",
+            cursor: "pointer",
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+          }}
+        >
+          + New Campaign
+        </button>
       </div>
 
-      <div className="-mx-1 mb-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
-        <Stat label="Total Campaigns" value={summary.total} />
-        <Stat label="Draft" value={summary.draft} color="text-yellow-300" />
-        <Stat label="Running" value={summary.running} color="text-blue-300" />
-        <Stat label="Queued Recipients" value={summary.queuedRecipients} color="text-green-300" />
+      {/* Stats row */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+        <StatCard label="Total Campaigns" value={summary.total} />
+        <StatCard label="Draft" value={summary.draft} color="var(--d-warning)" />
+        <StatCard label="Running" value={summary.running} color="var(--d-info)" />
+        <StatCard label="Queued Recipients" value={summary.queuedRecipients} color="var(--d-success)" />
       </div>
 
-      <div className="mb-4 rounded-xl border border-gray-800 bg-[#111] p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold">Integrations Settings</h2>
-            <p className="mt-1 text-xs text-gray-400">
-              Monitor active provider and API readiness without exposing secrets.
-            </p>
+      {/* Alerts */}
+      {error && <div style={{ marginBottom: 16 }}><Alert type="error">{error}</Alert></div>}
+      {info  && <div style={{ marginBottom: 16 }}><Alert type="success">{info}</Alert></div>}
+
+      {/* New Campaign Form */}
+      {showNewForm && (
+        <Card style={{ padding: 20, marginBottom: 20 }}>
+          <SectionHeader title="New Campaign" />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Campaign name"
+            />
+            <Input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={e => setScheduledAt(e.target.value)}
+            />
+            <Select value={channel} onChange={e => setChannel(e.target.value as CampaignChannel)}>
+              {CHANNEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
+            <Select value={segmentType} onChange={e => setSegmentType(e.target.value as CampaignSegment)}>
+              {SEGMENT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadIntegrationsStatus()}
-            className="rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:border-gray-500"
-          >
-            Refresh
-          </button>
+          <textarea
+            value={messageTemplate}
+            onChange={e => setMessageTemplate(e.target.value)}
+            placeholder="Message template — supports {{name}}, {{first_name}}, {{phone}}"
+            rows={4}
+            style={{
+              width: "100%",
+              marginTop: 10,
+              padding: "9px 12px",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "var(--d-text-1)",
+              background: "var(--d-input-bg)",
+              border: "1px solid var(--d-border)",
+              outline: "none",
+              resize: "vertical",
+              boxSizing: "border-box",
+              fontFamily: "inherit",
+            }}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <GhostBtn onClick={() => void handlePreview()} disabled={previewLoading}>
+              {previewLoading ? "Previewing..." : "Preview Segment"}
+            </GhostBtn>
+            <PrimaryBtn onClick={() => void handleCreateCampaign()} disabled={submitting}>
+              {submitting ? "Saving..." : "Create Campaign"}
+            </PrimaryBtn>
+            <div style={{ flex: 1 }} />
+            <GhostBtn onClick={() => setShowNewForm(false)}>Cancel</GhostBtn>
+          </div>
+
+          {previewError && <div style={{ marginTop: 12 }}><Alert type="error">{previewError}</Alert></div>}
+
+          {previewData && (
+            <div
+              style={{
+                marginTop: 14,
+                padding: 14,
+                borderRadius: 10,
+                background: "var(--d-surface-hover)",
+                border: "1px solid var(--d-border-soft)",
+              }}
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
+                <MiniStat label="Checked" value={previewData.considered_customers} />
+                <MiniStat label="Segment Match" value={previewData.matched_customers} />
+                <MiniStat label="Eligible" value={previewData.eligible_recipients} />
+                <MiniStat label="WA / Email" value={`${previewData.by_channel.whatsapp} / ${previewData.by_channel.email}`} />
+              </div>
+              <div
+                style={{
+                  maxHeight: 180,
+                  overflowY: "auto",
+                  borderRadius: 8,
+                  border: "1px solid var(--d-border)",
+                  background: "var(--d-surface)",
+                }}
+              >
+                {previewData.preview.length === 0 ? (
+                  <p style={{ padding: "12px 14px", fontSize: 12, color: "var(--d-text-3)" }}>
+                    No recipients in this segment.
+                  </p>
+                ) : (
+                  previewData.preview.map(row => (
+                    <div
+                      key={`${row.customer_id}-${row.channel}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "8px 12px",
+                        borderBottom: "1px solid var(--d-border-soft)",
+                        fontSize: 12,
+                      }}
+                    >
+                      <span style={{ flex: 1, color: "var(--d-text-1)", fontWeight: 500 }}>{row.customer_name}</span>
+                      <span style={{ color: "var(--d-text-3)" }}>{row.destination}</span>
+                      <span
+                        style={{
+                          padding: "2px 8px",
+                          borderRadius: 20,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.04em",
+                          background: "var(--d-accent-soft)",
+                          color: "var(--d-accent)",
+                        }}
+                      >
+                        {row.channel}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Campaign List */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--d-text-2)" }}>
+            {loading ? "Loading..." : `${campaigns.length} campaign${campaigns.length !== 1 ? "s" : ""}`}
+          </p>
         </div>
 
-        {integrationsLoading ? (
-          <p className="mt-3 text-sm text-gray-400">Checking integrations...</p>
-        ) : integrationsError ? (
-          <div className="mt-3 rounded-md border border-red-900 bg-red-950/20 px-3 py-2 text-xs text-red-300">
-            {integrationsError}
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {[1, 2].map(i => (
+              <div key={i} style={{ height: 100, borderRadius: 14, background: "var(--d-surface)", border: "1px solid var(--d-border)", opacity: 0.5 }} />
+            ))}
           </div>
+        ) : campaigns.length === 0 ? (
+          <Card style={{ padding: "40px 20px", textAlign: "center" }}>
+            <p style={{ fontSize: 14, color: "var(--d-text-3)" }}>No campaigns yet.</p>
+            <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 4 }}>Click &ldquo;+ New Campaign&rdquo; to get started.</p>
+          </Card>
         ) : (
-          <>
-            <div className="mt-3 rounded-md border border-gray-800 bg-black/40 px-3 py-2 text-xs text-gray-300">
-              Active payment provider:{" "}
-              <span className="font-semibold uppercase text-white">
-                {integrations?.payment_provider_active || "-"}
-              </span>
-            </div>
-
-            <div className="mt-3 space-y-2">
-              {(integrations?.integrations || []).map(integration => (
-                <div key={integration.id} className="rounded-md border border-gray-800 bg-black/30">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedIntegrationId(prev => (prev === integration.id ? null : integration.id))
-                    }
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
-                    aria-expanded={expandedIntegrationId === integration.id}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white">{integration.name}</p>
-                      <p className="mt-0.5 truncate text-[11px] uppercase tracking-wide text-gray-500">
-                        {integration.category} • {integration.status}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {campaigns.map(campaign => {
+              const badge = statusBadge(campaign.status);
+              return (
+                <Card key={campaign.id} style={{ padding: 18 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{campaign.name}</p>
+                        <span
+                          style={{
+                            padding: "2px 10px",
+                            borderRadius: 20,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: badge.color,
+                            background: badge.bg,
+                          }}
+                        >
+                          {badge.label}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 4 }}>
+                        {formatSegment(campaign.segment_type)} · {campaign.channel.toUpperCase()}
+                        {campaign.scheduled_at
+                          ? ` · Scheduled ${new Date(campaign.scheduled_at).toLocaleString()}`
+                          : ""}
+                      </p>
+                      <p style={{ fontSize: 11, color: "var(--d-text-3)", marginTop: 2 }}>
+                        Created {new Date(campaign.created_at).toLocaleString()}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                          integration.healthy
-                            ? "bg-green-900/40 text-green-300"
-                            : integration.configured
-                              ? "bg-yellow-900/40 text-yellow-300"
-                              : "bg-gray-800 text-gray-300"
-                        }`}
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+                      <GhostBtn
+                        onClick={() => void handleQueueRecipients(campaign.id)}
+                        disabled={Boolean(queueLoadingById[campaign.id])}
                       >
-                        {integration.healthy ? "Healthy" : integration.configured ? "Partial" : "Missing"}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {expandedIntegrationId === integration.id ? "▲" : "▼"}
-                      </span>
+                        {queueLoadingById[campaign.id] ? "Queueing..." : "Queue"}
+                      </GhostBtn>
+                      <PrimaryBtn
+                        onClick={() => void handleSendCampaign(campaign.id)}
+                        disabled={Boolean(sendLoadingById[campaign.id])}
+                      >
+                        {sendLoadingById[campaign.id] ? "Sending..." : "Send Batch"}
+                      </PrimaryBtn>
                     </div>
-                  </button>
+                  </div>
 
-                  {expandedIntegrationId === integration.id ? (
-                    <div className="border-t border-gray-800 px-3 pb-3 pt-2">
-                      <div className="grid grid-cols-1 gap-1">
-                        {integration.checks.map(check => (
-                          <div
-                            key={`${integration.id}-${check.key}`}
-                            className="flex items-center justify-between rounded border border-gray-800 bg-[#0f0f0f] px-2 py-1 text-[11px]"
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginTop: 14 }}>
+                    <MiniStat label="Total" value={campaign.counts.total} />
+                    <MiniStat label="Queued" value={campaign.counts.queued} />
+                    <MiniStat label="Sent" value={campaign.counts.sent} />
+                    <MiniStat label="Failed" value={campaign.counts.failed} />
+                    <MiniStat label="Skipped" value={campaign.counts.skipped} />
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      background: "var(--d-surface-hover)",
+                      fontSize: 12,
+                      color: "var(--d-text-3)",
+                      fontStyle: "italic",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {campaign.message_template}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Integrations Settings */}
+      <Card style={{ padding: 20, marginBottom: 16 }}>
+        <SectionHeader
+          title="Integrations"
+          desc="Monitor active providers and API readiness."
+          action={
+            <GhostBtn onClick={() => void loadIntegrationsStatus()} disabled={integrationsLoading}>
+              {integrationsLoading ? "Checking..." : "Refresh"}
+            </GhostBtn>
+          }
+        />
+
+        {integrationsError ? (
+          <Alert type="error">{integrationsError}</Alert>
+        ) : (
+          <>
+            {integrations && (
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  background: "var(--d-accent-soft)",
+                  fontSize: 12,
+                  color: "var(--d-text-2)",
+                  marginBottom: 12,
+                }}
+              >
+                Active payment provider:{" "}
+                <strong style={{ color: "var(--d-text-1)", textTransform: "uppercase" }}>
+                  {integrations.payment_provider_active || "—"}
+                </strong>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {integrationsLoading
+                ? [1, 2, 3].map(i => (
+                    <div key={i} style={{ height: 48, borderRadius: 10, background: "var(--d-surface-hover)", opacity: 0.6 }} />
+                  ))
+                : (integrations?.integrations || []).map(intg => (
+                    <div
+                      key={intg.id}
+                      style={{
+                        borderRadius: 10,
+                        border: "1px solid var(--d-border)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setExpandedIntegrationId(p => p === intg.id ? null : intg.id)}
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          padding: "11px 14px",
+                          background: "var(--d-surface-hover)",
+                          border: "none",
+                          cursor: "pointer",
+                          textAlign: "left",
+                        }}
+                      >
+                        <div>
+                          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--d-text-1)" }}>{intg.name}</p>
+                          <p style={{ fontSize: 11, color: "var(--d-text-3)", marginTop: 1, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                            {intg.category} · {intg.status}
+                          </p>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span
+                            style={{
+                              padding: "3px 10px",
+                              borderRadius: 20,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              textTransform: "uppercase",
+                              letterSpacing: "0.04em",
+                              color: intg.healthy ? "var(--d-success)" : intg.configured ? "var(--d-warning)" : "var(--d-text-3)",
+                              background: intg.healthy ? "var(--d-success-soft)" : intg.configured ? "var(--d-warning-soft)" : "var(--d-surface-hover)",
+                            }}
                           >
-                            <span className="text-gray-400">{check.label}</span>
-                            <span className={check.ok ? "text-green-300" : "text-red-300"}>
-                              {check.ok ? "OK" : "Missing"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                            {intg.healthy ? "Healthy" : intg.configured ? "Partial" : "Missing"}
+                          </span>
+                          <span style={{ fontSize: 10, color: "var(--d-text-3)" }}>
+                            {expandedIntegrationId === intg.id ? "▲" : "▼"}
+                          </span>
+                        </div>
+                      </button>
 
-                      {integration.hint ? (
-                        <p className="mt-2 text-[11px] text-amber-300">{integration.hint}</p>
-                      ) : null}
+                      {expandedIntegrationId === intg.id && (
+                        <div style={{ padding: "10px 14px", borderTop: "1px solid var(--d-border)" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            {intg.checks.map(check => (
+                              <div
+                                key={`${intg.id}-${check.key}`}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  padding: "6px 10px",
+                                  borderRadius: 6,
+                                  background: "var(--d-surface-hover)",
+                                  fontSize: 12,
+                                }}
+                              >
+                                <span style={{ color: "var(--d-text-2)" }}>{check.label}</span>
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    color: check.ok ? "var(--d-success)" : "var(--d-error)",
+                                  }}
+                                >
+                                  {check.ok ? "OK" : "Missing"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          {intg.hint && (
+                            <p style={{ marginTop: 8, fontSize: 11, color: "var(--d-warning)" }}>{intg.hint}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ) : null}
-                </div>
-              ))}
+                  ))}
             </div>
           </>
         )}
-      </div>
+      </Card>
 
-      <div className="mb-4 rounded-xl border border-gray-800 bg-[#111] p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Murpati Connection</h2>
-          <button
-            type="button"
-            onClick={() => void loadMurpatiStatus()}
-            className="rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:border-gray-500"
-          >
-            Refresh
-          </button>
-        </div>
+      {/* Murpati Connection */}
+      <Card style={{ padding: 20 }}>
+        <SectionHeader
+          title="Murpati Connection"
+          desc="Test WhatsApp gateway connectivity."
+          action={
+            <GhostBtn onClick={() => void loadMurpatiStatus()} disabled={murpatiLoading}>
+              {murpatiLoading ? "Checking..." : "Refresh"}
+            </GhostBtn>
+          }
+        />
 
         {murpatiLoading ? (
-          <p className="mt-2 text-sm text-gray-400">Checking Murpati status...</p>
+          <p style={{ fontSize: 13, color: "var(--d-text-3)" }}>Checking Murpati status...</p>
         ) : (
-          <div className="mt-2 space-y-2 text-sm">
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-              <Mini label="Configured" value={murpatiStatus?.configured ? "Yes" : "No"} />
-              <Mini label="Session Status" value={murpatiStatus?.session_status || "Unknown"} />
-              <Mini label="Base URL" value={murpatiStatus?.base_url || "-"} />
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
+              <MiniStat label="Configured" value={murpatiStatus?.configured ? "Yes" : "No"} />
+              <MiniStat label="Session" value={murpatiStatus?.session_status || "Unknown"} />
+              <MiniStat label="Base URL" value={murpatiStatus?.base_url || "—"} />
             </div>
-            {murpatiStatus?.error ? (
-              <div className="rounded-md border border-red-900 bg-red-950/20 px-3 py-2 text-xs text-red-300">
-                {murpatiStatus.error}
+            {murpatiStatus?.error && (
+              <div style={{ marginBottom: 12 }}>
+                <Alert type="error">{murpatiStatus.error}</Alert>
               </div>
-            ) : null}
-          </div>
+            )}
+          </>
         )}
 
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_2fr_auto]">
-          <input
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto", gap: 8 }}>
+          <Input
             value={testTo}
             onChange={e => setTestTo(e.target.value)}
-            placeholder="Test number (example 60123456789)"
-            className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
+            placeholder="e.g. 60123456789"
           />
-          <input
+          <Input
             value={testMessage}
             onChange={e => setTestMessage(e.target.value)}
             placeholder="Test message"
-            className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
           />
-          <button
-            type="button"
-            onClick={() => void handleTestSend()}
-            disabled={testLoading}
-            className="rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
+          <PrimaryBtn onClick={() => void handleTestSend()} disabled={testLoading}>
             {testLoading ? "Sending..." : "Test Send"}
-          </button>
+          </PrimaryBtn>
         </div>
-      </div>
-
-      <div className="rounded-xl border border-gray-800 bg-[#111] p-4">
-        <h2 className="text-base font-semibold">New Campaign</h2>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Campaign name"
-            className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-          />
-
-          <input
-            type="datetime-local"
-            value={scheduledAt}
-            onChange={e => setScheduledAt(e.target.value)}
-            className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-          />
-
-          <select
-            value={channel}
-            onChange={e => setChannel(e.target.value as CampaignChannel)}
-            className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-          >
-            {CHANNEL_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={segmentType}
-            onChange={e => setSegmentType(e.target.value as CampaignSegment)}
-            className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-          >
-            {SEGMENT_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <textarea
-          value={messageTemplate}
-          onChange={e => setMessageTemplate(e.target.value)}
-          placeholder="Message template. Supports {{name}}, {{first_name}}, {{phone}}"
-          rows={4}
-          className="mt-2 w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-        />
-
-        <div className="mt-2 flex flex-col gap-2 md:flex-row">
-          <button
-            type="button"
-            onClick={() => void handlePreview()}
-            disabled={previewLoading}
-            className="rounded-md border border-gray-700 px-4 py-2 text-sm text-gray-200 hover:border-gray-500 disabled:opacity-60"
-          >
-            {previewLoading ? "Previewing..." : "Preview Segment"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCreateCampaign()}
-            disabled={submitting}
-            className="rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white hover:opacity-95 disabled:opacity-60"
-          >
-            {submitting ? "Saving..." : "Create Campaign"}
-          </button>
-        </div>
-
-        {previewError ? (
-          <div className="mt-3 rounded-md border border-red-900 bg-red-950/20 px-3 py-2 text-sm text-red-300">
-            {previewError}
-          </div>
-        ) : null}
-
-        {previewData ? (
-          <div className="mt-3 rounded-md border border-gray-800 bg-black/40 p-3 text-sm">
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <Mini label="Customers Checked" value={previewData.considered_customers} />
-              <Mini label="Segment Match" value={previewData.matched_customers} />
-              <Mini label="Eligible Recipients" value={previewData.eligible_recipients} />
-              <Mini
-                label="Split"
-                value={`WA ${previewData.by_channel.whatsapp} / Email ${previewData.by_channel.email}`}
-              />
-            </div>
-            <div className="mt-3 max-h-44 space-y-1 overflow-auto rounded-md border border-gray-800 bg-[#111] p-2">
-              {previewData.preview.length === 0 ? (
-                <p className="text-xs text-gray-500">No recipients in this segment.</p>
-              ) : (
-                previewData.preview.map(row => (
-                  <div
-                    key={`${row.customer_id}-${row.channel}`}
-                    className="flex items-center justify-between gap-3 rounded border border-gray-800 px-2 py-1 text-xs"
-                  >
-                    <span className="truncate">{row.customer_name}</span>
-                    <span className="truncate text-gray-400">{row.destination}</span>
-                    <span className="rounded-full bg-gray-800 px-2 py-0.5 uppercase text-[10px]">
-                      {row.channel}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {error ? (
-        <div className="mt-4 rounded-md border border-red-900 bg-red-950/20 px-3 py-2 text-sm text-red-300">
-          {error}
-        </div>
-      ) : null}
-
-      {info ? (
-        <div className="mt-4 rounded-md border border-green-900 bg-green-950/20 px-3 py-2 text-sm text-green-300">
-          {info}
-        </div>
-      ) : null}
-
-      <div className="mt-4 space-y-3">
-        {loading ? (
-          <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
-            Loading campaigns...
-          </div>
-        ) : null}
-
-        {!loading && campaigns.length === 0 ? (
-          <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
-            No campaigns yet.
-          </div>
-        ) : null}
-
-        {!loading &&
-          campaigns.map(campaign => (
-            <div key={campaign.id} className="rounded-xl border border-gray-800 bg-[#111] p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">{campaign.name}</p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    {formatSegment(campaign.segment_type)} • {campaign.channel.toUpperCase()}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Created {new Date(campaign.created_at).toLocaleString()}
-                    {campaign.scheduled_at
-                      ? ` • Schedule ${new Date(campaign.scheduled_at).toLocaleString()}`
-                      : ""}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-gray-800 px-2 py-1 text-xs">
-                    {formatStatus(campaign.status)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void handleQueueRecipients(campaign.id)}
-                    disabled={Boolean(queueLoadingById[campaign.id])}
-                    className="rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-200 disabled:opacity-60"
-                  >
-                    {queueLoadingById[campaign.id] ? "Queueing..." : "Queue Recipients"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleSendCampaign(campaign.id)}
-                    disabled={Boolean(sendLoadingById[campaign.id])}
-                    className="rounded-md bg-[#7F1D1D] px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
-                  >
-                    {sendLoadingById[campaign.id] ? "Sending..." : "Send WhatsApp Batch"}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-5">
-                <Mini label="Total" value={campaign.counts.total} />
-                <Mini label="Queued" value={campaign.counts.queued} />
-                <Mini label="Sent" value={campaign.counts.sent} />
-                <Mini label="Failed" value={campaign.counts.failed} />
-                <Mini label="Skipped" value={campaign.counts.skipped} />
-              </div>
-
-              <div className="mt-3 rounded-md border border-gray-800 bg-black/40 px-3 py-2 text-xs text-gray-300">
-                {campaign.message_template}
-              </div>
-            </div>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  color = "text-white",
-}: {
-  label: string;
-  value: number | string;
-  color?: string;
-}) {
-  return (
-    <div className="min-w-[155px] rounded-xl border border-gray-800 bg-[#111] p-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`mt-1 text-xl font-semibold ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function Mini({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-md border border-gray-800 bg-black/40 p-2 text-xs">
-      <p className="text-[11px] text-gray-500">{label}</p>
-      <p className="mt-1 font-medium text-gray-200">{value}</p>
+      </Card>
     </div>
   );
 }

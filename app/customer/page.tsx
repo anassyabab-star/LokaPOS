@@ -93,6 +93,7 @@ export default function CustomerApp() {
 
   // Loyalty
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [expiringPoints30d, setExpiringPoints30d] = useState(0);
   const [checkedInToday, setCheckedInToday] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkInMsg, setCheckInMsg] = useState<string | null>(null);
@@ -129,6 +130,7 @@ export default function CustomerApp() {
       else if (data.orders) {
         setTrackedOrders(data.orders);
         if (typeof data.loyalty_points === "number") setLoyaltyPoints(data.loyalty_points);
+        if (typeof data.expiring_points_30d === "number") setExpiringPoints30d(data.expiring_points_30d);
       }
     } catch {} finally { setTrackingLoading(false); }
   }, [lastOrderId, custPhone]);
@@ -402,6 +404,17 @@ export default function CustomerApp() {
               </div>
             </div>
 
+            {/* Expiry warning */}
+            {expiringPoints30d > 0 && (
+              <div className="mb-5 flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3">
+                <span className="text-xl">⏳</span>
+                <div>
+                  <p className="text-sm font-bold text-amber-800">{expiringPoints30d} pts akan tamat dalam 30 hari</p>
+                  <p className="text-[11px] text-amber-600">Tebus sebelum luput supaya tidak hilang!</p>
+                </div>
+              </div>
+            )}
+
             {/* Daily check-in */}
             <div className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm mb-5">
               <div className="flex items-center justify-between mb-3">
@@ -552,6 +565,9 @@ export default function CustomerApp() {
                   <div className="flex-1 px-4 py-3 border-r border-gray-100">
                     <p className="text-[10px] text-gray-400">Points</p>
                     <p className="text-base font-bold text-[#7F1D1D]">{loyaltyPoints} pts</p>
+                    {expiringPoints30d > 0 && (
+                      <p className="text-[10px] text-amber-600 font-semibold">⏳ {expiringPoints30d} pts luput 30 hari</p>
+                    )}
                   </div>
                   <div className="flex-1 px-4 py-3">
                     <p className="text-[10px] text-gray-400">Tier</p>

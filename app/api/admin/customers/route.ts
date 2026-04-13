@@ -30,7 +30,13 @@ function isMissingRelationError(message: string | null | undefined) {
 }
 
 export async function GET(req: Request) {
-  const auth = await requireAdminApi();
+  let auth;
+  try {
+    auth = await requireAdminApi();
+  } catch (err) {
+    console.error("[customers] requireAdminApi threw:", err);
+    return NextResponse.json({ error: "Auth error" }, { status: 500 });
+  }
   if (!auth.ok) return auth.response;
 
   const { searchParams } = new URL(req.url);
@@ -66,20 +72,25 @@ export async function GET(req: Request) {
         Date.now() - LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000
       ).toISOString();
 
-      const { data: loyaltyRows, error: loyaltyError } = await supabase
-        .from("loyalty_ledger")
-        .select("customer_id,points_change")
-        .in("customer_id", customerIds)
-        .gte("created_at", cutoffIso)
-        .limit(5000);
+      // Batch into chunks of 100 to avoid URL length limits with many customer IDs.
+      const CHUNK = 100;
+      for (let i = 0; i < customerIds.length; i += CHUNK) {
+        const chunk = customerIds.slice(i, i + CHUNK);
+        const { data: loyaltyRows, error: loyaltyError } = await supabase
+          .from("loyalty_ledger")
+          .select("customer_id,points_change")
+          .in("customer_id", chunk)
+          .gte("created_at", cutoffIso)
+          .limit(5000);
 
-      if (loyaltyError && !isMissingRelationError(loyaltyError.message)) {
-        return NextResponse.json({ error: loyaltyError.message }, { status: 500 });
-      }
+        if (loyaltyError && !isMissingRelationError(loyaltyError.message)) {
+          return NextResponse.json({ error: loyaltyError.message }, { status: 500 });
+        }
 
-      for (const row of (loyaltyRows || []) as LoyaltyRow[]) {
-        const current = pointsByCustomer.get(row.customer_id) || 0;
-        pointsByCustomer.set(row.customer_id, current + Number(row.points_change || 0));
+        for (const row of (loyaltyRows || []) as LoyaltyRow[]) {
+          const current = pointsByCustomer.get(row.customer_id) || 0;
+          pointsByCustomer.set(row.customer_id, current + Number(row.points_change || 0));
+        }
       }
     }
 
@@ -118,6 +129,7 @@ export async function GET(req: Request) {
       summary,
     });
   } catch (error) {
+    console.error("[customers] unhandled error:", error);
     const message = error instanceof Error ? error.message : "Failed to load customers";
     return NextResponse.json({ error: message }, { status: 500 });
   }

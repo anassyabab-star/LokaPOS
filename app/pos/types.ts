@@ -106,8 +106,8 @@ export const DEFAULT_SUGAR_LEVEL: SugarLevel = "normal";
 export const PAYMENT_METHODS: Array<"cash" | "qr" | "card"> = ["cash", "qr", "card"];
 export const DISCOUNT_TYPES: Array<"percent" | "fixed" | "none"> = ["percent", "fixed", "none"];
 export const LOYALTY_REDEEM_RM_PER_POINT = 0.05;
-export const LOYALTY_REDEEM_MIN_POINTS = 100;
-export const LOYALTY_REDEEM_MAX_RATIO = 0.3;
+export const LOYALTY_REDEEM_MIN_POINTS = 50;
+export const LOYALTY_REDEEM_MAX_RATIO = 0.5;
 
 export function buildCartKey(
   productId: string,

@@ -3,6 +3,22 @@
 import { useState } from "react";
 import { usePos } from "../pos-context";
 
+const VOID_REASONS = [
+  "Permintaan pelanggan",
+  "Kehabisan stok",
+  "Kesilapan pesanan",
+  "Masalah pembayaran",
+  "Lain-lain",
+];
+
+const REFUND_REASONS = [
+  "Permintaan pelanggan",
+  "Item salah diterima",
+  "Kesilapan harga",
+  "Kualiti tidak memuaskan",
+  "Lain-lain",
+];
+
 function statusColor(status: string) {
   switch (status?.toLowerCase()) {
     case "completed": return "bg-green-100 text-green-800";
@@ -24,9 +40,26 @@ function sourceTag(source: string | null) {
   return { label: "POS", color: "bg-gray-100 text-gray-600" };
 }
 
+type StatusFilter = "all" | "pending" | "preparing" | "ready" | "completed" | "cancelled";
+
+const FILTER_TABS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "Semua" },
+  { key: "pending", label: "Pending" },
+  { key: "preparing", label: "Dibuat" },
+  { key: "ready", label: "Sedia" },
+  { key: "completed", label: "Selesai" },
+  { key: "cancelled", label: "Batal" },
+];
+
 export default function OrdersTab() {
   const s = usePos();
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [pendingAction, setPendingAction] = useState<{ action: "void" | "refund"; orderId: string } | null>(null);
+  const [selectedReason, setSelectedReason] = useState("");
+  const [customReason, setCustomReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   function printCupLabel(orderId: string) {
     if (!orderId) return;
@@ -49,6 +82,50 @@ export default function OrdersTab() {
       void s.loadOrders();
     } catch {
       setStatusError("Tiada sambungan. Cuba lagi.");
+    }
+  }
+
+  function openAction(orderId: string, action: "void" | "refund") {
+    setPendingAction({ action, orderId });
+    setSelectedReason("");
+    setCustomReason("");
+    setActionError(null);
+  }
+
+  function cancelAction() {
+    setPendingAction(null);
+    setSelectedReason("");
+    setCustomReason("");
+    setActionError(null);
+  }
+
+  async function submitAction() {
+    if (!pendingAction) return;
+    const reason = selectedReason === "Lain-lain" ? customReason.trim() : selectedReason;
+    if (!reason || reason.length < 3) {
+      setActionError("Sila pilih atau masukkan sebab.");
+      return;
+    }
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/admin/orders/${pendingAction.orderId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: pendingAction.action, reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setActionError(data.error || `Gagal (${res.status})`);
+        return;
+      }
+      cancelAction();
+      s.setOrderDetailOpen(null);
+      void s.loadOrders();
+    } catch {
+      setActionError("Tiada sambungan. Cuba lagi.");
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -79,16 +156,36 @@ export default function OrdersTab() {
             </button>
           </div>
         </div>
+
+        {/* Status filter tabs */}
+        <div className="scrollbar-hide flex gap-1.5 overflow-x-auto border-b border-gray-200 px-4 py-2.5">
+          {FILTER_TABS.map(tab => {
+            const count = tab.key === "all"
+              ? s.orders.length
+              : s.orders.filter(o => o.status?.toLowerCase() === tab.key).length;
+            return (
+              <button key={tab.key} onClick={() => setStatusFilter(tab.key)}
+                className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${statusFilter === tab.key ? "bg-[#7F1D1D] text-white" : "bg-gray-100 text-gray-600 active:bg-gray-200"}`}>
+                {tab.label}{count > 0 ? ` (${count})` : ""}
+              </button>
+            );
+          })}
+        </div>
         {s.ordersLoading ? (
           <div className="flex items-center justify-center py-20"><div className="text-sm text-gray-400">Memuatkan...</div></div>
-        ) : s.orders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="text-sm font-medium text-gray-300 mb-1">—</div>
-            <div className="text-sm text-gray-400">Tiada order dijumpai</div>
-          </div>
-        ) : (
+        ) : (() => {
+          const filtered = statusFilter === "all"
+            ? s.orders
+            : s.orders.filter(o => o.status?.toLowerCase() === statusFilter);
+          if (filtered.length === 0) return (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="text-sm font-medium text-gray-300 mb-1">—</div>
+              <div className="text-sm text-gray-400">{s.orders.length === 0 ? "Tiada order dijumpai" : `Tiada order ${FILTER_TABS.find(t => t.key === statusFilter)?.label.toLowerCase()}`}</div>
+            </div>
+          );
+          return (
           <div>
-            {s.orders.map(order => {
+            {filtered.map(order => {
               const src = sourceTag(order.order_source);
               const st = order.status?.toLowerCase() || "pending";
               return (
@@ -119,7 +216,8 @@ export default function OrdersTab() {
               );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Order Detail Modal */}
@@ -168,11 +266,60 @@ export default function OrdersTab() {
                     <span className="text-lg font-bold text-gray-900">RM{Number(detailOrder.total).toFixed(2)}</span>
                   </div>
                 )}
+
+                {/* Void/Refund reason picker */}
+                {pendingAction && pendingAction.orderId === s.orderDetailOpen && (
+                  <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3">
+                    <p className="mb-2 text-xs font-bold text-red-800 uppercase tracking-wide">
+                      {pendingAction.action === "void" ? "Sebab Void" : "Sebab Refund"}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {(pendingAction.action === "void" ? VOID_REASONS : REFUND_REASONS).map(r => (
+                        <button key={r} onClick={() => setSelectedReason(r)}
+                          className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${selectedReason === r ? "bg-[#7F1D1D] text-white" : "bg-white border border-gray-200 text-gray-700 active:bg-gray-100"}`}>
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedReason === "Lain-lain" && (
+                      <input value={customReason} onChange={e => setCustomReason(e.target.value)}
+                        placeholder="Nyatakan sebab lain..."
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:border-[#7F1D1D] mb-2" />
+                    )}
+                    {actionError && <p className="mb-2 text-[11px] text-red-600">{actionError}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={cancelAction} className="flex-1 rounded-lg border border-gray-300 py-2 text-xs font-medium text-gray-600 active:bg-gray-100">Batal</button>
+                      <button onClick={() => void submitAction()} disabled={actionLoading}
+                        className="flex-1 rounded-lg bg-[#7F1D1D] py-2 text-xs font-medium text-white active:bg-[#6F1A1A] disabled:opacity-50">
+                        {actionLoading ? "Proses..." : `Sahkan ${pendingAction.action === "void" ? "Void" : "Refund"}`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <button onClick={() => { if (s.orderDetailOpen) window.open(`/api/orders/receipt/${s.orderDetailOpen}`, "_blank", "width=420,height=720"); }} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-700 active:bg-gray-100">Print Receipt</button>
                   <button onClick={() => { if (s.orderDetailOpen) printCupLabel(s.orderDetailOpen); }} className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-[#7F1D1D] active:bg-red-50">Cup Label</button>
                   <button onClick={() => s.setOrderDetailOpen(null)} className="flex-1 rounded-lg bg-[#7F1D1D] py-2.5 text-sm font-medium text-white active:bg-[#6F1A1A]">Tutup</button>
                 </div>
+
+                {/* Void / Refund trigger buttons */}
+                {detailOrder && detailOrder.status?.toLowerCase() !== "cancelled" && !pendingAction && (
+                  <div className="mt-2 flex gap-2">
+                    {detailOrder.payment_status?.toLowerCase() !== "paid" && (
+                      <button onClick={() => openAction(detailOrder.id, "void")}
+                        className="flex-1 rounded-lg border border-red-200 py-2 text-xs font-medium text-red-600 active:bg-red-50">
+                        Void Order
+                      </button>
+                    )}
+                    {detailOrder.payment_status?.toLowerCase() === "paid" && (
+                      <button onClick={() => openAction(detailOrder.id, "refund")}
+                        className="flex-1 rounded-lg border border-red-200 py-2 text-xs font-medium text-red-600 active:bg-red-50">
+                        Refund
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

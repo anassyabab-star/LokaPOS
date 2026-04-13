@@ -74,7 +74,7 @@ function POSPageInner() {
       const timeout = setTimeout(() => controller.abort(), 20000);
       let res: Response;
       try {
-        res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountAmount, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) });
+        res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountValue, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) });
       } finally { clearTimeout(timeout); }
       const data = await res.json();
       if (!data.success) { pw?.close(); alert(data?.error || "Gagal"); return; }
@@ -100,6 +100,46 @@ function POSPageInner() {
   // ━━━ RENDER ━━━
   return (
     <div className="pos-surface flex min-h-[100dvh] flex-col bg-white text-gray-900">
+      {/* No-shift warning banner */}
+      {!s.currentShift && !s.shiftLoading && s.overlay === "none" && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 50,
+            background: "#7F1D1D",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "10px 16px",
+            fontSize: 13,
+            fontWeight: 500,
+            gap: 8,
+          }}
+        >
+          <span>⚠️ Tiada shift aktif — transaksi tidak boleh diproses.</span>
+          <button
+            type="button"
+            onClick={() => s.setShowOpenShiftModal(true)}
+            style={{
+              background: "#fff",
+              color: "#7F1D1D",
+              border: "none",
+              borderRadius: 6,
+              padding: "4px 12px",
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Buka Shift
+          </button>
+        </div>
+      )}
       {s.mainTab === "checkout" && s.overlay === "none" && <CheckoutTab checkoutSub={s.checkoutSub} setCheckoutSub={s.setCheckoutSub} keypadValue={s.keypadValue} setKeypadValue={s.setKeypadValue} keypadNote={s.keypadNote} setKeypadNote={s.setKeypadNote} addKeypadAmount={s.addKeypadAmount} currentShift={s.currentShift} setShowOpenShiftModal={s.setShowOpenShiftModal} products={s.products} category={s.category} setCategory={s.setCategory} searchQuery={s.searchQuery} setSearchQuery={s.setSearchQuery} categories={s.categories} handleSelectProduct={s.handleSelectProduct} totalQty={s.totalQty} setOverlay={s.setOverlay} shiftLoading={s.shiftLoading} />}
       {s.mainTab === "orders" && s.overlay === "none" && <OrdersTab />}
       {s.mainTab === "reports" && s.overlay === "none" && <ReportsTab />}

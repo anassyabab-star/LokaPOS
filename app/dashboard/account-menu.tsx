@@ -4,60 +4,189 @@ import ThemeToggle from "@/components/theme-toggle";
 import { useState } from "react";
 
 export default function AccountMenu() {
+  const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
     <>
-      <details className="relative">
-        <summary className="list-none cursor-pointer rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:border-gray-500 hover:text-white">
-          Account
-        </summary>
-        <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-gray-800 bg-[#111] p-1.5 shadow-xl">
-          <div className="px-1 py-1">
-            <ThemeToggle className="w-full text-left" />
-          </div>
-          <a
-            href="/pos"
-            className="block rounded-md px-3 py-2 text-sm text-gray-200 hover:bg-[#1b1b1b]"
+      <div style={{ position: "relative" }}>
+        <button
+          type="button"
+          onClick={() => setOpen(p => !p)}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            color: "var(--d-text-2)",
+            background: open ? "var(--d-surface-hover)" : "transparent",
+            border: "1px solid var(--d-border)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            transition: "background 0.15s",
+          }}
+        >
+          <span>Account</span>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
           >
-            Open POS
-          </a>
-          <button
-            type="button"
-            onClick={() => setConfirmOpen(true)}
-            className="block w-full rounded-md px-3 py-2 text-left text-sm text-red-300 hover:bg-[#1b1b1b]"
-          >
-            Sign out
-          </button>
-        </div>
-      </details>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
 
-      {confirmOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 md:items-center">
-          <div className="w-full max-w-sm rounded-xl border border-gray-800 bg-[#111] p-4 text-gray-200 shadow-xl">
-            <h3 className="text-base font-semibold">Sign out account?</h3>
-            <p className="mt-1 text-sm text-gray-400">
+        {open && (
+          <>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 10,
+                background: "transparent",
+                border: "none",
+                cursor: "default",
+              }}
+              aria-label="Close menu"
+            />
+            <div
+              style={{
+                position: "absolute",
+                bottom: "calc(100% + 6px)",
+                left: 0,
+                right: 0,
+                zIndex: 20,
+                background: "var(--d-surface)",
+                border: "1px solid var(--d-border)",
+                borderRadius: 12,
+                padding: 8,
+                boxShadow: "var(--d-shadow-md)",
+              }}
+            >
+              <div style={{ padding: "2px 4px 6px", borderBottom: "1px solid var(--d-border)", marginBottom: 4 }}>
+                <ThemeToggle className="w-full text-left" />
+              </div>
+              <a
+                href="/pos"
+                onClick={() => setOpen(false)}
+                style={{
+                  display: "block",
+                  padding: "7px 10px",
+                  borderRadius: 7,
+                  fontSize: 13,
+                  color: "var(--d-text-2)",
+                  textDecoration: "none",
+                  transition: "background 0.1s",
+                }}
+              >
+                Open POS
+              </a>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); setConfirmOpen(true); }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "7px 10px",
+                  borderRadius: 7,
+                  fontSize: 13,
+                  color: "var(--d-error)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "background 0.1s",
+                }}
+              >
+                Sign out
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {confirmOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.5)",
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 380,
+              background: "var(--d-surface)",
+              border: "1px solid var(--d-border)",
+              borderRadius: 18,
+              padding: 20,
+              boxShadow: "var(--d-shadow-md)",
+              marginBottom: 8,
+            }}
+          >
+            <p style={{ fontSize: 15, fontWeight: 700, color: "var(--d-text-1)" }}>
+              Sign out account?
+            </p>
+            <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 6 }}>
               Anda akan keluar dari Admin Console pada peranti ini.
             </p>
-
-            <div className="mt-4 flex gap-2">
+            <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
               <button
                 type="button"
                 onClick={() => setConfirmOpen(false)}
-                className="flex-1 rounded-md border border-gray-700 px-3 py-2 text-sm text-gray-200 hover:bg-[#1b1b1b]"
+                style={{
+                  flex: 1,
+                  padding: "9px 0",
+                  borderRadius: 9,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "var(--d-text-2)",
+                  background: "transparent",
+                  border: "1px solid var(--d-border)",
+                  cursor: "pointer",
+                }}
               >
                 Cancel
               </button>
               <a
                 href="/auth/logout?next=/staff/login"
-                className="flex-1 rounded-md bg-[#7F1D1D] px-3 py-2 text-center text-sm font-medium text-white hover:opacity-95"
+                style={{
+                  flex: 1,
+                  padding: "9px 0",
+                  borderRadius: 9,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#fff",
+                  background: "var(--d-accent)",
+                  textAlign: "center",
+                  textDecoration: "none",
+                  display: "block",
+                }}
               >
                 Yes, Sign out
               </a>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </>
   );
 }

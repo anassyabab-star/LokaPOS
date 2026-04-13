@@ -102,6 +102,9 @@ export default function CheckoutTab({
                   <div>
                     <span className="text-sm font-medium text-gray-900">{p.name}</span>
                     {p.category && <div className="text-[11px] text-gray-500">{p.category}</div>}
+                    {Number(p.stock) > 0 && Number(p.stock) <= 5 && (
+                      <div className="text-[11px] font-semibold text-amber-600">⚠ {p.stock} baki</div>
+                    )}
                   </div>
                 </div>
                 <span className="text-sm font-semibold text-gray-700">RM{Number(p.price).toFixed(2)}</span>
@@ -120,7 +123,10 @@ export default function CheckoutTab({
             </div>
             <div className="grid grid-cols-3 gap-[1px] bg-gray-200">
               {(category === "All" ? products : products.filter(p => p.category === category)).map(p => (
-                <button key={p.id} onClick={() => handleSelectProduct(p)} disabled={Number(p.stock || 0) <= 0} className={`pos-tile flex flex-col items-center justify-center bg-white px-2 py-5 text-center ${Number(p.stock || 0) <= 0 ? "opacity-30" : ""}`}>
+                <button key={p.id} onClick={() => handleSelectProduct(p)} disabled={Number(p.stock || 0) <= 0} className={`pos-tile relative flex flex-col items-center justify-center bg-white px-2 py-5 text-center ${Number(p.stock || 0) <= 0 ? "opacity-30" : ""}`}>
+                  {Number(p.stock) > 0 && Number(p.stock) <= 5 && (
+                    <span className="absolute right-1 top-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">{p.stock}</span>
+                  )}
                   <span className="line-clamp-2 text-[13px] font-medium leading-snug text-gray-900">{p.name}</span>
                   <span className="mt-1 text-xs text-gray-500">RM{Number(p.price).toFixed(2)}</span>
                 </button>

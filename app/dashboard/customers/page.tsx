@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  PageWrapper, PageHeader, Card, StatCard, GhostBtn, DInput, DSelect,
+  Alert, Empty, Skeleton,
+} from "../_ui";
 
 type Customer = {
   id: string;
@@ -16,12 +20,7 @@ type Customer = {
   loyalty_points: number;
 };
 
-type Summary = {
-  total: number;
-  whatsapp: number;
-  email: number;
-  total_spend: number;
-};
+type Summary = { total: number; whatsapp: number; email: number; total_spend: number };
 
 type LoyaltyHistoryItem = {
   id: string;
@@ -33,12 +32,24 @@ type LoyaltyHistoryItem = {
   receipt_number: string | null;
 };
 
-const EMPTY_SUMMARY: Summary = {
-  total: 0,
-  whatsapp: 0,
-  email: 0,
-  total_spend: 0,
-};
+const EMPTY_SUMMARY: Summary = { total: 0, whatsapp: 0, email: 0, total_spend: 0 };
+
+function ConsentPill({ active, label }: { active: boolean; label: string }) {
+  return (
+    <span
+      style={{
+        padding: "2px 10px",
+        borderRadius: 20,
+        fontSize: 11,
+        fontWeight: 600,
+        color: active ? "var(--d-success)" : "var(--d-text-3)",
+        background: active ? "var(--d-success-soft)" : "var(--d-surface-hover)",
+      }}
+    >
+      {label}: {active ? "Yes" : "No"}
+    </span>
+  );
+}
 
 export default function CustomersPage() {
   const [query, setQuery] = useState("");
@@ -59,11 +70,9 @@ export default function CustomersPage() {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
       params.set("consent", consent);
-
       const res = await fetch(`/api/admin/customers?${params.toString()}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to load customers");
-
       setCustomers(data.customers || []);
       setSummary(data.summary || EMPTY_SUMMARY);
     } catch (e) {
@@ -75,230 +84,189 @@ export default function CustomersPage() {
     }
   }, [consent, query]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const loadLoyaltyHistory = useCallback(async (customerId: string) => {
     if (historyByCustomer[customerId]) return;
-
     setHistoryLoadingByCustomer(prev => ({ ...prev, [customerId]: true }));
     setHistoryErrorByCustomer(prev => ({ ...prev, [customerId]: null }));
-
     try {
-      const res = await fetch(`/api/admin/customers/${customerId}/loyalty`, {
-        cache: "no-store",
-      });
+      const res = await fetch(`/api/admin/customers/${customerId}/loyalty`, { cache: "no-store" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Failed to load loyalty history");
-
-      setHistoryByCustomer(prev => ({
-        ...prev,
-        [customerId]: (data.history || []) as LoyaltyHistoryItem[],
-      }));
+      if (!res.ok) throw new Error(data?.error || "Failed");
+      setHistoryByCustomer(prev => ({ ...prev, [customerId]: (data.history || []) as LoyaltyHistoryItem[] }));
     } catch (e) {
-      setHistoryErrorByCustomer(prev => ({
-        ...prev,
-        [customerId]: e instanceof Error ? e.message : "Failed to load loyalty history",
-      }));
+      setHistoryErrorByCustomer(prev => ({ ...prev, [customerId]: e instanceof Error ? e.message : "Failed" }));
     } finally {
       setHistoryLoadingByCustomer(prev => ({ ...prev, [customerId]: false }));
     }
   }, [historyByCustomer]);
 
   function toggleHistory(customerId: string) {
-    setExpandedCustomerId(prev => (prev === customerId ? null : customerId));
-    if (!historyByCustomer[customerId]) {
-      void loadLoyaltyHistory(customerId);
-    }
+    setExpandedCustomerId(prev => prev === customerId ? null : customerId);
+    if (!historyByCustomer[customerId]) void loadLoyaltyHistory(customerId);
   }
 
   return (
-    <div className="min-h-screen bg-black p-4 text-gray-200 md:p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold">Customers</h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Customer database + consent tracker untuk campaign WhatsApp/Email.
-        </p>
+    <PageWrapper>
+      <PageHeader
+        title="Customers"
+        desc="Customer database + consent tracker untuk campaign WhatsApp/Email."
+      />
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+        <StatCard label="Total Customers" value={summary.total} />
+        <StatCard label="WhatsApp Consent" value={summary.whatsapp} accent="var(--d-success)" />
+        <StatCard label="Email Consent" value={summary.email} accent="var(--d-info)" />
+        <StatCard label="Total Spend" value={`RM ${summary.total_spend.toFixed(2)}`} />
       </div>
 
-      <div className="-mx-1 mb-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
-        <Stat label="Total Customers" value={summary.total} />
-        <Stat label="WhatsApp Consent" value={summary.whatsapp} color="text-green-400" />
-        <Stat label="Email Consent" value={summary.email} color="text-blue-300" />
-        <Stat label="Total Spend" value={`RM ${summary.total_spend.toFixed(2)}`} />
-      </div>
-
-      <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl border border-gray-800 bg-[#111] p-3 md:grid-cols-3">
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search name / phone / email"
-          className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-        />
-        <select
-          value={consent}
-          onChange={e => setConsent(e.target.value)}
-          className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-        >
-          <option value="all">All consent</option>
-          <option value="whatsapp">WhatsApp consent</option>
-          <option value="email">Email consent</option>
-          <option value="none">No consent</option>
-        </select>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
-        >
-          Refresh
-        </button>
-      </div>
-
-      {error ? (
-        <div className="mb-4 rounded-md border border-red-900 bg-red-950/20 px-3 py-2 text-sm text-red-300">
-          {error}
+      {/* Filter bar */}
+      <Card style={{ padding: 14, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10 }}>
+          <DInput
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search name / phone / email"
+          />
+          <DSelect value={consent} onChange={e => setConsent(e.target.value)}>
+            <option value="all">All consent</option>
+            <option value="whatsapp">WhatsApp consent</option>
+            <option value="email">Email consent</option>
+            <option value="none">No consent</option>
+          </DSelect>
+          <GhostBtn onClick={() => void load()}>Refresh</GhostBtn>
         </div>
-      ) : null}
+      </Card>
 
+      {error && <div style={{ marginBottom: 14 }}><Alert type="error">{error}</Alert></div>}
+
+      {/* Customer list */}
       {loading ? (
-        <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
-          Loading customers...
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {[1, 2, 3].map(i => <Skeleton key={i} height={100} />)}
         </div>
-      ) : null}
-
-      {!loading && customers.length === 0 ? (
-        <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
-          No customers found.
-        </div>
-      ) : null}
-
-      <div className="space-y-3">
-        {!loading &&
-          customers.map(customer => (
-            <div key={customer.id} className="rounded-xl border border-gray-800 bg-[#111] p-4">
-              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">{customer.name}</p>
-                  <p className="text-xs text-gray-400">{customer.phone || "No phone"}</p>
-                  <p className="text-xs text-gray-400">{customer.email || "No email"}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <ConsentBadge active={customer.consent_whatsapp} label="WhatsApp" />
-                    <ConsentBadge active={customer.consent_email} label="Email" />
+      ) : customers.length === 0 ? (
+        <Empty title="No customers found." />
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {customers.map(customer => (
+            <Card key={customer.id} style={{ padding: 16 }}>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                {/* Left */}
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{customer.name}</p>
+                  <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>{customer.phone || "No phone"}</p>
+                  <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>{customer.email || "No email"}</p>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                    <ConsentPill active={customer.consent_whatsapp} label="WhatsApp" />
+                    <ConsentPill active={customer.consent_email} label="Email" />
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-gray-800 bg-black/30 p-3 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <span className="text-gray-400">Orders</span>
-                    <span>{customer.total_orders}</span>
-                  </div>
-                  <div className="mt-1 flex justify-between gap-4">
-                    <span className="text-gray-400">Spend</span>
-                    <span>RM {customer.total_spend.toFixed(2)}</span>
-                  </div>
-                  <div className="mt-1 flex justify-between gap-4">
-                    <span className="text-gray-400">Points</span>
-                    <span>{customer.loyalty_points}</span>
-                  </div>
-                  <div className="mt-1 flex justify-between gap-4">
-                    <span className="text-gray-400">Last Order</span>
-                    <span className="text-xs">
-                      {customer.last_order_at
-                        ? new Date(customer.last_order_at).toLocaleDateString()
-                        : "-"}
-                    </span>
-                  </div>
+                {/* Right */}
+                <div
+                  style={{
+                    borderRadius: 10,
+                    border: "1px solid var(--d-border-soft)",
+                    background: "var(--d-surface-hover)",
+                    padding: "10px 14px",
+                    fontSize: 12,
+                    minWidth: 160,
+                  }}
+                >
+                  {[
+                    ["Orders", customer.total_orders],
+                    ["Spend", `RM ${customer.total_spend.toFixed(2)}`],
+                    ["Points", customer.loyalty_points],
+                    ["Last Order", customer.last_order_at ? new Date(customer.last_order_at).toLocaleDateString() : "—"],
+                  ].map(([label, val]) => (
+                    <div
+                      key={String(label)}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 16,
+                        marginBottom: 4,
+                      }}
+                    >
+                      <span style={{ color: "var(--d-text-3)" }}>{label}</span>
+                      <span style={{ color: "var(--d-text-1)", fontWeight: 500 }}>{String(val)}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              <div className="mt-3 border-t border-gray-800 pt-3">
-                <button
-                  type="button"
-                  onClick={() => toggleHistory(customer.id)}
-                  className="w-full rounded-lg border border-gray-700 bg-black/40 px-3 py-2 text-left text-xs text-gray-300 hover:border-gray-500"
-                >
+              {/* Loyalty history toggle */}
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--d-border-soft)", paddingTop: 12 }}>
+                <GhostBtn onClick={() => toggleHistory(customer.id)} style={{ width: "100%", justifyContent: "center" }}>
                   {expandedCustomerId === customer.id ? "Hide" : "View"} Loyalty History
-                </button>
+                </GhostBtn>
 
-                {expandedCustomerId === customer.id ? (
-                  <div className="mt-2 rounded-lg border border-gray-800 bg-black/40 p-2">
-                    {historyLoadingByCustomer[customer.id] ? (
-                      <p className="text-xs text-gray-400">Loading loyalty history...</p>
-                    ) : null}
-
-                    {historyErrorByCustomer[customer.id] ? (
-                      <p className="text-xs text-red-300">{historyErrorByCustomer[customer.id]}</p>
-                    ) : null}
-
-                    {!historyLoadingByCustomer[customer.id] &&
-                    !historyErrorByCustomer[customer.id] &&
-                    (historyByCustomer[customer.id] || []).length === 0 ? (
-                      <p className="text-xs text-gray-500">No loyalty transactions yet.</p>
-                    ) : null}
-
-                    <div className="space-y-2">
+                {expandedCustomerId === customer.id && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      borderRadius: 10,
+                      border: "1px solid var(--d-border)",
+                      background: "var(--d-surface-hover)",
+                      padding: 10,
+                      maxHeight: 240,
+                      overflowY: "auto",
+                    }}
+                  >
+                    {historyLoadingByCustomer[customer.id] && (
+                      <p style={{ fontSize: 12, color: "var(--d-text-3)", padding: "4px 0" }}>Loading...</p>
+                    )}
+                    {historyErrorByCustomer[customer.id] && (
+                      <p style={{ fontSize: 12, color: "var(--d-error)" }}>{historyErrorByCustomer[customer.id]}</p>
+                    )}
+                    {!historyLoadingByCustomer[customer.id] && !historyErrorByCustomer[customer.id] && (historyByCustomer[customer.id] || []).length === 0 && (
+                      <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>No loyalty transactions yet.</p>
+                    )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {(historyByCustomer[customer.id] || []).map(item => (
                         <div
                           key={item.id}
-                          className="rounded-md border border-gray-800 bg-[#111] p-2 text-xs"
+                          style={{
+                            borderRadius: 8,
+                            border: "1px solid var(--d-border)",
+                            background: "var(--d-surface)",
+                            padding: "8px 10px",
+                            fontSize: 12,
+                          }}
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-gray-400">
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                            <span style={{ color: "var(--d-text-3)" }}>
                               {new Date(item.created_at).toLocaleString()}
                             </span>
                             <span
-                              className={`font-semibold ${
-                                item.points_change > 0 ? "text-green-300" : "text-red-300"
-                              }`}
+                              style={{
+                                fontWeight: 700,
+                                color: item.points_change > 0 ? "var(--d-success)" : "var(--d-error)",
+                              }}
                             >
-                              {item.points_change > 0 ? "+" : ""}
-                              {item.points_change} pts
+                              {item.points_change > 0 ? "+" : ""}{item.points_change} pts
                             </span>
                           </div>
-                          <div className="mt-1 text-gray-300">
+                          <p style={{ color: "var(--d-text-2)", marginTop: 3 }}>
                             {item.entry_type.toUpperCase()}
-                            {item.receipt_number ? ` • #${item.receipt_number}` : ""}
-                          </div>
-                          {item.note ? <div className="mt-1 text-gray-500">{item.note}</div> : null}
+                            {item.receipt_number ? ` · #${item.receipt_number}` : ""}
+                          </p>
+                          {item.note && (
+                            <p style={{ fontSize: 11, color: "var(--d-text-3)", marginTop: 2 }}>{item.note}</p>
+                          )}
                         </div>
                       ))}
                     </div>
                   </div>
-                ) : null}
+                )}
               </div>
-            </div>
+            </Card>
           ))}
-      </div>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  color = "text-white",
-}: {
-  label: string;
-  value: number | string;
-  color?: string;
-}) {
-  return (
-    <div className="min-w-[155px] rounded-xl border border-gray-800 bg-[#111] p-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`mt-1 text-xl font-semibold ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function ConsentBadge({ active, label }: { active: boolean; label: string }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-1 text-xs ${
-        active ? "bg-green-500/15 text-green-300" : "bg-gray-800 text-gray-400"
-      }`}
-    >
-      {label}: {active ? "Yes" : "No"}
-    </span>
+        </div>
+      )}
+    </PageWrapper>
   );
 }

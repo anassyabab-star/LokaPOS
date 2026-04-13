@@ -1,12 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePos } from "../pos-context";
-import { LOYALTY_REDEEM_MIN_POINTS, MarketingConsentMode } from "../types";
+import { LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO, LOYALTY_REDEEM_RM_PER_POINT, MarketingConsentMode } from "../types";
 
 // ━━━━━━━━━━━━━━━ CUSTOMER OVERLAY ━━━━━━━━━━━━━━━
 export function CustomerOverlay() {
   const s = usePos();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Compute max eligible points for this order
+  const maxRedeemByAmount = Math.floor((s.totalAfterDiscount * LOYALTY_REDEEM_MAX_RATIO) / LOYALTY_REDEEM_RM_PER_POINT);
+  const redeemEligibleMax = s.linkedCustomerId ? Math.min(s.memberPoints, maxRedeemByAmount) : 0;
+  const canUsePoints = redeemEligibleMax >= LOYALTY_REDEEM_MIN_POINTS;
+  const pointsAlreadyApplied = Number(s.redeemPointsInput || 0) >= LOYALTY_REDEEM_MIN_POINTS;
+
+  // Cleanup debounce on unmount
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
+  function handlePhoneChange(val: string) {
+    s.setCustomerPhone(val);
+    s.setLinkedCustomerId(null);
+    s.setMemberPoints(0);
+    s.setMemberExpiringPoints(0);
+    s.setRedeemPointsInput("");
+    s.setMemberLookupMessage(null);
+    // Auto-lookup when phone looks complete (≥10 digits)
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const digits = val.replace(/\D/g, "");
+    if (digits.length >= 10) {
+      debounceRef.current = setTimeout(() => void lookupMember(s), 700);
+    }
+  }
+
   return (
     <div className="screen-enter fixed inset-0 z-50 flex flex-col bg-white">
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
@@ -17,11 +43,65 @@ export function CustomerOverlay() {
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         <input value={s.customerName} onChange={e => s.setCustomerName(e.target.value)} placeholder="Nama" className="w-full border-b border-gray-200 py-3 text-sm outline-none placeholder:text-gray-400 focus:border-[#7F1D1D]" />
         <div className="flex gap-2">
-          <input value={s.customerPhone} onChange={e => { s.setCustomerPhone(e.target.value); s.setLinkedCustomerId(null); s.setMemberPoints(0); s.setMemberExpiringPoints(0); s.setRedeemPointsInput(""); s.setMemberLookupMessage(null); }} placeholder="Telefon" className="flex-1 border-b border-gray-200 py-3 text-sm outline-none placeholder:text-gray-400 focus:border-[#7F1D1D]" />
-          <button onClick={() => void lookupMember(s)} disabled={s.memberLookupLoading} className="shrink-0 rounded-lg bg-[#7F1D1D] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">{s.memberLookupLoading ? "..." : "Cari"}</button>
+          <input
+            value={s.customerPhone}
+            onChange={e => handlePhoneChange(e.target.value)}
+            placeholder="Telefon (auto-cari ahli)"
+            className="flex-1 border-b border-gray-200 py-3 text-sm outline-none placeholder:text-gray-400 focus:border-[#7F1D1D]"
+          />
+          <button onClick={() => void lookupMember(s)} disabled={s.memberLookupLoading} className="shrink-0 rounded-lg bg-[#7F1D1D] px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
+            {s.memberLookupLoading ? "..." : "Cari"}
+          </button>
         </div>
-        {s.memberLookupMessage && <div className={`rounded-lg px-3 py-2 text-xs ${s.memberLookupTone === "success" ? "bg-green-50 text-green-700" : s.memberLookupTone === "warn" ? "bg-amber-50 text-amber-700" : "bg-gray-50 text-gray-600"}`}>{s.memberLookupMessage}</div>}
-        {s.linkedCustomerId && <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">{s.memberPoints} points{s.memberExpiringPoints > 0 && ` · ${s.memberExpiringPoints} tamat 30 hari`}</div>}
+        {s.memberLookupMessage && (
+          <div className={`rounded-lg px-3 py-2 text-xs ${s.memberLookupTone === "success" ? "bg-green-50 text-green-700" : s.memberLookupTone === "warn" ? "bg-amber-50 text-amber-700" : "bg-gray-50 text-gray-600"}`}>
+            {s.memberLookupMessage}
+          </div>
+        )}
+
+        {/* Points banner + Guna Points button */}
+        {s.linkedCustomerId && s.memberPoints > 0 && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold text-blue-700">🏆 {s.memberPoints} pts</div>
+                {s.memberExpiringPoints > 0 && (
+                  <div className="text-[11px] text-amber-600">{s.memberExpiringPoints} pts tamat 30 hari</div>
+                )}
+                <div className="text-[11px] text-blue-500">
+                  Nilai: RM {(s.memberPoints * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2)}
+                </div>
+              </div>
+              {canUsePoints && !pointsAlreadyApplied && (
+                <button
+                  onClick={() => s.setRedeemPointsInput(String(redeemEligibleMax))}
+                  className="rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white active:bg-blue-700"
+                >
+                  Guna Points
+                </button>
+              )}
+              {pointsAlreadyApplied && (
+                <button
+                  onClick={() => s.setRedeemPointsInput("")}
+                  className="rounded-full bg-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 active:bg-gray-300"
+                >
+                  Batalkan
+                </button>
+              )}
+            </div>
+            {pointsAlreadyApplied && (
+              <div className="mt-2 text-xs font-medium text-green-700">
+                ✓ {s.redeemPointsInput} pts ditebus — diskaun RM{(Number(s.redeemPointsInput) * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2)}
+              </div>
+            )}
+            {!canUsePoints && s.memberPoints >= LOYALTY_REDEEM_MIN_POINTS && (
+              <div className="mt-1 text-[11px] text-amber-600">
+                Subtotal terlalu rendah untuk tebus points (min order RM{(LOYALTY_REDEEM_MIN_POINTS * LOYALTY_REDEEM_RM_PER_POINT / LOYALTY_REDEEM_MAX_RATIO).toFixed(2)})
+              </div>
+            )}
+          </div>
+        )}
+
         <input value={s.customerEmail} onChange={e => s.setCustomerEmail(e.target.value)} placeholder="Email" className="w-full border-b border-gray-200 py-3 text-sm outline-none placeholder:text-gray-400 focus:border-[#7F1D1D]" />
         <div>
           <label className="mb-1 block text-xs text-gray-500">Marketing</label>
@@ -31,8 +111,14 @@ export function CustomerOverlay() {
         </div>
         {s.linkedCustomerId && (
           <div>
-            <label className="mb-1 block text-xs text-gray-500">Tebus Points ({s.memberPoints})</label>
-            <input type="number" value={s.redeemPointsInput} onChange={e => s.setRedeemPointsInput(e.target.value)} placeholder={`Min ${LOYALTY_REDEEM_MIN_POINTS}`} className="w-full border-b border-gray-200 py-3 text-sm outline-none" />
+            <label className="mb-1 block text-xs text-gray-500">Tebus points (manual)</label>
+            <input
+              type="number"
+              value={s.redeemPointsInput}
+              onChange={e => s.setRedeemPointsInput(e.target.value)}
+              placeholder={`Min ${LOYALTY_REDEEM_MIN_POINTS} pts`}
+              className="w-full border-b border-gray-200 py-3 text-sm outline-none"
+            />
             {s.redeemStatusMessage && <div className="mt-1 text-xs text-amber-600">{s.redeemStatusMessage}</div>}
           </div>
         )}

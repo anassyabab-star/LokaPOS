@@ -8,12 +8,16 @@ type RequireRoleOptions = {
 };
 
 export async function getCurrentSessionUser() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return user;
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user;
+  } catch {
+    // If Supabase auth endpoint is temporarily unreachable, treat as unauthenticated.
+    return null;
+  }
 }
 
 export async function resolveCurrentUserRole(userId: string, fallbackRole?: string | null) {

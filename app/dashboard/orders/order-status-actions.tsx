@@ -14,25 +14,18 @@ type Props = {
 };
 
 function normalizeStatus(value: string | null | undefined): OrderStatus | null {
-  const status = String(value || "").trim().toLowerCase();
-  if (
-    status === "pending" ||
-    status === "preparing" ||
-    status === "ready" ||
-    status === "completed" ||
-    status === "cancelled"
-  ) {
-    return status;
-  }
+  const s = String(value || "").trim().toLowerCase();
+  if (["pending","preparing","ready","completed","cancelled"].includes(s)) return s as OrderStatus;
   return null;
 }
 
-export default function OrderStatusActions({
-  orderId,
-  currentStatus,
-  paymentStatus,
-  total,
-}: Props) {
+const ACTION_BTNS = [
+  { key: "preparing",  label: "Mark Preparing",  can: (s: OrderStatus|null) => s === "pending",    color: "var(--d-warning)",  bg: "var(--d-warning-soft)" },
+  { key: "ready",      label: "Mark Ready",       can: (s: OrderStatus|null) => s === "preparing",  color: "var(--d-success)",  bg: "var(--d-success-soft)" },
+  { key: "completed",  label: "Mark Completed",   can: (s: OrderStatus|null) => s === "ready",      color: "var(--d-info)",     bg: "var(--d-info-soft)" },
+] as const;
+
+export default function OrderStatusActions({ orderId, currentStatus, paymentStatus, total }: Props) {
   const router = useRouter();
   const [loadingStatus, setLoadingStatus] = useState<OrderStatus | null>(null);
   const [loadingAction, setLoadingAction] = useState<OrderAction | null>(null);
@@ -40,17 +33,13 @@ export default function OrderStatusActions({
   const [message, setMessage] = useState<string | null>(null);
 
   const status = normalizeStatus(currentStatus);
-  const normalizedPaymentStatus = String(paymentStatus || "").trim().toLowerCase();
-  const canMarkPreparing = status === "pending";
-  const canMarkReady = status === "preparing";
-  const canMarkCompleted = status === "ready";
+  const paid = String(paymentStatus || "").trim().toLowerCase() === "paid";
   const canVoid = status === "pending" || status === "preparing" || status === "ready";
-  const canRefund = status === "completed" && normalizedPaymentStatus === "paid";
+  const canRefund = status === "completed" && paid;
 
   async function updateStatus(nextStatus: OrderStatus) {
     if (loadingStatus || loadingAction) return;
-    setError(null);
-    setMessage(null);
+    setError(null); setMessage(null);
     setLoadingStatus(nextStatus);
     try {
       const res = await fetch(`/api/admin/orders/${orderId}/status`, {
@@ -59,12 +48,10 @@ export default function OrderStatusActions({
         body: JSON.stringify({ status: nextStatus }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(String(data?.error || "Failed to update order status"));
-      }
+      if (!res.ok) throw new Error(String(data?.error || "Failed"));
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update order status");
+      setError(e instanceof Error ? e.message : "Failed to update status");
     } finally {
       setLoadingStatus(null);
     }
@@ -72,104 +59,92 @@ export default function OrderStatusActions({
 
   async function runAction(action: OrderAction) {
     if (loadingStatus || loadingAction) return;
-
-    const label = action === "void" ? "void" : "refund";
-    const reason = window.prompt(`Reason untuk ${label} order (wajib):`, "");
-    if (!reason || reason.trim().length < 3) {
-      setError("Reason minimum 3 characters.");
-      return;
-    }
-
-    const managerPin = window.prompt(
-      "Manager PIN (optional). Isi jika transaksi perlukan approval tambahan.",
-      ""
-    );
-
-    const confirmation = window.confirm(
-      `${action === "void" ? "Void" : "Refund"} order ini${total ? ` (RM ${Number(total).toFixed(2)})` : ""}?`
-    );
-    if (!confirmation) return;
-
-    setError(null);
-    setMessage(null);
+    const reason = window.prompt(`Reason untuk ${action} order (wajib):`, "");
+    if (!reason || reason.trim().length < 3) { setError("Reason minimum 3 characters."); return; }
+    const managerPin = window.prompt("Manager PIN (optional):", "");
+    if (!window.confirm(`${action === "void" ? "Void" : "Refund"} order ini${total ? ` (RM ${Number(total).toFixed(2)})` : ""}?`)) return;
+    setError(null); setMessage(null);
     setLoadingAction(action);
     try {
       const res = await fetch(`/api/admin/orders/${orderId}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          reason: reason.trim(),
-          manager_pin: String(managerPin || "").trim(),
-        }),
+        body: JSON.stringify({ action, reason: reason.trim(), manager_pin: String(managerPin || "").trim() }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(String(data?.error || `Failed to ${action} order`));
-      }
-      if (data?.stock_restore_warning) {
-        setMessage(
-          `${action === "void" ? "Void" : "Refund"} saved. Stock warning: ${String(data.stock_restore_warning)}`
-        );
-      } else {
-        setMessage(
-          `${action === "void" ? "Void" : "Refund"} success (${String(data?.approval_level || "auto")}).`
-        );
-      }
+      if (!res.ok) throw new Error(String(data?.error || `Failed to ${action}`));
+      setMessage(data?.stock_restore_warning
+        ? `${action} saved. Stock warning: ${String(data.stock_restore_warning)}`
+        : `${action} success (${String(data?.approval_level || "auto")}).`
+      );
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to ${action} order`);
+      setError(e instanceof Error ? e.message : `Failed to ${action}`);
     } finally {
       setLoadingAction(null);
     }
   }
 
+  const busy = Boolean(loadingStatus) || Boolean(loadingAction);
+
   return (
-    <div className="mt-3">
-      <div className="flex flex-wrap gap-2">
+    <div style={{ marginTop: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {ACTION_BTNS.map(btn => {
+          const enabled = btn.can(status) && !busy;
+          return (
+            <button
+              key={btn.key}
+              type="button"
+              disabled={!enabled}
+              onClick={() => void updateStatus(btn.key as OrderStatus)}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 7,
+                fontSize: 12,
+                fontWeight: 600,
+                color: btn.color,
+                background: btn.bg,
+                border: `1px solid ${btn.color}`,
+                cursor: enabled ? "pointer" : "not-allowed",
+                opacity: enabled ? 1 : 0.4,
+              }}
+            >
+              {loadingStatus === btn.key ? "Updating..." : btn.label}
+            </button>
+          );
+        })}
         <button
           type="button"
-          disabled={!canMarkPreparing || Boolean(loadingStatus) || Boolean(loadingAction)}
-          onClick={() => updateStatus("preparing")}
-          className="rounded-md border border-amber-700/50 bg-amber-900/20 px-2.5 py-1 text-xs font-medium text-amber-200 transition hover:bg-amber-800/30 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loadingStatus === "preparing" ? "Updating..." : "Mark Preparing"}
-        </button>
-        <button
-          type="button"
-          disabled={!canMarkReady || Boolean(loadingStatus) || Boolean(loadingAction)}
-          onClick={() => updateStatus("ready")}
-          className="rounded-md border border-emerald-700/50 bg-emerald-900/20 px-2.5 py-1 text-xs font-medium text-emerald-200 transition hover:bg-emerald-800/30 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loadingStatus === "ready" ? "Updating..." : "Mark Ready"}
-        </button>
-        <button
-          type="button"
-          disabled={!canMarkCompleted || Boolean(loadingStatus) || Boolean(loadingAction)}
-          onClick={() => updateStatus("completed")}
-          className="rounded-md border border-sky-700/50 bg-sky-900/20 px-2.5 py-1 text-xs font-medium text-sky-200 transition hover:bg-sky-800/30 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loadingStatus === "completed" ? "Updating..." : "Mark Completed"}
-        </button>
-        <button
-          type="button"
-          disabled={!canVoid || Boolean(loadingStatus) || Boolean(loadingAction)}
+          disabled={!canVoid || busy}
           onClick={() => void runAction("void")}
-          className="rounded-md border border-red-700/50 bg-red-900/20 px-2.5 py-1 text-xs font-medium text-red-200 transition hover:bg-red-800/30 disabled:cursor-not-allowed disabled:opacity-60"
+          style={{
+            padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+            color: "var(--d-error)", background: "var(--d-error-soft)",
+            border: "1px solid var(--d-error)",
+            cursor: canVoid && !busy ? "pointer" : "not-allowed",
+            opacity: canVoid && !busy ? 1 : 0.4,
+          }}
         >
           {loadingAction === "void" ? "Voiding..." : "Void"}
         </button>
         <button
           type="button"
-          disabled={!canRefund || Boolean(loadingStatus) || Boolean(loadingAction)}
+          disabled={!canRefund || busy}
           onClick={() => void runAction("refund")}
-          className="rounded-md border border-orange-700/50 bg-orange-900/20 px-2.5 py-1 text-xs font-medium text-orange-200 transition hover:bg-orange-800/30 disabled:cursor-not-allowed disabled:opacity-60"
+          style={{
+            padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+            color: "var(--d-warning)", background: "var(--d-warning-soft)",
+            border: "1px solid var(--d-warning)",
+            cursor: canRefund && !busy ? "pointer" : "not-allowed",
+            opacity: canRefund && !busy ? 1 : 0.4,
+          }}
         >
           {loadingAction === "refund" ? "Refunding..." : "Refund"}
         </button>
       </div>
-      {message ? <p className="mt-2 text-xs text-emerald-400">{message}</p> : null}
-      {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+      {message && <p style={{ marginTop: 8, fontSize: 12, color: "var(--d-success)" }}>{message}</p>}
+      {error   && <p style={{ marginTop: 8, fontSize: 12, color: "var(--d-error)" }}>{error}</p>}
     </div>
   );
 }

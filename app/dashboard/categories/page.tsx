@@ -7,6 +7,18 @@ type Category = {
   name: string;
 };
 
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  fontSize: 13,
+  color: "var(--d-text-1)",
+  background: "var(--d-input-bg)",
+  border: "1px solid var(--d-border)",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState("");
@@ -23,9 +35,7 @@ export default function CategoriesPage() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    void loadCategories();
-  }, []);
+  useEffect(() => { void loadCategories(); }, []);
 
   const filteredCategories = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -35,9 +45,7 @@ export default function CategoriesPage() {
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
-
     setSaving(true);
-
     if (editingId) {
       await fetch(`/api/categories/${editingId}`, {
         method: "PUT",
@@ -52,7 +60,6 @@ export default function CategoriesPage() {
         body: JSON.stringify({ name: name.trim() }),
       });
     }
-
     setName("");
     await loadCategories();
     setSaving(false);
@@ -61,17 +68,9 @@ export default function CategoriesPage() {
   const handleDelete = async (id: string) => {
     const ok = window.confirm("Delete this category?");
     if (!ok) return;
-
-    const res = await fetch(`/api/categories/${id}`, {
-      method: "DELETE",
-    });
-
+    const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
     const data = await res.json();
-
-    if (!data.success) {
-      alert("Category masih digunakan oleh product.");
-    }
-
+    if (!data.success) alert("Category masih digunakan oleh product.");
     await loadCategories();
   };
 
@@ -81,84 +80,139 @@ export default function CategoriesPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setName("");
-  };
-
-  const panelClass = "rounded-xl border border-[color:var(--app-border)] bg-[color:var(--app-surface)] p-4";
-  const fieldClass =
-    "w-full rounded border border-[color:var(--app-border)] bg-[color:var(--app-bg)] px-3 py-2 text-[color:var(--app-text)] placeholder:text-[color:var(--app-muted)]";
-  const neutralButtonClass =
-    "rounded border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)] px-3 py-1.5 text-xs text-[color:var(--app-text)]";
+  const cancelEdit = () => { setEditingId(null); setName(""); };
 
   return (
-    <div className="space-y-4 p-4 text-[color:var(--app-text)] md:space-y-6 md:p-6">
-      <div>
-        <h1 className="text-xl font-semibold md:text-2xl">Categories</h1>
-        <p className="mt-1 text-sm text-[color:var(--app-muted)]">Manage category list used by products.</p>
+    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Categories</h1>
+        <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>Manage category list used by products.</p>
       </div>
 
-      <section className={panelClass}>
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
+      {/* Add/Edit form */}
+      <div
+        style={{
+          background: "var(--d-surface)",
+          border: "1px solid var(--d-border)",
+          borderRadius: 14,
+          padding: "16px 18px",
+          marginBottom: 16,
+        }}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10 }}>
           <input
             placeholder="Category name"
-            className={fieldClass}
+            style={inputStyle}
             value={name}
             onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") void handleSubmit(); }}
           />
-
           <button
             onClick={() => void handleSubmit()}
             disabled={saving || !name.trim()}
-            className="rounded bg-[#7F1D1D] px-4 py-2 text-[#ffffff] disabled:opacity-50"
+            style={{
+              padding: "9px 18px",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#fff",
+              background: "var(--d-accent)",
+              border: "none",
+              cursor: saving || !name.trim() ? "not-allowed" : "pointer",
+              opacity: saving || !name.trim() ? 0.5 : 1,
+              whiteSpace: "nowrap",
+            }}
           >
             {saving ? "Saving..." : editingId ? "Update Category" : "Add Category"}
           </button>
-
-          {editingId ? (
-            <button onClick={cancelEdit} className="rounded border border-[color:var(--app-border)] bg-[color:var(--app-surface-soft)] px-4 py-2 text-[color:var(--app-text)]">
+          {editingId && (
+            <button
+              onClick={cancelEdit}
+              style={{
+                padding: "9px 14px",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "var(--d-text-2)",
+                background: "transparent",
+                border: "1px solid var(--d-border)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
               Cancel
             </button>
-          ) : null}
+          )}
         </div>
-      </section>
+      </div>
 
-      <section className={panelClass}>
-        <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <p className="text-sm text-[color:var(--app-muted)]">{filteredCategories.length} category</p>
+      {/* Category list */}
+      <div
+        style={{
+          background: "var(--d-surface)",
+          border: "1px solid var(--d-border)",
+          borderRadius: 14,
+          padding: "16px 18px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12, flexWrap: "wrap" }}>
+          <p style={{ fontSize: 13, color: "var(--d-text-3)" }}>{filteredCategories.length} categories</p>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search category"
-            className={`${fieldClass} text-sm md:max-w-xs`}
+            style={{ ...inputStyle, width: "auto", minWidth: 200 }}
           />
         </div>
 
         {loading ? (
-          <p className="text-sm text-[color:var(--app-muted)]">Loading categories...</p>
+          <p style={{ fontSize: 13, color: "var(--d-text-3)" }}>Loading categories...</p>
         ) : filteredCategories.length === 0 ? (
-          <p className="text-sm text-[color:var(--app-muted)]">No categories found.</p>
+          <p style={{ fontSize: 13, color: "var(--d-text-3)" }}>No categories found.</p>
         ) : (
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
             {filteredCategories.map(c => (
               <div
                 key={c.id}
-                className="flex items-center justify-between rounded-lg border border-[color:var(--app-border)] bg-[color:var(--app-bg)] p-3"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "1px solid var(--d-border-soft)",
+                  background: "var(--d-surface-hover)",
+                }}
               >
-                <p className="font-medium">{c.name}</p>
-
-                <div className="flex gap-2">
+                <p style={{ fontSize: 14, fontWeight: 500, color: "var(--d-text-1)" }}>{c.name}</p>
+                <div style={{ display: "flex", gap: 8 }}>
                   <button
                     onClick={() => startEdit(c)}
-                    className={neutralButtonClass}
+                    style={{
+                      padding: "4px 12px",
+                      borderRadius: 7,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "var(--d-text-2)",
+                      background: "transparent",
+                      border: "1px solid var(--d-border)",
+                      cursor: "pointer",
+                    }}
                   >
                     Edit
                   </button>
-
                   <button
                     onClick={() => void handleDelete(c.id)}
-                    className="rounded bg-red-700 px-3 py-1.5 text-xs text-[#ffffff]"
+                    style={{
+                      padding: "4px 12px",
+                      borderRadius: 7,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "#fff",
+                      background: "var(--d-error)",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
                   >
                     Delete
                   </button>
@@ -167,7 +221,7 @@ export default function CategoriesPage() {
             ))}
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 }

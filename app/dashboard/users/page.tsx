@@ -13,12 +13,7 @@ type SignupRequest = {
   review_note: string | null;
 };
 
-type RequestCounts = {
-  total: number;
-  pending: number;
-  approved: number;
-  rejected: number;
-};
+type RequestCounts = { total: number; pending: number; approved: number; rejected: number };
 
 type ActiveUser = {
   id: string;
@@ -29,28 +24,53 @@ type ActiveUser = {
   last_sign_in_at: string | null;
 };
 
-type ActiveCounts = {
-  total: number;
-  admin: number;
-  cashier: number;
-  customer: number;
-  unknown: number;
+type ActiveCounts = { total: number; admin: number; cashier: number; customer: number; unknown: number };
+
+const EMPTY_REQUEST_COUNTS: RequestCounts = { total: 0, pending: 0, approved: 0, rejected: 0 };
+const EMPTY_ACTIVE_COUNTS: ActiveCounts = { total: 0, admin: 0, cashier: 0, customer: 0, unknown: 0 };
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  fontSize: 13,
+  color: "var(--d-text-1)",
+  background: "var(--d-input-bg)",
+  border: "1px solid var(--d-border)",
+  outline: "none",
+  boxSizing: "border-box",
 };
 
-const EMPTY_REQUEST_COUNTS: RequestCounts = {
-  total: 0,
-  pending: 0,
-  approved: 0,
-  rejected: 0,
-};
+function MiniStatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div style={{ minWidth: 130, background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 12, padding: "12px 14px" }}>
+      <p style={{ fontSize: 10, fontWeight: 500, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</p>
+      <p style={{ fontSize: 20, fontWeight: 700, color: accent ?? "var(--d-text-1)", marginTop: 4, lineHeight: 1 }}>{value}</p>
+    </div>
+  );
+}
 
-const EMPTY_ACTIVE_COUNTS: ActiveCounts = {
-  total: 0,
-  admin: 0,
-  cashier: 0,
-  customer: 0,
-  unknown: 0,
-};
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", background: "var(--d-surface-hover)", color: "var(--d-text-3)", border: "1px solid var(--d-border)" }}>
+      {role}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: SignupRequest["status"] }) {
+  const styles: React.CSSProperties =
+    status === "pending"
+      ? { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px solid var(--d-warning)" }
+      : status === "approved"
+        ? { color: "var(--d-success)", background: "var(--d-success-soft)", border: "1px solid var(--d-success)" }
+        : { color: "var(--d-error)", background: "var(--d-error-soft)", border: "1px solid var(--d-error)" };
+  return (
+    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, textTransform: "capitalize", ...styles }}>
+      {status}
+    </span>
+  );
+}
 
 export default function UsersPage() {
   const [status, setStatus] = useState("all");
@@ -66,9 +86,7 @@ export default function UsersPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
+    setLoading(true); setError(null);
     try {
       const usersParams = new URLSearchParams();
       usersParams.set("role", role);
@@ -80,75 +98,43 @@ export default function UsersPage() {
       ]);
 
       const requestsRaw = await requestsRes.text();
-      let requestsData: {
-        error?: string;
-        requests?: SignupRequest[];
-        counts?: RequestCounts;
-      } = {};
-      try {
-        requestsData = requestsRaw ? (JSON.parse(requestsRaw) as typeof requestsData) : {};
-      } catch {
-        throw new Error("Invalid signup request response");
-      }
-
-      if (!requestsRes.ok) {
-        throw new Error(requestsData?.error || "Failed to load users");
-      }
+      let requestsData: { error?: string; requests?: SignupRequest[]; counts?: RequestCounts } = {};
+      try { requestsData = requestsRaw ? (JSON.parse(requestsRaw) as typeof requestsData) : {}; }
+      catch { throw new Error("Invalid signup request response"); }
+      if (!requestsRes.ok) throw new Error(requestsData?.error || "Failed to load users");
 
       const usersRaw = await usersRes.text();
-      let usersData: {
-        error?: string;
-        users?: ActiveUser[];
-        counts?: ActiveCounts;
-      } = {};
-      try {
-        usersData = usersRaw ? (JSON.parse(usersRaw) as typeof usersData) : {};
-      } catch {
-        throw new Error("Invalid active users response");
-      }
-
-      if (!usersRes.ok) {
-        throw new Error(usersData?.error || "Failed to load active users");
-      }
+      let usersData: { error?: string; users?: ActiveUser[]; counts?: ActiveCounts } = {};
+      try { usersData = usersRaw ? (JSON.parse(usersRaw) as typeof usersData) : {}; }
+      catch { throw new Error("Invalid active users response"); }
+      if (!usersRes.ok) throw new Error(usersData?.error || "Failed to load active users");
 
       setRequests(requestsData.requests || []);
       setRequestCounts(requestsData.counts || EMPTY_REQUEST_COUNTS);
       setActiveUsers(usersData.users || []);
       setActiveCounts(usersData.counts || EMPTY_ACTIVE_COUNTS);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load users";
-      setError(msg);
-      setActiveUsers([]);
-      setRequests([]);
-      setRequestCounts(EMPTY_REQUEST_COUNTS);
-      setActiveCounts(EMPTY_ACTIVE_COUNTS);
+      setError(e instanceof Error ? e.message : "Failed to load users");
+      setActiveUsers([]); setRequests([]);
+      setRequestCounts(EMPTY_REQUEST_COUNTS); setActiveCounts(EMPTY_ACTIVE_COUNTS);
     } finally {
       setLoading(false);
     }
   }, [status, role, query]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   async function reviewRequest(id: string, action: "approve" | "reject") {
-    setProcessingId(id);
-    setError(null);
-
+    setProcessingId(id); setError(null);
     try {
       const res = await fetch(`/api/admin/signup-requests/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-
       const raw = await res.text();
       const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Action failed");
-      }
-
+      if (!res.ok) throw new Error(data?.error || "Action failed");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
@@ -160,277 +146,223 @@ export default function UsersPage() {
   const filteredRequests = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return requests;
-    return requests.filter(
-      request =>
-        request.full_name.toLowerCase().includes(q) ||
-        request.email.toLowerCase().includes(q) ||
-        request.requested_role.toLowerCase().includes(q)
+    return requests.filter(r =>
+      r.full_name.toLowerCase().includes(q) ||
+      r.email.toLowerCase().includes(q) ||
+      r.requested_role.toLowerCase().includes(q)
     );
   }, [query, requests]);
 
   return (
-    <div className="min-h-screen bg-black text-gray-200 p-4 md:p-6">
-      <div className="mb-5">
-        <h1 className="text-xl font-semibold">Users</h1>
-        <p className="mt-1 text-sm text-gray-400">
+    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Users</h1>
+        <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
           Semak akaun aktif + signup request, approve/reject akaun, dan track growth pengguna.
         </p>
       </div>
 
-      <div className="mb-2 text-sm font-semibold text-gray-300">Active Accounts</div>
-      <div className="-mx-1 mb-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
-        <StatCard label="Total" value={activeCounts.total} tone="default" />
-        <StatCard label="Admin" value={activeCounts.admin} tone="approved" />
-        <StatCard label="Cashier" value={activeCounts.cashier} tone="pending" />
-        <StatCard label="Customer" value={activeCounts.customer} tone="default" />
+      {/* Active accounts stats */}
+      <p style={{ fontSize: 11, fontWeight: 600, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Active Accounts</p>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        <MiniStatCard label="Total" value={activeCounts.total} />
+        <MiniStatCard label="Admin" value={activeCounts.admin} accent="var(--d-success)" />
+        <MiniStatCard label="Cashier" value={activeCounts.cashier} accent="var(--d-warning)" />
+        <MiniStatCard label="Customer" value={activeCounts.customer} />
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-2 rounded-xl border border-gray-800 bg-[#111] p-3 md:grid-cols-4">
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search name/email/role"
-          className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-        />
-        <select
-          value={role}
-          onChange={e => setRole(e.target.value)}
-          className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-        >
+      {/* Filter bar */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+          gap: 10,
+          background: "var(--d-surface)",
+          border: "1px solid var(--d-border)",
+          borderRadius: 14,
+          padding: "14px 16px",
+          marginBottom: 16,
+        }}
+      >
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name/email/role" style={inputStyle} />
+        <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle}>
           <option value="all">All roles</option>
           <option value="admin">Admin</option>
           <option value="cashier">Cashier</option>
           <option value="customer">Customer</option>
           <option value="unknown">Unknown</option>
         </select>
-        <select
-          value={status}
-          onChange={e => setStatus(e.target.value)}
-          className="rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-        >
+        <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
           <option value="all">All status</option>
           <option value="pending">Pending</option>
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
-        >
+        <button type="button" onClick={() => void load()} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#fff", background: "var(--d-accent)", border: "none", cursor: "pointer" }}>
           Refresh
         </button>
       </div>
 
-      {error ? (
-        <div className="mb-4 rounded-md border border-red-900 bg-red-950/20 px-3 py-2 text-sm text-red-300">
+      {error && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, fontSize: 13, color: "var(--d-error)", background: "var(--d-error-soft)", border: "1px solid var(--d-error)" }}>
           {error}
         </div>
-      ) : null}
+      )}
 
-      {loading ? (
-        <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
+      {loading && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "20px 18px", fontSize: 13, color: "var(--d-text-3)" }}>
           Loading users...
         </div>
-      ) : null}
+      )}
 
-      {!loading && activeUsers.length === 0 ? (
-        <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
+      {!loading && activeUsers.length === 0 && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
           No active users found.
         </div>
-      ) : null}
+      )}
 
-      <div className="space-y-3">
-        {!loading &&
-          activeUsers.map(user => (
-            <div key={user.id} className="rounded-xl border border-gray-800 bg-[#111] p-4">
-              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">{user.full_name || "No name"}</p>
-                  <p className="text-xs text-gray-400">{user.email || "-"}</p>
-                  <div className="mt-2">
-                    <RoleBadge role={user.role} />
-                  </div>
-                </div>
-                <div className="text-xs text-gray-500">
-                  <p>Created: {user.created_at ? new Date(user.created_at).toLocaleString() : "-"}</p>
-                  <p>
-                    Last sign in:{" "}
-                    {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "-"}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setEditingUserId(editingUserId === user.id ? null : user.id)}
-                    className="mt-2 rounded-md border border-gray-700 px-3 py-1.5 text-xs text-gray-300 hover:bg-[#1b1b1b]"
-                  >
-                    {editingUserId === user.id ? "Cancel" : "Edit"}
-                  </button>
-                </div>
+      {/* Active users list */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {!loading && activeUsers.map(user => (
+          <div key={user.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{user.full_name || "No name"}</p>
+                <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>{user.email || "—"}</p>
+                <div style={{ marginTop: 8 }}><RoleBadge role={user.role} /></div>
               </div>
-              {editingUserId === user.id && (
-                <div className="mt-3 space-y-2 border-t border-gray-800 pt-3">
-                  <input
-                    defaultValue={user.full_name}
-                    placeholder="Full name"
-                    id={`edit-name-${user.id}`}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  />
-                  <input
-                    defaultValue=""
-                    placeholder="Phone (optional)"
-                    id={`edit-phone-${user.id}`}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  />
-                  <select
-                    defaultValue={user.role}
-                    id={`edit-role-${user.id}`}
-                    className="w-full rounded-md border border-gray-700 bg-black px-3 py-2 text-sm text-gray-100 outline-none focus:border-[#7F1D1D]"
-                  >
-                    <option value="admin">Admin</option>
-                    <option value="cashier">Cashier</option>
-                  </select>
+              <div style={{ fontSize: 12, color: "var(--d-text-3)", textAlign: "right" }}>
+                <p>Created: {user.created_at ? new Date(user.created_at).toLocaleString() : "—"}</p>
+                <p>Last sign in: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "—"}</p>
+                <button
+                  type="button"
+                  onClick={() => setEditingUserId(editingUserId === user.id ? null : user.id)}
+                  style={{ marginTop: 8, padding: "5px 12px", borderRadius: 7, fontSize: 12, color: "var(--d-text-2)", background: "transparent", border: "1px solid var(--d-border)", cursor: "pointer" }}
+                >
+                  {editingUserId === user.id ? "Cancel" : "Edit"}
+                </button>
+              </div>
+            </div>
+
+            {editingUserId === user.id && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--d-border)", display: "flex", flexDirection: "column", gap: 8 }}>
+                <input defaultValue={user.full_name} placeholder="Full name" id={`edit-name-${user.id}`} style={inputStyle} />
+                <input defaultValue="" placeholder="Phone (optional)" id={`edit-phone-${user.id}`} style={inputStyle} />
+                <select defaultValue={user.role} id={`edit-role-${user.id}`} style={inputStyle}>
+                  <option value="admin">Admin</option>
+                  <option value="cashier">Cashier</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nameEl = document.getElementById(`edit-name-${user.id}`) as HTMLInputElement;
+                    const phoneEl = document.getElementById(`edit-phone-${user.id}`) as HTMLInputElement;
+                    const roleEl = document.getElementById(`edit-role-${user.id}`) as HTMLSelectElement;
+                    try {
+                      await fetch("/api/admin/users", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          user_id: user.id,
+                          full_name: nameEl?.value || user.full_name,
+                          phone: phoneEl?.value || "",
+                          role: roleEl?.value || user.role,
+                        }),
+                      });
+                      setEditingUserId(null);
+                      void load();
+                    } catch {}
+                  }}
+                  style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#fff", background: "var(--d-accent)", border: "none", cursor: "pointer" }}
+                >
+                  Save Changes
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Divider */}
+      <div style={{ borderTop: "1px solid var(--d-border)", margin: "28px 0" }} />
+
+      {/* Signup Requests */}
+      <p style={{ fontSize: 11, fontWeight: 600, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Signup Requests</p>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        <MiniStatCard label="Total" value={requestCounts.total} />
+        <MiniStatCard label="Pending" value={requestCounts.pending} accent="var(--d-warning)" />
+        <MiniStatCard label="Approved" value={requestCounts.approved} accent="var(--d-success)" />
+        <MiniStatCard label="Rejected" value={requestCounts.rejected} accent="var(--d-error)" />
+      </div>
+
+      {!loading && filteredRequests.length === 0 && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
+          No user requests found.
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {!loading && filteredRequests.map(request => (
+          <div key={request.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{request.full_name}</p>
+                <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>{request.email}</p>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <RoleBadge role={request.requested_role} />
+                  <StatusBadge status={request.status} />
+                </div>
+                <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 8 }}>
+                  Requested: {new Date(request.requested_at).toLocaleString()}
+                </p>
+                {request.reviewed_at && (
+                  <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>
+                    Reviewed: {new Date(request.reviewed_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              {request.status === "pending" && (
+                <div style={{ display: "flex", gap: 8 }}>
                   <button
                     type="button"
-                    onClick={async () => {
-                      const nameEl = document.getElementById(`edit-name-${user.id}`) as HTMLInputElement;
-                      const phoneEl = document.getElementById(`edit-phone-${user.id}`) as HTMLInputElement;
-                      const roleEl = document.getElementById(`edit-role-${user.id}`) as HTMLSelectElement;
-                      try {
-                        await fetch("/api/admin/users", {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            user_id: user.id,
-                            full_name: nameEl?.value || user.full_name,
-                            phone: phoneEl?.value || "",
-                            role: roleEl?.value || user.role,
-                          }),
-                        });
-                        setEditingUserId(null);
-                        void load();
-                      } catch {}
+                    onClick={() => void reviewRequest(request.id, "approve")}
+                    disabled={processingId === request.id}
+                    style={{
+                      padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      color: "#fff", background: "var(--d-success)", border: "none",
+                      cursor: processingId === request.id ? "not-allowed" : "pointer",
+                      opacity: processingId === request.id ? 0.5 : 1,
                     }}
-                    className="w-full rounded-md bg-[#7F1D1D] px-4 py-2 text-sm font-medium text-white"
                   >
-                    Save Changes
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void reviewRequest(request.id, "reject")}
+                    disabled={processingId === request.id}
+                    style={{
+                      padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      color: "#fff", background: "var(--d-accent)", border: "none",
+                      cursor: processingId === request.id ? "not-allowed" : "pointer",
+                      opacity: processingId === request.id ? 0.5 : 1,
+                    }}
+                  >
+                    Reject
                   </button>
                 </div>
               )}
             </div>
-          ))}
-      </div>
 
-      <div className="my-5 border-t border-gray-800" />
-      <div className="mb-2 text-sm font-semibold text-gray-300">Signup Requests</div>
-      <div className="-mx-1 mb-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0">
-        <StatCard label="Total" value={requestCounts.total} tone="default" />
-        <StatCard label="Pending" value={requestCounts.pending} tone="pending" />
-        <StatCard label="Approved" value={requestCounts.approved} tone="approved" />
-        <StatCard label="Rejected" value={requestCounts.rejected} tone="rejected" />
-      </div>
-
-      {!loading && filteredRequests.length === 0 ? (
-        <div className="rounded-xl border border-gray-800 bg-[#111] px-3 py-5 text-sm text-gray-400">
-          No user requests found.
-        </div>
-      ) : null}
-
-      <div className="space-y-3">
-        {!loading &&
-          filteredRequests.map(request => (
-            <div key={request.id} className="rounded-xl border border-gray-800 bg-[#111] p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">{request.full_name}</p>
-                  <p className="text-xs text-gray-400">{request.email}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <RoleBadge role={request.requested_role} />
-                    <StatusBadge status={request.status} />
-                  </div>
-                  <p className="mt-2 text-xs text-gray-500">
-                    Requested: {new Date(request.requested_at).toLocaleString()}
-                  </p>
-                  {request.reviewed_at ? (
-                    <p className="text-xs text-gray-500">
-                      Reviewed: {new Date(request.reviewed_at).toLocaleString()}
-                    </p>
-                  ) : null}
-                </div>
-
-                {request.status === "pending" ? (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => reviewRequest(request.id, "approve")}
-                      disabled={processingId === request.id}
-                      className="rounded-md bg-green-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => reviewRequest(request.id, "reject")}
-                      disabled={processingId === request.id}
-                      className="rounded-md bg-[#7F1D1D] px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                ) : null}
+            {request.review_note && (
+              <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--d-border-soft)", background: "var(--d-surface-hover)", fontSize: 12, color: "var(--d-text-3)" }}>
+                Note: {request.review_note}
               </div>
-
-              {request.review_note ? (
-                <p className="mt-3 rounded-md border border-gray-800 bg-black/30 px-3 py-2 text-xs text-gray-400">
-                  Note: {request.review_note}
-                </p>
-              ) : null}
-            </div>
-          ))}
+            )}
+          </div>
+        ))}
       </div>
     </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "default" | "pending" | "approved" | "rejected";
-}) {
-  const toneClass =
-    tone === "pending"
-      ? "text-amber-300"
-      : tone === "approved"
-        ? "text-green-400"
-        : tone === "rejected"
-          ? "text-red-400"
-          : "text-white";
-
-  return (
-    <div className="min-w-[155px] rounded-xl border border-gray-800 bg-[#111] p-3">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</p>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: SignupRequest["status"] }) {
-  const className =
-    status === "pending"
-      ? "bg-amber-500/15 text-amber-300"
-      : status === "approved"
-        ? "bg-green-500/15 text-green-300"
-        : "bg-red-500/15 text-red-300";
-  return <span className={`rounded-full px-2 py-1 text-xs capitalize ${className}`}>{status}</span>;
-}
-
-function RoleBadge({ role }: { role: "admin" | "cashier" | "customer" | "unknown" }) {
-  return (
-    <span className="rounded-full bg-[#1d1d1d] px-2 py-1 text-xs uppercase tracking-wide text-gray-300">
-      {role}
-    </span>
   );
 }

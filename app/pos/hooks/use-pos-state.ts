@@ -391,9 +391,9 @@ export function usePosState() {
   const appliedRedeemPoints = candidateRedeem >= LOYALTY_REDEEM_MIN_POINTS ? candidateRedeem : 0;
   let redeemStatusMessage: string | null = null;
   if (linkedCustomerId) {
-    if (redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS) redeemStatusMessage = `Subtotal terlalu rendah (cap 30%: ${redeemEligibleMaxPoints} pts).`;
+    if (redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS) redeemStatusMessage = `Subtotal terlalu rendah (cap 50%: ${redeemEligibleMaxPoints} pts).`;
     else if (requestedRedeem > 0 && requestedRedeem < LOYALTY_REDEEM_MIN_POINTS) redeemStatusMessage = `Minimum: ${LOYALTY_REDEEM_MIN_POINTS} points.`;
-    else if (requestedRedeem > redeemEligibleMaxPoints) redeemStatusMessage = `Max: ${redeemEligibleMaxPoints} pts (30% cap).`;
+    else if (requestedRedeem > redeemEligibleMaxPoints) redeemStatusMessage = `Max: ${redeemEligibleMaxPoints} pts (50% cap).`;
   }
   const redeemAmount = appliedRedeemPoints * LOYALTY_REDEEM_RM_PER_POINT;
   const total = Math.max(totalAfterDiscount - redeemAmount, 0);

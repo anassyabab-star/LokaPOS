@@ -10,22 +10,166 @@ export default async function DashboardLayout({
   await requireRole(["admin"], { loginPath: "/staff/login" });
 
   return (
-    <div className="theme-scope min-h-screen bg-black text-gray-200 flex flex-col md:flex-row">
-      <div className="w-full md:w-56 bg-[#111111] border-b md:border-b-0 md:border-r border-gray-800 p-3 md:p-4">
-        <div className="mb-2 md:mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Loka POS</h2>
-            <p className="text-xs text-gray-500">Admin Console</p>
-          </div>
-          <div className="hidden md:block">
-            <AccountMenu />
+    <div
+      className="theme-scope"
+      style={{
+        display: "flex",
+        minHeight: "100vh",
+        background: "var(--d-bg)",
+        color: "var(--d-text-1)",
+      }}
+    >
+      {/* ── Desktop sidebar ── */}
+      <aside
+        className="hidden md:flex md:flex-col"
+        style={{
+          width: 224,
+          flexShrink: 0,
+          background: "var(--d-sidebar)",
+          borderRight: "1px solid var(--d-border)",
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          overflowY: "auto",
+        }}
+      >
+        {/* Brand */}
+        <div
+          style={{
+            padding: "20px 16px 18px",
+            borderBottom: "1px solid var(--d-border)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                background: "var(--d-accent)",
+                borderRadius: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 01-8 0" />
+              </svg>
+            </div>
+            <div>
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "var(--d-text-1)",
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                Loka POS
+              </p>
+              <p
+                style={{
+                  fontSize: 11,
+                  color: "var(--d-text-3)",
+                  marginTop: 2,
+                }}
+              >
+                Admin Console
+              </p>
+            </div>
           </div>
         </div>
 
-        <AdminNav />
-      </div>
+        {/* Navigation */}
+        <nav style={{ flex: 1, padding: "10px 8px" }}>
+          <AdminNav />
+        </nav>
 
-      <div className="flex-1 p-4 pb-20 md:p-6">{children}</div>
+        {/* Account */}
+        <div
+          style={{
+            padding: "10px 12px",
+            borderTop: "1px solid var(--d-border)",
+          }}
+        >
+          <AccountMenu />
+        </div>
+      </aside>
+
+      {/* ── Main area ── */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        {/* Mobile top bar */}
+        <header
+          className="md:hidden"
+          style={{
+            padding: "12px 16px",
+            background: "var(--d-sidebar)",
+            borderBottom: "1px solid var(--d-border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            position: "sticky",
+            top: 0,
+            zIndex: 30,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              style={{
+                width: 30,
+                height: 30,
+                background: "var(--d-accent)",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 01-8 0" />
+              </svg>
+            </div>
+            <span
+              style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}
+            >
+              Loka POS
+            </span>
+          </div>
+          <AccountMenu />
+        </header>
+
+        {/* Page content */}
+        <main style={{ flex: 1, paddingBottom: 80 }}>{children}</main>
+
+        {/* Mobile bottom nav */}
+        <div className="md:hidden">
+          <AdminNav />
+        </div>
+      </div>
     </div>
   );
 }
