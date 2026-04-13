@@ -1,6 +1,105 @@
 "use client";
 
 import { usePos } from "../pos-context";
+import { useState, useEffect, useRef } from "react";
+
+type ClockProfile = { hourly_rate: number; employment_type: string; is_active: boolean } | null;
+type ClockinRecord = { id: string; clock_in_at: string } | null;
+
+function useDuration(clockInAt: string | null) {
+  const [mins, setMins] = useState(0);
+  useEffect(() => {
+    if (!clockInAt) { setMins(0); return; }
+    const tick = () => setMins(Math.floor((Date.now() - new Date(clockInAt).getTime()) / 60000));
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, [clockInAt]);
+  return mins;
+}
+
+function ClockInSection() {
+  const [profile, setProfile] = useState<ClockProfile>(null);
+  const [clockin, setClockin] = useState<ClockinRecord>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const durationMins = useDuration(clockin?.clock_in_at ?? null);
+
+  useEffect(() => {
+    fetch("/api/pos/clockin", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { setProfile(d.profile); setClockin(d.clockin); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="px-4 py-3 text-sm text-gray-400">Memuatkan...</div>;
+  if (!profile || profile.employment_type !== "parttime" || !profile.is_active) return null;
+
+  const hrs = Math.floor(durationMins / 60);
+  const mns = durationMins % 60;
+  const durationLabel = clockin
+    ? hrs > 0 ? `${hrs}j ${mns}m` : `${mns}m`
+    : null;
+
+  async function handleClock(action: "clockin" | "clockout") {
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/pos/clockin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data?.error || "Gagal"); return; }
+      if (action === "clockin") setClockin(data.clockin);
+      else setClockin(null);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="mx-4 my-3 rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        Kehadiran
+      </div>
+      {clockin ? (
+        <div className="px-4 py-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-gray-500">Clocked in sejak</div>
+              <div className="text-sm font-semibold text-gray-900">
+                {new Date(clockin.clock_in_at).toLocaleTimeString("ms-MY", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kuala_Lumpur" })}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-gray-500">Tempoh</div>
+              <div className="text-sm font-bold text-green-700">{durationLabel}</div>
+            </div>
+          </div>
+          <button
+            onClick={() => void handleClock("clockout")}
+            disabled={submitting}
+            className="w-full rounded-xl bg-[#7F1D1D] py-3 text-sm font-semibold text-white disabled:opacity-50 active:bg-[#6B1818]"
+          >
+            {submitting ? "..." : "Clock Out"}
+          </button>
+        </div>
+      ) : (
+        <div className="px-4 py-3">
+          <button
+            onClick={() => void handleClock("clockin")}
+            disabled={submitting}
+            className="w-full rounded-xl bg-green-600 py-3 text-sm font-semibold text-white disabled:opacity-50 active:bg-green-700"
+          >
+            {submitting ? "..." : "Clock In"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function MoreTab() {
   const s = usePos();
@@ -11,6 +110,7 @@ export default function MoreTab() {
         <h1 className="text-2xl font-bold text-gray-900">More</h1>
         <p className="text-sm text-gray-500">Loka POS v2.1</p>
       </div>
+      <ClockInSection />
       <div className="mx-4 my-3 rounded-xl bg-[#7F1D1D]/5 border border-[#7F1D1D]/10 px-4 py-3">
         <div className="text-xs text-gray-500">Shift</div>
         <div className="text-sm font-medium">{s.currentShift ? `Aktif · RM${s.expectedCashLive.toFixed(2)} tunai` : "Tutup"}</div>

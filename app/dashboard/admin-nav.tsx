@@ -75,6 +75,13 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: "/dashboard/timesheets",
+    label: "Timesheets",
+    icon: (
+      <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+    ),
+  },
+  {
     href: "/dashboard/paid-outs",
     label: "Paid Outs",
     icon: (
@@ -138,6 +145,7 @@ const MOBILE_MORE = [
   { href: "/dashboard/categories", label: "Categories", exact: false },
   { href: "/dashboard/customers", label: "Customers", exact: false },
   { href: "/dashboard/shifts", label: "Shifts", exact: false },
+  { href: "/dashboard/timesheets", label: "Timesheets", exact: false },
   { href: "/dashboard/campaigns", label: "Campaigns", exact: false },
   { href: "/dashboard/users", label: "Users", exact: false },
 ];
