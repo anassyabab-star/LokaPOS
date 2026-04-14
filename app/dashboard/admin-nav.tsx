@@ -160,7 +160,7 @@ export default function AdminNav() {
   return (
     <>
       {/* ── Desktop nav ─────────────────────────────────── */}
-      <div className="hidden md:flex md:flex-col" style={{ gap: 2 }}>
+      <div className="hidden md:flex md:flex-col gap-0.5">
         {NAV_ITEMS.map(item => {
           const active = isActive(item.href, item.exact);
           return (
