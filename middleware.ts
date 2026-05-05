@@ -2,11 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import type { CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+const PROTECTED_PREFIXES = ["/dashboard", "/pos", "/staff"];
+
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
   let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+    request: { headers: request.headers },
   });
 
   const supabase = createServerClient(
@@ -20,26 +22,41 @@ export async function middleware(request: NextRequest) {
         setAll(
           cookiesToSet: Array<{ name: string; value: string; options: CookieOptions }>
         ) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
-          response = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
         },
       },
     }
   );
 
+  let user = null;
   try {
-    await supabase.auth.getUser();
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
   } catch {
-    // Fail-safe: if Supabase auth endpoint is temporarily unreachable,
-    // do not crash middleware and let route render normally.
-    return NextResponse.next({
-      request: {
-        headers: request.headers,
-      },
-    });
+    // Supabase temporarily unreachable — fail open on non-protected routes only
+    const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+    if (isProtected) {
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return response;
+  }
+
+  const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+
+  if (isProtected && !user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (pathname === "/login" && user) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return response;

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireStaffApi } from "@/lib/staff-api-auth";
 
 export async function POST(req: Request) {
+  const auth = await requireStaffApi();
+  if (!auth.ok) return auth.response;
+
   const body = await req.json().catch(() => null);
   const phone = String(body?.phone || "").trim();
 

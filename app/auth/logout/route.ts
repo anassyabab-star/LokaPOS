@@ -38,7 +38,8 @@ async function signOutWithServerClient(request: NextRequest, response: NextRespo
 }
 
 export async function GET(request: NextRequest) {
-  const nextPath = request.nextUrl.searchParams.get("next") || "/login";
+  const raw = request.nextUrl.searchParams.get("next") || "/login";
+  const nextPath = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/login";
   const response = NextResponse.redirect(new URL(nextPath, request.url));
 
   await signOutWithServerClient(request, response);

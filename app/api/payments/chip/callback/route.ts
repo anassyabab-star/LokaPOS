@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { verifyChipPurchase } from "@/lib/chip";
+import { verifyChipPurchase, verifyChipSignature } from "@/lib/chip";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-signature");
+
+    if (!verifyChipSignature(rawBody, signature)) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+    }
+
+    const body = rawBody ? JSON.parse(rawBody) : {};
     const purchaseId = String(body?.id || body?.purchase_id || "").trim();
 
     if (!purchaseId) {

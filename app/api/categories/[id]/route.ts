@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireAdminApi } from "@/lib/admin-api-auth";
 
 const supabase = createSupabaseAdminClient();
 
@@ -8,6 +9,9 @@ type RouteContext = {
 };
 
 export async function PUT(req: Request, { params }: RouteContext) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
   const { id } = await params;
   const body = await req.json();
   const name = String(body?.name || "").trim();
@@ -26,6 +30,9 @@ export async function PUT(req: Request, { params }: RouteContext) {
 }
 
 export async function DELETE(_: Request, { params }: RouteContext) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
   const { id } = await params;
 
   const { error } = await supabase.from("categories").delete().eq("id", id);

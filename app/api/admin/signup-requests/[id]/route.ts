@@ -64,55 +64,40 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       );
     }
 
+    let tempPassword: string | null = null;
+
     if (action === "approve") {
-      let userId: string | null = null;
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || undefined;
-
-      const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-        requestRow.email,
-        {
-          data: {
-            full_name: requestRow.full_name,
-            role: requestRow.requested_role,
-          },
-          redirectTo: siteUrl ? `${siteUrl}/login` : undefined,
-        }
-      );
-
-      if (inviteError) {
-        const errMsg = inviteError.message || "";
-        if (!errMsg.toLowerCase().includes("already")) {
-          return NextResponse.json({ error: errMsg }, { status: 400 });
-        }
-      } else {
-        userId = inviteData.user?.id || null;
-      }
+      let userId: string | null = await findUserIdByEmail(requestRow.email);
 
       if (!userId) {
-        userId = await findUserIdByEmail(requestRow.email);
+        // User belum wujud — create terus dengan temp password (tiada email diperlukan)
+        const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+        tempPassword = Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+
+        const { data: created, error: createError } = await supabase.auth.admin.createUser({
+          email: requestRow.email,
+          password: tempPassword,
+          email_confirm: true,
+          user_metadata: { full_name: requestRow.full_name },
+          app_metadata: { role: requestRow.requested_role },
+        });
+
+        if (createError) {
+          return NextResponse.json({ error: createError.message }, { status: 400 });
+        }
+        userId = created.user?.id || null;
+      } else {
+        // User dah wujud — update role sahaja
+        await supabase.auth.admin.updateUserById(userId, {
+          app_metadata: { role: requestRow.requested_role },
+        });
       }
 
       if (userId) {
         await supabase.from("profiles").upsert(
-          [
-            {
-              id: userId,
-              full_name: requestRow.full_name,
-              role: requestRow.requested_role,
-            },
-          ],
+          [{ id: userId, full_name: requestRow.full_name, role: requestRow.requested_role }],
           { onConflict: "id" }
         );
-
-        await supabase.auth.admin.updateUserById(userId, {
-          user_metadata: {
-            full_name: requestRow.full_name,
-            role: requestRow.requested_role,
-          },
-          app_metadata: {
-            role: requestRow.requested_role,
-          },
-        });
       }
     }
 
@@ -130,7 +115,7 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, temp_password: tempPassword });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to process request";
     return NextResponse.json({ error: message }, { status: 500 });

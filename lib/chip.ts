@@ -1,6 +1,8 @@
 // CHIP Collect Payment Gateway integration
 // Docs: https://docs.chip-in.asia
 
+import { createHmac } from "crypto";
+
 const CHIP_API_BASE = "https://gate.chip-in.asia/api/v1";
 
 export function getChipConfig() {
@@ -113,6 +115,13 @@ export async function createChipPurchase(params: CreatePurchaseParams): Promise<
     purchaseId: data.id,
     checkoutUrl: data.checkout_url,
   };
+}
+
+export function verifyChipSignature(rawBody: string, signatureHeader: string | null): boolean {
+  const config = getChipConfig();
+  if (!config.secretKey || !signatureHeader) return false;
+  const expected = createHmac("sha256", config.secretKey).update(rawBody).digest("hex");
+  return expected === signatureHeader;
 }
 
 // Verify a purchase status

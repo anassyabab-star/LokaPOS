@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireStaffApi } from "@/lib/staff-api-auth";
+import { requireAdminApi } from "@/lib/admin-api-auth";
 
 const supabase = createSupabaseAdminClient();
 
@@ -27,6 +29,9 @@ function pickCategoryName(
 
 // ================= GET PRODUCTS =================
 export async function GET(req: Request) {
+  const auth = await requireStaffApi();
+  if (!auth.ok) return auth.response;
+
   const { searchParams } = new URL(req.url);
   const includeInactive = searchParams.get("include_inactive") === "1";
 
@@ -126,6 +131,9 @@ export async function GET(req: Request) {
 
 // ================= ADD PRODUCT =================
 export async function POST(req: Request) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
   const body = await req.json();
 
   const { name, price, cost, stock, category_id, image_url } = body;

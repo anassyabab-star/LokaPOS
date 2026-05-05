@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireStaffApi } from "@/lib/staff-api-auth";
+import { requireAdminApi } from "@/lib/admin-api-auth";
 
 const supabase = createSupabaseAdminClient();
 
 // GET ALL CATEGORIES
 export async function GET() {
+  const auth = await requireStaffApi();
+  if (!auth.ok) return auth.response;
   const { data, error } = await supabase
     .from("categories")
     .select("*")
@@ -19,6 +23,9 @@ export async function GET() {
 
 // ADD CATEGORY
 export async function POST(req: Request) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
   const body = await req.json();
   const { name } = body;
 

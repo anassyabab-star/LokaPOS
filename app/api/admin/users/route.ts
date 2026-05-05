@@ -171,6 +171,35 @@ export async function GET(req: Request) {
   }
 }
 
+// ================= DELETE USER =================
+export async function DELETE(req: Request) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
+  try {
+    const body = await req.json();
+    const userId = String(body?.user_id || "").trim();
+    if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 });
+
+    // Prevent self-deletion
+    if (userId === auth.user.id) {
+      return NextResponse.json({ error: "Tidak boleh padam akaun sendiri" }, { status: 403 });
+    }
+
+    const supabase = createSupabaseAdminClient();
+
+    // Delete from profiles first (FK), then auth user
+    await supabase.from("profiles").delete().eq("id", userId);
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete user";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 // ================= UPDATE USER (name, role) =================
 export async function PATCH(req: Request) {
   const auth = await requireAdminApi();

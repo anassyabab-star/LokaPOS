@@ -23,6 +23,7 @@ function ClockInSection() {
   const [clockin, setClockin] = useState<ClockinRecord>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [notes, setNotes] = useState("");
   const durationMins = useDuration(clockin?.clock_in_at ?? null);
 
   useEffect(() => {
@@ -34,7 +35,7 @@ function ClockInSection() {
   }, []);
 
   if (loading) return <div className="px-4 py-3 text-sm text-gray-400">Memuatkan...</div>;
-  if (!profile || profile.employment_type !== "parttime" || !profile.is_active) return null;
+  if (!profile || !profile.is_active) return null;
 
   const hrs = Math.floor(durationMins / 60);
   const mns = durationMins % 60;
@@ -48,12 +49,12 @@ function ClockInSection() {
       const res = await fetch("/api/pos/clockin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, notes: action === "clockout" ? notes.trim() : undefined }),
       });
       const data = await res.json();
       if (!res.ok) { alert(data?.error || "Gagal"); return; }
       if (action === "clockin") setClockin(data.clockin);
-      else setClockin(null);
+      else { setClockin(null); setNotes(""); }
     } finally {
       setSubmitting(false);
     }
@@ -78,6 +79,13 @@ function ClockInSection() {
               <div className="text-sm font-bold text-green-700">{durationLabel}</div>
             </div>
           </div>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Nota (pilihan) — cth: tugas hari ini..."
+            rows={2}
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-gray-400 focus:outline-none resize-none"
+          />
           <button
             onClick={() => void handleClock("clockout")}
             disabled={submitting}

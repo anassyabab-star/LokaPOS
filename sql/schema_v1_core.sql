@@ -250,10 +250,18 @@ create index if not exists loyalty_ledger_order_idx
 create index if not exists loyalty_ledger_expires_idx
   on public.loyalty_ledger(expires_at);
 
-create or replace view public.customer_loyalty_balances as
+create or replace view public.customer_loyalty_balances
+  with (security_invoker = true)
+as
 select
   customer_id,
-  coalesce(sum(points_change), 0)::integer as points_balance,
+  coalesce(sum(
+    case
+      when points_change < 0                        then points_change
+      when expires_at is null or expires_at > now() then points_change
+      else 0
+    end
+  ), 0)::integer as points_balance,
   max(created_at) as last_activity_at
 from public.loyalty_ledger
 group by customer_id;

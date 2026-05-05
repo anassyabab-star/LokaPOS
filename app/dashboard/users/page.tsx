@@ -91,6 +91,18 @@ export default function UsersPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createRole, setCreateRole] = useState<"cashier" | "admin">("cashier");
+  const [createPassword, setCreatePassword] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createResult, setCreateResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const [approvedCreds, setApprovedCreds] = useState<{ email: string; password: string } | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
@@ -130,6 +142,30 @@ export default function UsersPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  async function createUserDirect() {
+    if (!createEmail.trim() || !createPassword.trim()) return;
+    setCreating(true); setCreateResult(null);
+    try {
+      const res = await fetch("/api/admin/users/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: createEmail.trim(), full_name: createName.trim(), role: createRole, password: createPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCreateResult({ ok: false, msg: data?.error || "Gagal cipta akaun" });
+      } else {
+        setCreateResult({ ok: true, msg: `Akaun ${createEmail.trim()} berjaya dicipta` });
+        setCreateEmail(""); setCreateName(""); setCreateRole("cashier"); setCreatePassword("");
+        await load();
+      }
+    } catch {
+      setCreateResult({ ok: false, msg: "Ralat rangkaian" });
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function sendInvite() {
     if (!inviteEmail.trim()) return;
     setInviting(true); setInviteResult(null);
@@ -157,19 +193,43 @@ export default function UsersPage() {
   async function reviewRequest(id: string, action: "approve" | "reject") {
     setProcessingId(id); setError(null);
     try {
+      const req = requests.find(r => r.id === id);
       const res = await fetch(`/api/admin/signup-requests/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
       const raw = await res.text();
-      const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
+      const data = raw ? (JSON.parse(raw) as { error?: string; temp_password?: string }) : {};
       if (!res.ok) throw new Error(data?.error || "Action failed");
+      if (action === "approve" && data.temp_password && req) {
+        setApprovedCreds({ email: req.email, password: data.temp_password });
+      }
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
     } finally {
       setProcessingId(null);
+    }
+  }
+
+  async function deleteUser(userId: string) {
+    setDeletingUserId(userId); setError(null);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data?.error || "Gagal padam pengguna");
+      setEditingUserId(null);
+      setConfirmDeleteId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal padam pengguna");
+    } finally {
+      setDeletingUserId(null);
     }
   }
 
@@ -193,13 +253,50 @@ export default function UsersPage() {
             Semak akaun aktif + signup request, approve/reject akaun, dan track growth pengguna.
           </p>
         </div>
-        <button
-          onClick={() => { setShowInviteModal(true); setInviteResult(null); }}
-          style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--d-accent)", color: "#fff", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}
-        >
-          + Jemput Staf
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => { setShowCreateModal(true); setCreateResult(null); }}
+            style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--d-surface)", color: "var(--d-text-1)", border: "1px solid var(--d-border)", cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            + Tambah Terus
+          </button>
+          <button
+            onClick={() => { setShowInviteModal(true); setInviteResult(null); }}
+            style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--d-accent)", color: "#fff", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            + Jemput via Email
+          </button>
+        </div>
       </div>
+
+      {/* Temp Password Modal — shown after approving a new user */}
+      {approvedCreds && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--d-surface)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 400, border: "1px solid var(--d-border)" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--d-success)", marginBottom: 6 }}>Akaun Diluluskan</p>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 14 }}>Butiran Log Masuk</h2>
+            <p style={{ fontSize: 13, color: "var(--d-text-3)", marginBottom: 18 }}>
+              Akaun baru telah dicipta. Kongsikan butiran ini dengan staf — password boleh ditukar selepas log masuk pertama.
+            </p>
+            <div style={{ background: "var(--d-bg)", borderRadius: 10, padding: "14px 16px", marginBottom: 20, border: "1px solid var(--d-border)" }}>
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: "var(--d-text-3)", marginBottom: 3 }}>EMAIL</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--d-text-1)", wordBreak: "break-all" }}>{approvedCreds.email}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: "var(--d-text-3)", marginBottom: 3 }}>PASSWORD SEMENTARA</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: "var(--d-accent)", letterSpacing: "0.08em", fontFamily: "monospace" }}>{approvedCreds.password}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setApprovedCreds(null)}
+              style={{ width: "100%", padding: "11px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+            >
+              Saya Dah Catat — Tutup
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Invite Modal */}
       {showInviteModal && (
@@ -258,6 +355,61 @@ export default function UsersPage() {
                 style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: inviting || !inviteEmail.trim() ? 0.6 : 1 }}
               >
                 {inviting ? "Menghantar..." : "Hantar Jemputan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Direct Modal */}
+      {showCreateModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--d-surface)", borderRadius: 16, padding: 24, width: "100%", maxWidth: 420, border: "1px solid var(--d-border)" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 4 }}>Tambah Staf Terus</h2>
+            <p style={{ fontSize: 13, color: "var(--d-text-3)", marginBottom: 20 }}>
+              Cipta akaun dengan password yang anda tetapkan sendiri. Tiada email jemputan dihantar — kongsikan butiran log masuk terus kepada staf.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Email *</label>
+                <input type="email" value={createEmail} onChange={e => setCreateEmail(e.target.value)} placeholder="staff@email.com" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Nama penuh</label>
+                <input type="text" value={createName} onChange={e => setCreateName(e.target.value)} placeholder="cth: Siti binti Rahman" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Password *</label>
+                <input type="text" value={createPassword} onChange={e => setCreatePassword(e.target.value)} placeholder="Min. 6 aksara" style={inputStyle} autoComplete="off" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Role</label>
+                <select value={createRole} onChange={e => setCreateRole(e.target.value as "cashier" | "admin")} style={inputStyle}>
+                  <option value="cashier">Cashier (Staf)</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+
+            {createResult && (
+              <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, fontSize: 13, background: createResult.ok ? "var(--d-success-soft)" : "var(--d-error-soft)", color: createResult.ok ? "var(--d-success)" : "var(--d-error)", border: `1px solid ${createResult.ok ? "var(--d-success)" : "var(--d-error)"}` }}>
+                {createResult.ok ? "✓ " : "✗ "}{createResult.msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => { setShowCreateModal(false); setCreateResult(null); }}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid var(--d-border)", background: "transparent", color: "var(--d-text-2)", fontSize: 13, cursor: "pointer" }}
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => void createUserDirect()}
+                disabled={creating || !createEmail.trim() || !createPassword.trim()}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: creating || !createEmail.trim() || !createPassword.trim() ? 0.6 : 1 }}
+              >
+                {creating ? "Mencipta..." : "Cipta Akaun"}
               </button>
             </div>
           </div>
@@ -379,6 +531,35 @@ export default function UsersPage() {
                 >
                   Save Changes
                 </button>
+
+                {/* Delete — require double confirm */}
+                {confirmDeleteId !== user.id ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(user.id)}
+                    style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "var(--d-error)", background: "transparent", border: "1px solid var(--d-error)", cursor: "pointer" }}
+                  >
+                    Padam Pengguna
+                  </button>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      style={{ flex: 1, padding: "9px 0", borderRadius: 8, fontSize: 13, color: "var(--d-text-2)", background: "transparent", border: "1px solid var(--d-border)", cursor: "pointer" }}
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteUser(user.id)}
+                      disabled={deletingUserId === user.id}
+                      style={{ flex: 2, padding: "9px 0", borderRadius: 8, fontSize: 13, fontWeight: 700, color: "#fff", background: "var(--d-error)", border: "none", cursor: deletingUserId === user.id ? "not-allowed" : "pointer", opacity: deletingUserId === user.id ? 0.6 : 1 }}
+                    >
+                      {deletingUserId === user.id ? "Memadamkan..." : "Ya, Padam Sekarang"}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

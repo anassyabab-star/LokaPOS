@@ -6,11 +6,12 @@ import { useEffect, useState } from "react";
 type ClockRecord = {
   id: string;
   clock_in_at: string;
-  clock_out_at: string;
+  clock_out_at: string | null;
   duration_minutes: number;
   notes: string | null;
   hours: number;
   salary: number;
+  is_open: boolean;
 };
 
 type StaffRow = {
@@ -78,6 +79,111 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid var(--d-border)", outline: "none", width: "100%",
 };
 
+/* ── Helpers ─────────────────────────────────────── */
+function toDatetimeLocal(iso: string): string {
+  // Convert ISO → "YYYY-MM-DDTHH:mm" in MYT (UTC+8) for datetime-local input
+  const d = new Date(new Date(iso).getTime() + 8 * 3600000);
+  return d.toISOString().slice(0, 16);
+}
+function datetimeLocalToISO(value: string): string {
+  return new Date(`${value}:00+08:00`).toISOString();
+}
+function calcDuration(inVal: string, outVal: string): string {
+  if (!inVal || !outVal) return "";
+  const diff = new Date(`${outVal}:00+08:00`).getTime() - new Date(`${inVal}:00+08:00`).getTime();
+  if (diff <= 0) return "⚠ Masa keluar mesti selepas masa masuk";
+  const mins = Math.round(diff / 60000);
+  const h = Math.floor(mins / 60); const m = mins % 60;
+  return h > 0 ? `${h}j ${m}m` : `${m}m`;
+}
+
+/* ── Edit Record Modal ──────────────────────────── */
+function EditRecordModal({
+  record,
+  staffName,
+  onClose,
+  onSaved,
+}: {
+  record: ClockRecord;
+  staffName: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [clockIn, setClockIn] = useState(toDatetimeLocal(record.clock_in_at));
+  const [clockOut, setClockOut] = useState(record.clock_out_at ? toDatetimeLocal(record.clock_out_at) : "");
+  const [notes, setNotes] = useState(record.notes ?? "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const duration = calcDuration(clockIn, clockOut);
+  const durationOk = clockOut !== "" && !duration.startsWith("⚠");
+
+  async function save() {
+    if (!clockIn) { setErr("Masa masuk diperlukan"); return; }
+    if (clockOut && !durationOk) { setErr("Masa keluar mesti selepas masa masuk"); return; }
+    setSaving(true); setErr(null);
+    try {
+      const res = await fetch("/api/admin/timesheets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: record.id,
+          clock_in_at: datetimeLocalToISO(clockIn),
+          clock_out_at: clockOut ? datetimeLocalToISO(clockOut) : null,
+          notes: notes.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setErr(data?.error || "Gagal simpan"); return; }
+      onSaved();
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "var(--d-surface)", borderRadius: 16, padding: 24, width: "100%", maxWidth: 420, border: "1px solid var(--d-border)" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 4 }}>Edit Rekod</div>
+        <div style={{ fontSize: 13, color: "var(--d-text-2)", marginBottom: 20 }}>{staffName}</div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 6 }}>Masa Masuk *</label>
+            <input type="datetime-local" value={clockIn} onChange={e => setClockIn(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 6 }}>
+              Masa Keluar <span style={{ color: "var(--d-text-3)" }}>(kosongkan jika sesi masih terbuka)</span>
+            </label>
+            <input type="datetime-local" value={clockOut} onChange={e => setClockOut(e.target.value)} style={inputStyle} />
+          </div>
+
+          {(clockIn && clockOut) && (
+            <div style={{ padding: "8px 12px", borderRadius: 8, background: durationOk ? "var(--d-success-soft)" : "var(--d-error-soft)", color: durationOk ? "var(--d-success)" : "var(--d-error)", fontSize: 13, fontWeight: 500 }}>
+              {durationOk ? `Tempoh: ${duration}` : duration}
+            </div>
+          )}
+
+          <div>
+            <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 6 }}>Nota</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Nota pilihan..." style={{ ...inputStyle, resize: "none" }} />
+          </div>
+        </div>
+
+        {err && <div style={{ fontSize: 12, color: "var(--d-error)", marginBottom: 12 }}>{err}</div>}
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid var(--d-border)", background: "transparent", color: "var(--d-text-2)", fontSize: 13, cursor: "pointer" }}>
+            Batal
+          </button>
+          <button onClick={() => void save()} disabled={saving} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+            {saving ? "Menyimpan..." : "Simpan"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Staff Profile Modal ────────────────────────── */
 function ProfileModal({
   target,
@@ -91,6 +197,7 @@ function ProfileModal({
   const isNew = (target as { isNew?: boolean }).isNew === true;
   const existing = isNew ? null : (target as Profile);
   const [rate, setRate] = useState(existing ? String(existing.hourly_rate) : "");
+  const [empType, setEmpType] = useState<"parttime" | "fulltime">(existing?.employment_type === "fulltime" ? "fulltime" : "parttime");
   const [active, setActive] = useState(existing ? existing.is_active : true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -103,7 +210,7 @@ function ProfileModal({
       const res = await fetch("/api/admin/staff-profiles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: target.user_id, hourly_rate: r, employment_type: "parttime", is_active: active }),
+        body: JSON.stringify({ user_id: target.user_id, hourly_rate: r, employment_type: empType, is_active: active }),
       });
       const data = await res.json();
       if (!res.ok) { setErr(data?.error || "Gagal simpan"); return; }
@@ -118,6 +225,14 @@ function ProfileModal({
           {isNew ? "Tambah Profil" : "Edit Profil"}
         </div>
         <div style={{ fontSize: 13, color: "var(--d-text-2)", marginBottom: 20 }}>{target.name}</div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 6 }}>Jenis pekerjaan</label>
+          <select value={empType} onChange={e => setEmpType(e.target.value as "parttime" | "fulltime")} style={inputStyle}>
+            <option value="parttime">Paruh masa (Part-time)</option>
+            <option value="fulltime">Penuh masa (Full-time)</option>
+          </select>
+        </div>
 
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 6 }}>Kadar sejam (RM)</label>
@@ -172,6 +287,9 @@ export default function TimesheetsPage() {
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [modalTarget, setModalTarget] = useState<Profile | StaffWithoutProfile | null>(null);
 
+  // Edit record modal
+  const [editRecord, setEditRecord] = useState<{ record: ClockRecord; staffName: string } | null>(null);
+
   function loadTimesheets() {
     setLoading(true);
     const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
@@ -195,14 +313,14 @@ export default function TimesheetsPage() {
   useEffect(() => { loadTimesheets(); }, [dateFrom, dateTo, selectedUser]);
   useEffect(() => { loadProfiles(); }, []);
 
-  const allPartTime = profiles.filter(p => p.employment_type === "parttime");
+  const allActiveStaff = profiles.filter(p => p.is_active);
 
   return (
     <div style={{ padding: "24px 0" }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--d-text-1)", margin: 0 }}>Timesheet</h1>
-        <p style={{ fontSize: 13, color: "var(--d-text-2)", marginTop: 4 }}>Rekod kehadiran & pengiraan gaji staf paruh masa</p>
+        <p style={{ fontSize: 13, color: "var(--d-text-2)", marginTop: 4 }}>Rekod kehadiran & pengiraan gaji staf</p>
       </div>
 
       {/* Quick range buttons */}
@@ -227,7 +345,7 @@ export default function TimesheetsPage() {
         <select value={selectedUser} onChange={e => setSelectedUser(e.target.value)}
           style={{ ...inputStyle, width: "auto", flex: "1 1 180px" }}>
           <option value="">Semua staf</option>
-          {allPartTime.map(p => (
+          {allActiveStaff.map(p => (
             <option key={p.user_id} value={p.user_id}>{p.name}</option>
           ))}
         </select>
@@ -290,22 +408,32 @@ export default function TimesheetsPage() {
               {expandedUser === s.user_id && (
                 <div style={{ background: "var(--d-surface-hover)", borderTop: "1px solid var(--d-border)" }}>
                   {/* Table header */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 80px 80px", gap: 8, padding: "8px 20px", fontSize: 11, color: "var(--d-text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                    <span>Tarikh</span><span>Masuk</span><span>Keluar</span><span style={{ textAlign: "right" }}>Jam</span><span style={{ textAlign: "right" }}>Gaji</span>
+                  <div style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 1fr auto", gap: 8, padding: "8px 20px", fontSize: 11, color: "var(--d-text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <span>Tarikh</span><span>Masuk</span><span>Keluar</span><span style={{ textAlign: "right" }}>Jam</span><span style={{ textAlign: "right" }}>Gaji</span><span>Nota</span><span />
                   </div>
                   {s.records.map(r => (
-                    <div key={r.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 80px 80px", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border-soft)", alignItems: "center" }}>
+                    <div key={r.id} style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 1fr auto", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border-soft)", alignItems: "center", background: r.is_open ? "rgba(245,158,11,0.04)" : undefined }}>
                       <span style={{ fontSize: 12, color: "var(--d-text-2)" }}>{fmtDate(r.clock_in_at)}</span>
                       <span style={{ fontSize: 13, fontWeight: 500, color: "var(--d-text-1)" }}>{fmtTime(r.clock_in_at)}</span>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: "var(--d-text-1)" }}>{fmtTime(r.clock_out_at)}</span>
-                      <span style={{ fontSize: 12, color: "var(--d-text-2)", textAlign: "right" }}>{fmtHours(r.duration_minutes)}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--d-accent)", textAlign: "right" }}>RM {r.salary.toFixed(2)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: r.is_open ? "var(--d-warning)" : "var(--d-text-1)" }}>
+                        {r.clock_out_at ? fmtTime(r.clock_out_at) : "Terbuka"}
+                      </span>
+                      <span style={{ fontSize: 12, color: "var(--d-text-2)", textAlign: "right" }}>{r.is_open ? "—" : fmtHours(r.duration_minutes)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--d-accent)", textAlign: "right" }}>{r.salary > 0 ? `RM ${r.salary.toFixed(2)}` : "—"}</span>
+                      <span style={{ fontSize: 12, color: "var(--d-text-3)" }}>{r.notes || ""}</span>
+                      <button
+                        onClick={() => setEditRecord({ record: r, staffName: s.name })}
+                        style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, border: "1px solid var(--d-border)", background: r.is_open ? "var(--d-warning-soft)" : "var(--d-surface-hover)", color: r.is_open ? "var(--d-warning)" : "var(--d-text-3)", cursor: "pointer", whiteSpace: "nowrap" }}
+                      >
+                        {r.is_open ? "Fix !" : "Edit"}
+                      </button>
                     </div>
                   ))}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 80px 80px", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border)", background: "var(--d-accent-soft)" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 1fr auto", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border)", background: "var(--d-accent-soft)" }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "var(--d-text-1)", gridColumn: "1/4" }}>Jumlah</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "var(--d-text-1)", textAlign: "right" }}>{fmtHours(s.total_minutes)}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--d-accent)", textAlign: "right" }}>RM {s.total_salary.toFixed(2)}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--d-accent)", textAlign: "right" }}>{s.total_salary > 0 ? `RM ${s.total_salary.toFixed(2)}` : "—"}</span>
+                    <span /><span />
                   </div>
                 </div>
               )}
@@ -318,7 +446,7 @@ export default function TimesheetsPage() {
       <div style={{ marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--d-text-1)", margin: 0 }}>Kadar Gaji Staf</h2>
-          <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>Set kadar perjam untuk staf paruh masa</p>
+          <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>Set kadar perjam & jenis pekerjaan staf</p>
         </div>
       </div>
 
@@ -341,8 +469,13 @@ export default function TimesheetsPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>RM {Number(p.hourly_rate).toFixed(2)}/j</div>
-                    <div style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, display: "inline-block", background: p.is_active ? "var(--d-success-soft)" : "var(--d-surface-hover)", color: p.is_active ? "var(--d-success)" : "var(--d-text-3)" }}>
-                      {p.is_active ? "Aktif" : "Tidak aktif"}
+                    <div style={{ display: "flex", gap: 4, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 2 }}>
+                      <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: "var(--d-surface-hover)", color: "var(--d-text-3)" }}>
+                        {p.employment_type === "fulltime" ? "Fulltime" : "Parttime"}
+                      </span>
+                      <span style={{ fontSize: 11, padding: "1px 6px", borderRadius: 4, background: p.is_active ? "var(--d-success-soft)" : "var(--d-surface-hover)", color: p.is_active ? "var(--d-success)" : "var(--d-text-3)" }}>
+                        {p.is_active ? "Aktif" : "Tidak aktif"}
+                      </span>
                     </div>
                   </div>
                   <button onClick={() => setModalTarget(p)}
@@ -384,6 +517,16 @@ export default function TimesheetsPage() {
           target={modalTarget as Profile & { isNew?: boolean }}
           onClose={() => setModalTarget(null)}
           onSaved={() => { setModalTarget(null); loadProfiles(); loadTimesheets(); }}
+        />
+      )}
+
+      {/* Edit record modal */}
+      {editRecord && (
+        <EditRecordModal
+          record={editRecord.record}
+          staffName={editRecord.staffName}
+          onClose={() => setEditRecord(null)}
+          onSaved={() => { setEditRecord(null); loadTimesheets(); }}
         />
       )}
     </div>
