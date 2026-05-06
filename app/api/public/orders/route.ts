@@ -7,6 +7,7 @@ import {
   insertOrderItemAddonsWithFallback,
 } from "@/lib/customer-orders";
 import { createChipPurchase, getChipConfigStatus } from "@/lib/chip";
+import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -222,7 +223,7 @@ export async function POST(req: Request) {
     const normalizedPhone = customerPhone.replace(/[^\d+]/g, "");
     const { data: existingCustomer } = await supabase
       .from("customers")
-      .select("id")
+      .select("id, consent_whatsapp")
       .eq("phone", normalizedPhone)
       .maybeSingle();
 
@@ -231,10 +232,12 @@ export async function POST(req: Request) {
     if (!customerId) {
       const { data: newCustomer } = await supabase
         .from("customers")
-        .insert([{ name: customerName, phone: normalizedPhone }])
+        .insert([{ name: customerName, phone: normalizedPhone, consent_whatsapp: true }])
         .select("id")
         .maybeSingle();
       customerId = newCustomer?.id || null;
+    } else if (!existingCustomer?.consent_whatsapp) {
+      await supabase.from("customers").update({ consent_whatsapp: true }).eq("id", customerId);
     }
 
     const orderBase = {
@@ -342,6 +345,21 @@ export async function POST(req: Request) {
           console.error("CHIP bill creation failed:", chipErr);
         }
       }
+    }
+
+    // WhatsApp receipt — fire-and-forget, never block the order response
+    const waPhone = normalizeWhatsappNumber(normalizedPhone);
+    if (waPhone) {
+      const storeName = String(process.env.STORE_NAME || "Loka").trim();
+      const itemLines = calculated.items
+        .map(i => `• ${i.product_name_snapshot}${i.variant_name ? ` (${i.variant_name})` : ""} ×${i.qty} — RM${i.line_total.toFixed(2)}`)
+        .join("\n");
+      const waMsg =
+        `✅ Order #${numbering.orderNumber} disahkan!\n\n` +
+        `${itemLines}\n\n` +
+        `Jumlah: RM${calculated.subtotal.toFixed(2)}\n\n` +
+        `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
+      sendMurpatiText({ to: waPhone, message: waMsg }).catch(() => {});
     }
 
     return NextResponse.json({

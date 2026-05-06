@@ -43,6 +43,7 @@ export async function POST(req: Request) {
   }
 
   // Award 1 point
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const { error: insertError } = await supabase.from("loyalty_ledger").insert([
     {
       customer_id: customer.id,
@@ -50,6 +51,7 @@ export async function POST(req: Request) {
       points_change: 1,
       note: `Daily check-in ${todayMyt}`,
       created_by: null,
+      expires_at: expiresAt,
     },
   ]);
 

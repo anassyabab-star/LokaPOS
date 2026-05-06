@@ -220,6 +220,10 @@ async function writeLoyaltyLedgerEntry(payload: {
 }) {
   if (!payload.pointsChange) return;
 
+  const expiresAt = payload.entryType === "earn"
+    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
   const { error } = await supabase.from("loyalty_ledger").insert([
     {
       customer_id: payload.customerId,
@@ -228,6 +232,7 @@ async function writeLoyaltyLedgerEntry(payload: {
       points_change: payload.pointsChange,
       created_by: payload.createdBy,
       note: payload.note,
+      ...(expiresAt ? { expires_at: expiresAt } : {}),
     },
   ]);
 
