@@ -3,6 +3,7 @@ import { requireAdminApi } from "@/lib/admin-api-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isMissingRelationError, schemaMissingMessage } from "../../helpers";
 import { sendMurpatiText } from "../../murpati";
+import { sendEmail } from "@/lib/email";
 
 type CampaignRow = {
   id: string;
@@ -70,12 +71,15 @@ export async function POST(
     }
 
     const campaign = campaignData as CampaignRow;
+    const body2 = body as { limit?: number; channel?: string };
+    const channelFilter = String(body2?.channel || "whatsapp") === "email" ? "email" : "whatsapp";
+
     const { data: recipientData, error: recipientError } = await supabase
       .from("crm_campaign_recipients")
       .select("id,customer_id,channel,destination,send_status")
       .eq("campaign_id", campaignId)
       .eq("send_status", "queued")
-      .eq("channel", "whatsapp")
+      .eq("channel", channelFilter)
       .order("created_at", { ascending: true })
       .limit(batchLimit);
 
@@ -93,7 +97,7 @@ export async function POST(
         processed: 0,
         sent: 0,
         failed: 0,
-        message: "No queued WhatsApp recipients.",
+        message: `No queued ${channelFilter === "email" ? "email" : "WhatsApp"} recipients.`,
       });
     }
 
@@ -118,10 +122,20 @@ export async function POST(
     for (const recipient of recipients) {
       const customer = recipient.customer_id ? customerMap.get(recipient.customer_id) : undefined;
       const finalMessage = applyTemplate(campaign.message_template, customer, recipient.destination);
-      const result = await sendMurpatiText({
-        to: recipient.destination,
-        message: finalMessage,
-      });
+
+      let result: { ok: boolean; messageId: string | null; error: string | null };
+      if (channelFilter === "email") {
+        result = await sendEmail({
+          to: recipient.destination,
+          subject: campaign.name,
+          html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px">${finalMessage.replace(/\n/g, "<br>")}</div>`,
+        });
+      } else {
+        result = await sendMurpatiText({
+          to: recipient.destination,
+          message: finalMessage,
+        });
+      }
 
       if (result.ok) {
         sent += 1;

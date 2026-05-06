@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { requireStaffApi } from "@/lib/staff-api-auth";
 
 export async function POST(req: Request) {
-  const auth = await requireStaffApi();
-  if (!auth.ok) return auth.response;
-
   const body = await req.json().catch(() => null);
   const phone = String(body?.phone || "").trim();
 
@@ -36,7 +32,8 @@ export async function POST(req: Request) {
     .from("loyalty_ledger")
     .select("id")
     .eq("customer_id", customer.id)
-    .eq("entry_type", "checkin")
+    .eq("entry_type", "earn")
+    .like("note", "Daily check-in%")
     .gte("created_at", startOfToday)
     .lte("created_at", endOfToday)
     .maybeSingle();
@@ -46,13 +43,15 @@ export async function POST(req: Request) {
   }
 
   // Award 1 point
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const { error: insertError } = await supabase.from("loyalty_ledger").insert([
     {
       customer_id: customer.id,
-      entry_type: "checkin",
+      entry_type: "earn",
       points_change: 1,
       note: `Daily check-in ${todayMyt}`,
-      created_by: "customer_self",
+      created_by: null,
+      expires_at: expiresAt,
     },
   ]);
 

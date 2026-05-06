@@ -5,7 +5,7 @@ import {
   Product, Shift, PaidOutEntry, CartItem, ReceiptData, SugarLevel,
   MarketingConsentMode, MemberLookup, DEFAULT_SUGAR_LEVEL, SUGAR_LEVEL_OPTIONS,
   LOYALTY_REDEEM_RM_PER_POINT, LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO,
-  buildCartKey, isSugarSupportedCategory, sugarLabel,
+  buildCartKey, isSugarSupportedCategory, isKopiCategory, sugarLabel,
 } from "../types";
 
 const REGISTER_ID = "main";
@@ -116,6 +116,12 @@ export function usePosState() {
   const [paidOutInvoiceUrl, setPaidOutInvoiceUrl] = useState("");
   const [paidOutNotes, setPaidOutNotes] = useState("");
   const [recentPaidOuts, setRecentPaidOuts] = useState<PaidOutEntry[]>([]);
+
+  // ───── B1F1 Promo ─────
+  const [memberB1f1Redeemed, setMemberB1f1Redeemed] = useState(false);
+  const [b1f1Applied, setB1f1Applied] = useState(false);
+  const [b1f1DiscountAmount, setB1f1DiscountAmount] = useState(0);
+  const [b1f1Checking, setB1f1Checking] = useState(false);
 
   // ───── Customer / Loyalty ─────
   const [customerName, setCustomerName] = useState("");
@@ -307,8 +313,8 @@ export function usePosState() {
   const lastOrderCount = useRef(0);
 
   useEffect(() => {
-    // Reset polling count on shift change
     lastOrderCount.current = 0;
+    reportCache.current = {};
   }, [currentShift?.id]);
 
   // ━━━ Cart actions ━━━
@@ -348,6 +354,7 @@ export function usePosState() {
 
   function clearCart() {
     setCart({}); setCustomPrices({}); setCustomNotes({});
+    setB1f1Applied(false); setB1f1DiscountAmount(0);
   }
 
   function resetCustomerState() {
@@ -357,6 +364,7 @@ export function usePosState() {
     setRedeemPointsInput(""); setMemberLookupMessage(null);
     setDiscountType("none"); setDiscountValue(""); setCashReceived("");
     setShowDiscountPanel(false);
+    setMemberB1f1Redeemed(false); setB1f1Applied(false); setB1f1DiscountAmount(0);
   }
 
   // ━━━ Derived: Cart Items ━━━
@@ -383,7 +391,12 @@ export function usePosState() {
   let discountAmount = 0;
   if (discountType === "percent") discountAmount = subtotal * (discountNum / 100);
   if (discountType === "fixed") discountAmount = discountNum;
-  const totalAfterDiscount = Math.max(subtotal - discountAmount, 0);
+  const b1f1CartEligible = b1f1Applied && items.some(item => {
+    const product = products.find(p => p.id === item.product_id);
+    return isKopiCategory(product?.category) && item.qty >= 2;
+  });
+  const b1f1Discount = b1f1CartEligible ? b1f1DiscountAmount : 0;
+  const totalAfterDiscount = Math.max(subtotal - discountAmount - b1f1Discount, 0);
   const requestedRedeem = Math.max(0, Math.floor(Number(redeemPointsInput || 0)));
   const maxRedeemByAmount = Math.floor((totalAfterDiscount * LOYALTY_REDEEM_MAX_RATIO) / LOYALTY_REDEEM_RM_PER_POINT);
   const redeemEligibleMaxPoints = linkedCustomerId ? Math.min(memberPoints, maxRedeemByAmount) : 0;
@@ -451,6 +464,9 @@ export function usePosState() {
     memberLookupTone, setMemberLookupTone, memberPoints, setMemberPoints,
     memberExpiringPoints, setMemberExpiringPoints, redeemPointsInput, setRedeemPointsInput,
     setConsentMode, getConsentMode, resetCustomerState,
+    memberB1f1Redeemed, setMemberB1f1Redeemed,
+    b1f1Applied, setB1f1Applied, b1f1DiscountAmount, setB1f1DiscountAmount,
+    b1f1Checking, setB1f1Checking, b1f1Discount,
     // Payment
     discountType, setDiscountType, discountValue, setDiscountValue,
     paymentMethod, setPaymentMethod, cashReceived, setCashReceived,

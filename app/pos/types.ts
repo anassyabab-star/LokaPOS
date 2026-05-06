@@ -121,6 +121,12 @@ export function buildCartKey(
   return `${productId}__${variantId || "base"}__${normalizedAddonIds}__${sugarKey}`;
 }
 
+export function isKopiCategory(category?: string | null) {
+  const key = String(category || "").trim().toLowerCase();
+  if (!key) return false;
+  return key.includes("kopi") || key.includes("coffee");
+}
+
 export function isSugarSupportedCategory(category?: string | null) {
   const key = String(category || "").trim().toLowerCase();
   if (!key) return false;

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePos } from "../pos-context";
-import { sugarLabel, LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO, LOYALTY_REDEEM_RM_PER_POINT } from "../types";
+import { sugarLabel, LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO, LOYALTY_REDEEM_RM_PER_POINT, isKopiCategory } from "../types";
 
 export default function CartOverlay() {
   const s = usePos();
@@ -55,6 +55,44 @@ export default function CartOverlay() {
             </div>
           );
         })()}
+        {/* B1F1 Kopi banner */}
+        {(() => {
+          if (!s.linkedCustomerId || s.memberB1f1Redeemed) return null;
+          const eligibleItems = s.items.filter(item => {
+            const product = s.products.find(p => p.id === item.product_id);
+            return isKopiCategory(product?.category) && item.qty >= 2;
+          }).sort((a, b) => a.price - b.price);
+          const eligible = eligibleItems[0] || null;
+          if (!eligible) return null;
+          const applied = s.b1f1Applied;
+          return (
+            <div className={`flex items-center justify-between border-b px-4 py-2.5 ${applied ? "border-amber-200 bg-amber-50" : "border-orange-100 bg-orange-50"}`}>
+              <div className="text-xs">
+                {applied ? (
+                  <span className="font-semibold text-amber-700">☕ B1F1 −RM{s.b1f1DiscountAmount.toFixed(2)}</span>
+                ) : (
+                  <span className="text-orange-700">☕ B1F1 tersedia — {eligible.name}</span>
+                )}
+              </div>
+              {!applied ? (
+                <button
+                  onClick={() => { s.setB1f1Applied(true); s.setB1f1DiscountAmount(eligible.price); }}
+                  className="rounded-full bg-orange-500 px-3 py-1 text-[11px] font-semibold text-white active:bg-orange-600"
+                >
+                  Guna B1F1
+                </button>
+              ) : (
+                <button
+                  onClick={() => { s.setB1f1Applied(false); s.setB1f1DiscountAmount(0); }}
+                  className="rounded-full bg-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-600 active:bg-gray-300"
+                >
+                  Batalkan
+                </button>
+              )}
+            </div>
+          );
+        })()}
+
         <div className="px-4">
           {s.items.map(item => (
             <div key={item.id} className="flex items-center gap-2 border-b border-gray-200 py-3">
@@ -111,6 +149,7 @@ export default function CartOverlay() {
             </div>
           )}
           {s.discountAmount > 0 && <div className="mt-2 text-xs font-medium text-green-600">Diskaun: -RM{s.discountAmount.toFixed(2)}</div>}
+          {s.b1f1Applied && s.b1f1DiscountAmount > 0 && <div className="mt-1 text-xs font-medium text-amber-600">B1F1 Kopi: -RM{s.b1f1DiscountAmount.toFixed(2)}</div>}
         </div>
       </div>
       <div className="border-t border-gray-200 px-4 py-4 pb-[env(safe-area-inset-bottom,12px)]">

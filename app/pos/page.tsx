@@ -64,6 +64,7 @@ function POSPageInner() {
 
   async function completePayment(overrideMethod?: "cash" | "qr" | "card", overrideCash?: number) {
     if (s.submittingOrder) return; const method = overrideMethod || s.paymentMethod; const cashVal = overrideCash ?? s.cashNum;
+    if (s.items.length === 0) return;
     if (!s.currentShift) { alert("Buka shift dulu"); return; } const finalName = s.customerName.trim() || "Walk-in";
     if (s.consentWhatsapp && !s.customerPhone.trim()) { alert("Telefon diperlukan"); return; } if (s.consentEmail && !s.customerEmail.trim()) { alert("Email diperlukan"); return; }
     if (method === "cash" && (!cashVal || cashVal < s.total)) { alert("Duit tak cukup"); return; }
@@ -74,11 +75,11 @@ function POSPageInner() {
       const timeout = setTimeout(() => controller.abort(), 20000);
       let res: Response;
       try {
-        res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountValue, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) });
+        res = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ items: s.items, register_id: REGISTER_ID, customer_name: finalName, customer: { id: s.linkedCustomerId || undefined, name: finalName, phone: s.customerPhone, email: s.customerEmail, consent_whatsapp: s.consentWhatsapp, consent_email: s.consentEmail }, loyalty_redeem_points: s.appliedRedeemPoints, subtotal: s.subtotal, discount_type: s.discountType, discount_value: s.discountValue, b1f1_phone: s.b1f1Applied ? s.customerPhone.trim() : undefined, b1f1_discount_amount: s.b1f1Applied ? s.b1f1DiscountAmount : undefined, total: s.total, payment_method: method, cash_received: method === "cash" ? cashVal : s.total, balance: method === "cash" ? cashVal - s.total : 0 }) });
       } finally { clearTimeout(timeout); }
       const data = await res.json();
       if (!data.success) { pw?.close(); alert(data?.error || "Gagal"); return; }
-      const receipt: ReceiptData = { order_id: String(data.order_id || ""), receipt_number: data.receipt_number, customerName: finalName, items: s.items, subtotal: s.subtotal, discount: s.discountAmount + s.redeemAmount, total: s.total, payment_method: method, created_at: new Date().toISOString() };
+      const receipt: ReceiptData = { order_id: String(data.order_id || ""), receipt_number: data.receipt_number, customerName: finalName, items: s.items, subtotal: s.subtotal, discount: s.discountAmount + s.redeemAmount + s.b1f1Discount, total: s.total, payment_method: method, created_at: new Date().toISOString() };
       s.setReceiptData(receipt); if (s.autoPrintEnabled) printReceipt(receipt, pw); if (s.autoPrintLabel && data.order_id) printCupLabel(String(data.order_id));
       setLastCashChange(method === "cash" ? cashVal - s.total : 0);
       s.clearCart(); s.resetCustomerState(); s.setOverlay("done"); void s.refreshShiftState({ autoPrompt: false });

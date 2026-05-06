@@ -25,6 +25,9 @@ export function CustomerOverlay() {
     s.setMemberExpiringPoints(0);
     s.setRedeemPointsInput("");
     s.setMemberLookupMessage(null);
+    s.setMemberB1f1Redeemed(false);
+    s.setB1f1Applied(false);
+    s.setB1f1DiscountAmount(0);
     // Auto-lookup when phone looks complete (≥10 digits)
     // Pass val directly to avoid stale closure on s.customerPhone
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -142,6 +145,13 @@ async function lookupMember(s: ReturnType<typeof usePos>, phoneOverride?: string
     s.setConsentWhatsapp(Boolean(c.consent_whatsapp)); s.setConsentEmail(Boolean(c.consent_email));
     s.setMemberPoints(Number(c.loyalty_points || 0)); s.setMemberExpiringPoints(Number(c.expiring_points_30d || 0));
     s.setMemberLookupTone("success"); s.setMemberLookupMessage(`Ahli: ${c.total_orders ?? 0} order · RM${Number(c.total_spend || 0).toFixed(2)} · ${Number(c.loyalty_points || 0)} pts`);
+    // Check B1F1 redemption status
+    try {
+      const b1f1Res = await fetch(`/api/pos/promo/b1f1?phone=${encodeURIComponent(c.phone || phone)}`, { cache: "no-store" });
+      const b1f1Data = await b1f1Res.json() as { redeemed?: boolean };
+      s.setMemberB1f1Redeemed(Boolean(b1f1Data?.redeemed));
+      if (b1f1Data?.redeemed) s.setB1f1Applied(false);
+    } catch { /* silent */ }
   } finally { s.setMemberLookupLoading(false); }
 }
 

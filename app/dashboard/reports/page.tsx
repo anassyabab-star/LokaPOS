@@ -255,9 +255,10 @@ export default function ReportsPage() {
                     textAlign: "left",
                     padding: "10px 14px",
                     background: isSelected ? "var(--d-accent-soft)" : "transparent",
-                    borderLeft: isSelected ? "3px solid var(--d-accent)" : "3px solid transparent",
-                    border: "none",
+                    borderTop: "none",
+                    borderRight: "none",
                     borderBottom: "1px solid var(--d-border-soft)",
+                    borderLeft: isSelected ? "3px solid var(--d-accent)" : "3px solid transparent",
                     cursor: "pointer",
                   }}
                 >

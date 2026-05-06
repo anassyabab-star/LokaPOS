@@ -6,6 +6,8 @@ import {
   generateOrderNumber,
   insertOrderItemAddonsWithFallback,
 } from "@/lib/customer-orders";
+import { createChipPurchase, getChipConfigStatus } from "@/lib/chip";
+import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -186,6 +188,24 @@ export async function POST(req: Request) {
   }
 
   try {
+    const supabase = createSupabaseAdminClient();
+
+    // Reject orders when store has no open shift (store is closed)
+    const { data: openShift } = await supabase
+      .from("pos_shifts")
+      .select("id")
+      .eq("register_id", "main")
+      .eq("status", "open")
+      .limit(1)
+      .maybeSingle();
+
+    if (!openShift) {
+      return NextResponse.json(
+        { error: "Kedai sedang tutup. Sila cuba semula semasa waktu operasi.", store_closed: true },
+        { status: 503 }
+      );
+    }
+
     const parsedItems = (requestItems as Record<string, unknown>[]).map(raw => ({
       product_id: String(raw.product_id || "").trim(),
       variant_id: String(raw.variant_id || "").trim() || null,
@@ -198,13 +218,12 @@ export async function POST(req: Request) {
 
     const calculated = await calculateCustomerOrderItems(parsedItems);
     const numbering = await generateOrderNumber();
-    const supabase = createSupabaseAdminClient();
 
     // Find or create customer by phone
     const normalizedPhone = customerPhone.replace(/[^\d+]/g, "");
     const { data: existingCustomer } = await supabase
       .from("customers")
-      .select("id")
+      .select("id, consent_whatsapp")
       .eq("phone", normalizedPhone)
       .maybeSingle();
 
@@ -213,10 +232,12 @@ export async function POST(req: Request) {
     if (!customerId) {
       const { data: newCustomer } = await supabase
         .from("customers")
-        .insert([{ name: customerName, phone: normalizedPhone }])
+        .insert([{ name: customerName, phone: normalizedPhone, consent_whatsapp: true }])
         .select("id")
         .maybeSingle();
       customerId = newCustomer?.id || null;
+    } else if (!existingCustomer?.consent_whatsapp) {
+      await supabase.from("customers").update({ consent_whatsapp: true }).eq("id", customerId);
     }
 
     const orderBase = {
@@ -304,11 +325,49 @@ export async function POST(req: Request) {
       }
     }
 
+    // Create payment bill for online payment methods (no auth required — guest flow)
+    let paymentUrl: string | null = null;
+    if (paymentMethod === "fpx" || paymentMethod === "card") {
+      const chipStatus = getChipConfigStatus();
+      if (chipStatus.configured) {
+        try {
+          const purchase = await createChipPurchase({
+            amount: calculated.subtotal,
+            orderId: order.id,
+            orderNumber: numbering.orderNumber,
+            customerName: customerName,
+            customerEmail: null,
+            customerPhone: normalizedPhone,
+          });
+          paymentUrl = purchase.checkoutUrl;
+        } catch (chipErr) {
+          // Log but don't fail the order — frontend will handle missing URL
+          console.error("CHIP bill creation failed:", chipErr);
+        }
+      }
+    }
+
+    // WhatsApp receipt — fire-and-forget, never block the order response
+    const waPhone = normalizeWhatsappNumber(normalizedPhone);
+    if (waPhone) {
+      const storeName = String(process.env.STORE_NAME || "Loka").trim();
+      const itemLines = calculated.items
+        .map(i => `• ${i.product_name_snapshot}${i.variant_name ? ` (${i.variant_name})` : ""} ×${i.qty} — RM${i.line_total.toFixed(2)}`)
+        .join("\n");
+      const waMsg =
+        `✅ Order #${numbering.orderNumber} disahkan!\n\n` +
+        `${itemLines}\n\n` +
+        `Jumlah: RM${calculated.subtotal.toFixed(2)}\n\n` +
+        `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
+      sendMurpatiText({ to: waPhone, message: waMsg }).catch(() => {});
+    }
+
     return NextResponse.json({
       success: true,
       order_id: order.id,
       order_number: numbering.orderNumber,
       total: calculated.subtotal,
+      payment_url: paymentUrl,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Gagal buat order";

@@ -15,8 +15,8 @@ export async function POST(req: NextRequest) {
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: "Email tidak valid" }, { status: 400 });
   }
-  if (!password || password.length < 6) {
-    return NextResponse.json({ error: "Password mesti sekurang-kurangnya 6 aksara" }, { status: 400 });
+  if (!password || password.length < 8) {
+    return NextResponse.json({ error: "Password mesti sekurang-kurangnya 8 aksara" }, { status: 400 });
   }
 
   const supabase = createSupabaseAdminClient();
