@@ -28,6 +28,22 @@ const REDEEM_TIERS = [
   { points: 1000, reward: "RM12", color: "from-[#5B1010] to-[#7F1D1D]" },
 ];
 
+const MY_PREFIXES = [
+  { prefix: "010", label: "010" }, { prefix: "011", label: "011" },
+  { prefix: "012", label: "012" }, { prefix: "013", label: "013" },
+  { prefix: "014", label: "014" }, { prefix: "015", label: "015" },
+  { prefix: "016", label: "016" }, { prefix: "017", label: "017" },
+  { prefix: "018", label: "018" }, { prefix: "019", label: "019" },
+  { prefix: "03",  label: "03"  },
+];
+function splitPhone(phone: string): { prefix: string; rest: string } {
+  const digits = phone.replace(/\D/g, "");
+  for (const { prefix } of MY_PREFIXES) {
+    if (digits.startsWith(prefix)) return { prefix, rest: digits.slice(prefix.length) };
+  }
+  return { prefix: "011", rest: digits };
+}
+
 function fm(v: number) { return `RM${Number(v || 0).toFixed(2)}`; }
 function getTier(pts: number): string {
   if (pts >= 1000) return "Platinum";
@@ -82,6 +98,7 @@ export default function CustomerApp() {
   const [loading, setLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(false);
   const [storeOpen, setStoreOpen] = useState<boolean | null>(null);
+  const [enabledPayments, setEnabledPayments] = useState<Record<string, boolean>>({ fpx: true, cash: true });
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [catFilter, setCatFilter] = useState("All");
@@ -101,6 +118,9 @@ export default function CustomerApp() {
   const [checkoutStep, setCheckoutStep] = useState<1 | 2>(1);
   const [custName, setCustName] = useState("");
   const [custPhone, setCustPhone] = useState("");
+  const [phonePrefix, setPhonePrefix] = useState("011");
+  const [phoneRest, setPhoneRest] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
   const [payMethod, setPayMethod] = useState("fpx");
   const [placing, setPlacing] = useState(false);
   const [checkoutErr, setCheckoutErr] = useState<string | null>(null);
@@ -122,6 +142,12 @@ export default function CustomerApp() {
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkInMsg, setCheckInMsg] = useState<string | null>(null);
 
+  // Redemption
+  const [redeemTier, setRedeemTier] = useState<{ points: number; reward: string; color: string } | null>(null);
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemVoucher, setRedeemVoucher] = useState<{ code: string; reward: string } | null>(null);
+  const [redeemErr, setRedeemErr] = useState<string | null>(null);
+
   // Load catalog
   function fetchCatalog() {
     setLoading(true); setCatalogError(false);
@@ -137,7 +163,10 @@ export default function CustomerApp() {
   useEffect(() => {
     fetch("/api/public/store-status")
       .then(r => r.json())
-      .then(d => setStoreOpen(Boolean(d.is_open)))
+      .then(d => {
+        setStoreOpen(Boolean(d.is_open));
+        if (d.payment_methods) setEnabledPayments(d.payment_methods);
+      })
       .catch(() => setStoreOpen(null));
   }, []);
 
@@ -145,7 +174,13 @@ export default function CustomerApp() {
   useEffect(() => {
     try {
       setCustName(localStorage.getItem("loka_guest_name") || "");
-      setCustPhone(localStorage.getItem("loka_guest_phone") || "");
+      const savedPhone = localStorage.getItem("loka_guest_phone") || "";
+      setCustPhone(savedPhone);
+      if (savedPhone) {
+        const { prefix, rest } = splitPhone(savedPhone);
+        setPhonePrefix(prefix);
+        setPhoneRest(rest);
+      }
       const savedCart = localStorage.getItem("loka_cart");
       if (savedCart) setCart(JSON.parse(savedCart));
     } catch {}
@@ -251,6 +286,54 @@ export default function CustomerApp() {
     setTab("menu");
   }
 
+  const missions = useMemo(() => [
+    {
+      id: "first_order", icon: "☕", label: "Pelanggan Pertama",
+      desc: "Buat pesanan pertama anda",
+      done: trackedOrders.length > 0,
+      progress: Math.min(trackedOrders.length, 1), total: 1,
+      reward: "Selamat datang!",
+    },
+    {
+      id: "checkin_today", icon: "📅", label: "Check-in Hari Ini",
+      desc: "Daftar hadir harian untuk mata percuma",
+      done: checkedInToday,
+      progress: checkedInToday ? 1 : 0, total: 1,
+      reward: "+1 pt/hari",
+    },
+    {
+      id: "five_orders", icon: "🏆", label: "Coffee Addict",
+      desc: "Order sebanyak 5 kali",
+      done: trackedOrders.length >= 5,
+      progress: Math.min(trackedOrders.length, 5), total: 5,
+      reward: "Pencapaian 5x",
+    },
+    {
+      id: "collect_100", icon: "⭐", label: "Kumpul 100 Mata",
+      desc: "Capai 100 mata untuk buka tebus RM1",
+      done: loyaltyPoints >= 100,
+      progress: Math.min(loyaltyPoints, 100), total: 100,
+      reward: "Unlock RM1 Tebus",
+    },
+  ], [trackedOrders.length, checkedInToday, loyaltyPoints]);
+
+  async function doRedeem() {
+    if (!redeemTier || !custPhone.trim() || redeeming) return;
+    setRedeeming(true); setRedeemErr(null);
+    try {
+      const res = await fetch("/api/public/redeem", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: custPhone.trim(), points: redeemTier.points }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal menebus");
+      setLoyaltyPoints(p => Math.max(0, p - redeemTier.points));
+      setRedeemVoucher({ code: data.code, reward: data.reward });
+      setRedeemTier(null);
+    } catch (e) { setRedeemErr(e instanceof Error ? e.message : "Ralat berlaku"); }
+    finally { setRedeeming(false); }
+  }
+
   async function doCheckIn() {
     if (!custPhone.trim() || checkingIn || checkedInToday) return;
     setCheckingIn(true); setCheckInMsg(null);
@@ -283,7 +366,7 @@ export default function CustomerApp() {
       // Save cart for reorder
       try { localStorage.setItem("loka_last_cart", JSON.stringify(cartItems)); } catch {}
 
-      if ((payMethod === "fpx" || payMethod === "card") && orderId) {
+      if (payMethod !== "cash" && orderId) {
         if (!data.payment_url) {
           throw new Error("Gagal jana pautan pembayaran. Sila cuba lagi.");
         }
@@ -550,67 +633,155 @@ export default function CustomerApp() {
 
           {/* ━━━ REWARDS ━━━ */}
           {tab === "rewards" && (
-            <div className="px-5 pt-5">
-              <h1 className="text-center text-lg font-bold text-[#7F1D1D] mb-6">Ganjaran & Misi</h1>
-              <div className="flex flex-col items-center mb-8">
-                <div className="relative flex h-40 w-40 items-center justify-center">
-                  <svg className="absolute inset-0" viewBox="0 0 160 160">
-                    <circle cx="80" cy="80" r="70" fill="none" stroke="#F3F4F6" strokeWidth="8" />
-                    <circle cx="80" cy="80" r="70" fill="none" stroke="#7F1D1D" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${Math.min((loyaltyPoints / 1000) * 440, 440)} 440`} transform="rotate(-90 80 80)" className="transition-all duration-1000" />
-                  </svg>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-[#7F1D1D]">{loyaltyPoints}</div>
-                    <div className="text-xs text-gray-400 font-medium">points</div>
-                    <div className="text-[10px] text-gray-300 mt-0.5">{1000 - Math.min(loyaltyPoints, 1000)} lagi ke 1000</div>
+            <div className="pb-6">
+              {/* Hero */}
+              <div className="relative overflow-hidden px-5 pt-8 pb-6" style={{ background: "linear-gradient(135deg, #7F1D1D 0%, #991B1B 60%, #B91C1C 100%)" }}>
+                <div className="pointer-events-none absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)", backgroundSize: "20px 20px" }} />
+                <div className="relative flex flex-col items-center">
+                  <div className="relative flex h-36 w-36 items-center justify-center mb-3">
+                    <svg className="absolute inset-0" viewBox="0 0 144 144">
+                      <circle cx="72" cy="72" r="62" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="8" />
+                      <circle cx="72" cy="72" r="62" fill="none" stroke="white" strokeWidth="8" strokeLinecap="round"
+                        strokeDasharray={`${Math.min((loyaltyPoints / 1000) * 390, 390)} 390`}
+                        transform="rotate(-90 72 72)" className="transition-all duration-1000" />
+                    </svg>
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-white">{loyaltyPoints}</div>
+                      <div className="text-[10px] text-red-200 font-medium">mata</div>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-white/20 px-4 py-1 text-xs font-bold text-white">{getTier(loyaltyPoints)}</span>
+                  {/* Tier progress */}
+                  <div className="mt-4 w-full">
+                    <div className="flex justify-between mb-1.5">
+                      {[{ label: "Biasa", pts: 0 }, { label: "Perak", pts: 200 }, { label: "Emas", pts: 500 }, { label: "Platinum", pts: 1000 }].map(t => (
+                        <span key={t.label} className={`text-[9px] font-bold ${loyaltyPoints >= t.pts ? "text-white" : "text-white/30"}`}>{t.label}</span>
+                      ))}
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-white/20">
+                      <div className="h-full rounded-full bg-white transition-all duration-1000" style={{ width: `${Math.min((loyaltyPoints / 1000) * 100, 100)}%` }} />
+                    </div>
+                    <p className="text-center text-[10px] text-red-200 mt-1.5">
+                      {loyaltyPoints >= 1000 ? "Tahap tertinggi! 🏆" : `${1000 - Math.min(loyaltyPoints, 1000)} pts lagi ke Platinum`}
+                    </p>
                   </div>
                 </div>
               </div>
-              {expiringPoints30d > 0 && (
-                <div className="mb-5 flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3">
-                  <span className="text-xl">⏳</span>
-                  <div>
-                    <p className="text-sm font-bold text-amber-800">{expiringPoints30d} pts akan tamat dalam 30 hari</p>
-                    <p className="text-[11px] text-amber-600">Tebus sebelum luput!</p>
+
+              <div className="px-4 pt-4 space-y-4">
+                {/* Expiring warning */}
+                {expiringPoints30d > 0 && (
+                  <div className="flex items-center gap-3 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3">
+                    <span className="text-xl">⏳</span>
+                    <div>
+                      <p className="text-sm font-bold text-amber-800">{expiringPoints30d} pts akan tamat dalam 30 hari</p>
+                      <p className="text-[11px] text-amber-600">Tebus sebelum luput!</p>
+                    </div>
                   </div>
-                </div>
-              )}
-              <div className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm mb-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-gray-900">Daily Check-in</h3>
-                  <span className="text-xs text-[#7F1D1D] font-semibold">+1 pt/hari</span>
-                </div>
-                <div className="flex justify-between mb-3">
-                  {["Isn", "Sel", "Rab", "Kha", "Jum", "Sab", "Ahd"].map((day, i) => {
-                    const today = todayGridIndex();
-                    const isToday = i === today;
-                    const isPast = i < today;
-                    return (
-                      <div key={day} className="flex flex-col items-center gap-1">
-                        <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold ${isToday && checkedInToday ? "bg-[#7F1D1D] text-white" : isToday ? "border-2 border-[#7F1D1D] text-[#7F1D1D]" : isPast ? "bg-gray-200 text-gray-400" : "bg-gray-100 text-gray-300"}`}>
-                          {isToday && checkedInToday ? "✓" : isToday ? "+" : "·"}
+                )}
+
+                {/* Misi */}
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 mb-3">🎯 Misi</h3>
+                  <div className="space-y-2.5">
+                    {missions.map(m => (
+                      <div key={m.id} className={`rounded-2xl border p-3.5 ${m.done ? "bg-green-50 border-green-200" : "bg-white border-gray-100"} shadow-sm`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg ${m.done ? "bg-green-100" : "bg-gray-100"}`}>{m.icon}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className={`text-xs font-bold ${m.done ? "text-green-700" : "text-gray-900"}`}>{m.label}</p>
+                              <span className={`text-[10px] font-bold shrink-0 ${m.done ? "text-green-600" : "text-[#7F1D1D]"}`}>{m.reward}</span>
+                            </div>
+                            <p className="text-[11px] text-gray-400 mt-0.5">{m.desc}</p>
+                            {m.total > 1 && (
+                              <div className="mt-1.5">
+                                <div className="h-1 w-full rounded-full bg-gray-100">
+                                  <div className={`h-full rounded-full transition-all ${m.done ? "bg-green-500" : "bg-[#7F1D1D]"}`} style={{ width: `${(m.progress / m.total) * 100}%` }} />
+                                </div>
+                                <p className="text-[9px] text-gray-400 mt-0.5">{m.progress}/{m.total}</p>
+                              </div>
+                            )}
+                          </div>
+                          {m.done && <span className="text-green-500 text-lg shrink-0">✓</span>}
                         </div>
-                        <span className={`text-[9px] font-medium ${isToday ? "text-[#7F1D1D]" : "text-gray-400"}`}>{day}</span>
                       </div>
-                    );
-                  })}
-                </div>
-                {checkInMsg && <p className="text-center text-xs mb-2 font-medium" style={{ color: checkInMsg.startsWith("+") ? "#16a34a" : "#7F1D1D" }}>{checkInMsg}</p>}
-                <button onClick={() => void doCheckIn()} disabled={checkedInToday || checkingIn || !custPhone.trim()} className="w-full rounded-xl bg-[#7F1D1D] py-2.5 text-xs font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed">
-                  {checkingIn ? "Sedang Check-in..." : checkedInToday ? "✓ Dah Check-in Hari Ini" : "Check In & Dapat 1 pt"}
-                </button>
-                {!custPhone.trim() && <p className="text-center text-[10px] text-gray-400 mt-1.5">Tetapkan no telefon dalam tab Akaun</p>}
-              </div>
-              <h3 className="text-sm font-bold text-gray-900 mb-3">Tebus Ganjaran</h3>
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                {REDEEM_TIERS.map(tier => (
-                  <div key={tier.points} className={`rounded-2xl bg-gradient-to-br ${tier.color} p-4 shadow-md relative overflow-hidden`}>
-                    <div className="absolute right-2 top-2 text-white/10 text-4xl font-black">☕</div>
-                    <p className="text-2xl font-black text-white">{tier.reward}</p>
-                    <p className="text-xs text-red-200 mt-1">Tebus dengan</p>
-                    <p className="text-sm font-bold text-white">{tier.points} pts</p>
-                    {loyaltyPoints >= tier.points && <div className="mt-2 rounded-lg bg-white/20 py-1 text-center text-[10px] font-bold text-white">Boleh ditebus!</div>}
+                    ))}
                   </div>
-                ))}
+                </div>
+
+                {/* Daily Check-in */}
+                <div className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-gray-900">Check-in Harian</h3>
+                    <span className="text-xs text-[#7F1D1D] font-semibold">+1 pt/hari</span>
+                  </div>
+                  <div className="flex justify-between mb-3">
+                    {["Isn", "Sel", "Rab", "Kha", "Jum", "Sab", "Ahd"].map((day, i) => {
+                      const today = todayGridIndex();
+                      const isToday = i === today;
+                      const isPast = i < today;
+                      return (
+                        <div key={day} className="flex flex-col items-center gap-1">
+                          <div className={`flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-bold ${isToday && checkedInToday ? "bg-[#7F1D1D] text-white" : isToday ? "border-2 border-[#7F1D1D] text-[#7F1D1D]" : isPast ? "bg-gray-100 text-gray-400" : "bg-gray-50 text-gray-200"}`}>
+                            {isToday && checkedInToday ? "✓" : isToday ? "+" : "·"}
+                          </div>
+                          <span className={`text-[9px] font-medium ${isToday ? "text-[#7F1D1D]" : "text-gray-300"}`}>{day}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {checkInMsg && <p className="text-center text-xs mb-2 font-medium" style={{ color: checkInMsg.startsWith("+") ? "#16a34a" : "#7F1D1D" }}>{checkInMsg}</p>}
+                  <button onClick={() => void doCheckIn()} disabled={checkedInToday || checkingIn || !custPhone.trim()} className="w-full rounded-xl bg-[#7F1D1D] py-2.5 text-xs font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed active:bg-[#6B1818]">
+                    {checkingIn ? "Sedang Check-in..." : checkedInToday ? "✓ Dah Check-in Hari Ini" : "Check In & Dapat 1 pt"}
+                  </button>
+                  {!custPhone.trim() && <p className="text-center text-[10px] text-gray-400 mt-1.5">Tetapkan no telefon dalam tab Akaun dahulu</p>}
+                </div>
+
+                {/* Tebus Ganjaran */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-gray-900">🎁 Tebus Ganjaran</h3>
+                    <span className="text-xs text-gray-400">{loyaltyPoints} pts ada</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {REDEEM_TIERS.map(tier => {
+                      const canRedeem = loyaltyPoints >= tier.points && custPhone.trim();
+                      return (
+                        <button key={tier.points} onClick={() => canRedeem && setRedeemTier(tier)} className={`rounded-2xl bg-gradient-to-br ${tier.color} p-4 shadow-md relative overflow-hidden text-left transition-transform ${canRedeem ? "active:scale-[0.97]" : "opacity-50 cursor-not-allowed"}`}>
+                          <div className="absolute right-2 top-2 text-white/10 text-4xl font-black">☕</div>
+                          <p className="text-2xl font-black text-white">{tier.reward}</p>
+                          <p className="text-xs text-red-200 mt-1">Tebus dengan</p>
+                          <p className="text-sm font-bold text-white">{tier.points} pts</p>
+                          {canRedeem
+                            ? <div className="mt-2 rounded-lg bg-white/25 py-1 text-center text-[10px] font-bold text-white">Tebus Sekarang →</div>
+                            : <div className="mt-2 rounded-lg bg-black/10 py-1 text-center text-[10px] font-medium text-white/60">
+                                {!custPhone.trim() ? "Set no telefon dulu" : `Perlu ${tier.points - loyaltyPoints} pts lagi`}
+                              </div>
+                          }
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* How it works */}
+                <div className="rounded-2xl bg-gray-50 border border-gray-100 p-4">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Cara Ganjaran Berfungsi</h4>
+                  <div className="space-y-2.5">
+                    {[
+                      { icon: "🛍️", text: "Buat order → dapat mata (berdasarkan jumlah belanja)" },
+                      { icon: "📅", text: "Check-in harian → +1 pt percuma setiap hari" },
+                      { icon: "🎁", text: "Kumpul mata → tebus diskaun tunai" },
+                      { icon: "🧾", text: "Tunjuk kod voucher kepada kaunter untuk gunakan" },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-start gap-2.5">
+                        <span className="text-base shrink-0">{item.icon}</span>
+                        <p className="text-xs text-gray-500">{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -744,18 +915,52 @@ export default function CustomerApp() {
 
               <div className="px-5 mb-4">
                 <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-                  <p className="px-4 pt-3.5 pb-1.5 text-xs font-bold text-[#7F1D1D]/60 uppercase tracking-wider">Profil</p>
-                  <div className="border-t border-gray-50 px-4 py-3.5 space-y-2.5">
+                  <button onClick={() => setProfileOpen(o => !o)} className="flex w-full items-center justify-between px-4 pt-3.5 pb-3.5 active:bg-gray-50">
+                    <p className="text-xs font-bold text-[#7F1D1D]/60 uppercase tracking-wider">Profil</p>
+                    <span className={`text-gray-400 text-sm transition-transform duration-200 ${profileOpen ? "rotate-180" : ""}`}>⌄</span>
+                  </button>
+                  {profileOpen && <div className="border-t border-gray-100 px-4 py-3.5 space-y-2.5">
                     <div>
                       <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Nama</label>
                       <input value={custName} onChange={e => { setCustName(e.target.value); try { localStorage.setItem("loka_guest_name", e.target.value); } catch {} }} placeholder="Masukkan nama" className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20" />
                     </div>
                     <div>
                       <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">No Telefon</label>
-                      <input value={custPhone} onChange={e => { setCustPhone(e.target.value); try { localStorage.setItem("loka_guest_phone", e.target.value); } catch {} }} placeholder="Contoh: 0123456789" type="tel" className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20" />
+                      <div className="mt-1 flex gap-2">
+                        <select
+                          value={phonePrefix}
+                          onChange={e => {
+                            const p = e.target.value;
+                            setPhonePrefix(p);
+                            const full = p + phoneRest;
+                            setCustPhone(full);
+                            try { localStorage.setItem("loka_guest_phone", full); } catch {}
+                          }}
+                          className="w-24 shrink-0 rounded-xl border border-gray-200 px-2 py-2.5 text-sm outline-none focus:border-[#7F1D1D] bg-white"
+                        >
+                          {MY_PREFIXES.map(({ prefix, label }) => (
+                            <option key={prefix} value={prefix}>{label}</option>
+                          ))}
+                        </select>
+                        <input
+                          value={phoneRest}
+                          onChange={e => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            setPhoneRest(digits);
+                            const full = phonePrefix + digits;
+                            setCustPhone(full);
+                            try { localStorage.setItem("loka_guest_phone", full); } catch {}
+                          }}
+                          placeholder="40026446"
+                          type="tel"
+                          inputMode="numeric"
+                          maxLength={9}
+                          className="flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20"
+                        />
+                      </div>
                     </div>
                     <p className="text-[10px] text-gray-400">No telefon digunakan untuk jejak pesanan & notifikasi WhatsApp</p>
-                  </div>
+                  </div>}
                 </div>
               </div>
 
@@ -786,14 +991,24 @@ export default function CustomerApp() {
           <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 pb-[env(safe-area-inset-bottom,0px)]">
             <div className="mx-auto max-w-lg flex">
               {([
-                { key: "home" as AppTab, label: "Utama", icon: "🏠" },
-                { key: "menu" as AppTab, label: "Menu", icon: "☕" },
-                { key: "rewards" as AppTab, label: "Ganjaran", icon: "🎁" },
-                { key: "orders" as AppTab, label: "Pesanan", icon: "📋", badge: activeOrders.length > 0 },
-                { key: "account" as AppTab, label: "Akaun", icon: "👤" },
+                { key: "home" as AppTab, label: "Home", icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>
+                )},
+                { key: "menu" as AppTab, label: "Menu", icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M18 8h1a4 4 0 010 8h-1"/><path d="M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+                )},
+                { key: "rewards" as AppTab, label: "Rewards", icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z"/></svg>
+                )},
+                { key: "orders" as AppTab, label: "Orders", badge: activeOrders.length > 0, icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+                )},
+                { key: "account" as AppTab, label: "Account", icon: (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                )},
               ]).map(t => (
                 <button key={t.key} onClick={() => setTab(t.key)} className={`relative flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold transition-colors ${tab === t.key ? "text-[#7F1D1D]" : "text-gray-400"}`}>
-                  <span className="text-[17px]">{t.icon}</span>
+                  {t.icon}
                   {t.label}
                   {t.badge && <div className="absolute top-1.5 right-[18%] h-2 w-2 rounded-full bg-[#7F1D1D] border-2 border-white" />}
                 </button>
@@ -938,16 +1153,25 @@ export default function CustomerApp() {
                   <div className="rounded-2xl bg-white border border-gray-200 p-4 space-y-3">
                     <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Maklumat Anda</p>
                     <input value={custName} onChange={e => setCustName(e.target.value)} placeholder="Nama *" className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20" />
-                    <input value={custPhone} onChange={e => setCustPhone(e.target.value)} placeholder="No Telefon * (cth: 0123456789)" type="tel" className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20" />
+                    <div className="flex gap-2">
+                      <select value={phonePrefix} onChange={e => { const p = e.target.value; setPhonePrefix(p); setCustPhone(p + phoneRest); }} className="w-24 shrink-0 rounded-xl border border-gray-200 px-2 py-3 text-sm outline-none focus:border-[#7F1D1D] bg-white">
+                        {MY_PREFIXES.map(({ prefix, label }) => <option key={prefix} value={prefix}>{label}</option>)}
+                      </select>
+                      <input value={phoneRest} onChange={e => { const d = e.target.value.replace(/\D/g, ""); setPhoneRest(d); setCustPhone(phonePrefix + d); }} placeholder="40026446 *" type="tel" inputMode="numeric" maxLength={9} className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20" />
+                    </div>
                     <p className="text-[10px] text-gray-300">Notifikasi WhatsApp & jejak pesanan</p>
                   </div>
                   <div className="rounded-2xl bg-white border border-gray-200 p-4 space-y-3">
                     <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Kaedah Bayaran</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {[["fpx", "🏦", "Online Banking"], ["card", "💳", "Card / E-Wallet"]].map(([m, icon, l]) => (
-                        <button key={m} onClick={() => setPayMethod(m)} className={`rounded-xl py-3.5 text-xs font-bold transition-all flex flex-col items-center gap-1 ${payMethod === m ? "bg-[#7F1D1D] text-white shadow-md" : "bg-gray-50 border border-gray-200 text-gray-600"}`}>
-                          <span className="text-xl">{icon}</span>
-                          {l}
+                      {([
+                        { key: "fpx",  icon: "🏦", label: "Online Banking" },
+                        { key: "cash", icon: "💵", label: "Cash — Kaunter" },
+                        { key: "card", icon: "💳", label: "Card / E-Wallet" },
+                      ] as const).filter(m => enabledPayments[m.key]).map(m => (
+                        <button key={m.key} onClick={() => setPayMethod(m.key)} className={`rounded-xl py-3.5 text-xs font-bold transition-all flex flex-col items-center gap-1 ${payMethod === m.key ? "bg-[#7F1D1D] text-white shadow-md" : "bg-gray-50 border border-gray-200 text-gray-600"}`}>
+                          <span className="text-xl">{m.icon}</span>
+                          {m.label}
                         </button>
                       ))}
                     </div>
@@ -975,6 +1199,64 @@ export default function CustomerApp() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ━━━ REDEEM CONFIRM MODAL ━━━ */}
+        {redeemTier && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={() => { setRedeemTier(null); setRedeemErr(null); }}>
+            <div className="w-full max-w-lg rounded-t-3xl bg-white p-6 pb-[env(safe-area-inset-bottom,24px)] anim-fade-scale" onClick={e => e.stopPropagation()}>
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-200" />
+              <div className={`rounded-2xl bg-gradient-to-br ${redeemTier.color} p-5 mb-5 text-center`}>
+                <p className="text-4xl font-black text-white">{redeemTier.reward}</p>
+                <p className="text-sm text-red-200 mt-1">Diskaun Tunai</p>
+              </div>
+              <div className="space-y-2 mb-5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Kos tebus</span>
+                  <span className="font-bold text-gray-900">{redeemTier.points} pts</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Baki mata anda</span>
+                  <span className="font-bold text-gray-900">{loyaltyPoints} pts</span>
+                </div>
+                <div className="flex justify-between text-sm border-t pt-2">
+                  <span className="text-gray-500">Baki selepas tebus</span>
+                  <span className="font-bold text-[#7F1D1D]">{loyaltyPoints - redeemTier.points} pts</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 text-center mb-4">Kod voucher akan dipaparkan — tunjuk kepada kaunter untuk gunakan diskaun.</p>
+              {redeemErr && <p className="text-xs text-red-500 text-center mb-3">{redeemErr}</p>}
+              <button onClick={() => void doRedeem()} disabled={redeeming} className="w-full rounded-2xl bg-[#7F1D1D] py-4 text-sm font-bold text-white disabled:opacity-50 active:bg-[#6B1818]">
+                {redeeming ? "Memproses..." : `Tebus ${redeemTier.reward} — ${redeemTier.points} pts`}
+              </button>
+              <button onClick={() => { setRedeemTier(null); setRedeemErr(null); }} className="w-full py-3 text-sm text-gray-400 font-medium mt-1">Batal</button>
+            </div>
+          </div>
+        )}
+
+        {/* ━━━ VOUCHER SCREEN ━━━ */}
+        {redeemVoucher && (
+          <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[#FDF8F4] px-6">
+            <div className="anim-fade-scale flex flex-col items-center w-full max-w-sm">
+              <div className="mb-2 text-5xl">🎉</div>
+              <h1 className="text-2xl font-bold text-gray-900 mt-2">Tebus Berjaya!</h1>
+              <p className="text-gray-400 text-sm mt-1">Diskaun {redeemVoucher.reward} untuk pesanan anda</p>
+              <div className="mt-6 w-full rounded-3xl border-2 border-dashed border-[#7F1D1D] bg-white p-6 text-center shadow-lg">
+                <p className="text-xs font-bold text-[#7F1D1D]/50 uppercase tracking-widest mb-2">Kod Voucher</p>
+                <p className="text-4xl font-black tracking-widest text-[#7F1D1D]">{redeemVoucher.code}</p>
+                <div className="mt-3 h-px bg-gray-100" />
+                <p className="text-2xl font-black text-gray-900 mt-3">{redeemVoucher.reward} OFF</p>
+                <p className="text-xs text-gray-400 mt-1">Sah hari ini sahaja</p>
+              </div>
+              <div className="mt-4 w-full rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 flex items-center gap-3">
+                <span className="text-xl">⚠️</span>
+                <p className="text-xs text-amber-700 font-medium">Tunjuk kod ini kepada kaunter sebelum bayar. Satu penggunaan sahaja.</p>
+              </div>
+              <button onClick={() => { setRedeemVoucher(null); setTab("rewards"); }} className="mt-5 w-full rounded-2xl bg-[#7F1D1D] py-4 text-base font-bold text-white shadow-lg active:bg-[#6B1818]">
+                Selesai
+              </button>
+            </div>
           </div>
         )}
 
