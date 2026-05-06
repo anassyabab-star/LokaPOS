@@ -1,0 +1,40 @@
+{
+  "name": "Loka POS — Kedai Kopi",
+  "short_name": "Loka POS",
+  "description": "Point-of-Sale system untuk kedai kopi Loka",
+  "start_url": "/pos",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a0a",
+  "theme_color": "#7F1D1D",
+  "scope": "/",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open POS",
+      "short_name": "POS",
+      "url": "/pos",
+      "description": "Buka cashier POS"
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Admin",
+      "url": "/dashboard",
+      "description": "Admin Dashboard"
+    }
+  ]
+}

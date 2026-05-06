@@ -1,0 +1,650 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+type SignupRequest = {
+  id: string;
+  email: string;
+  full_name: string;
+  requested_role: "admin" | "cashier" | "customer";
+  status: "pending" | "approved" | "rejected";
+  requested_at: string;
+  reviewed_at: string | null;
+  review_note: string | null;
+};
+
+type RequestCounts = { total: number; pending: number; approved: number; rejected: number };
+
+type ActiveUser = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: "admin" | "cashier" | "customer" | "unknown";
+  created_at: string | null;
+  last_sign_in_at: string | null;
+};
+
+type ActiveCounts = { total: number; admin: number; cashier: number; customer: number; unknown: number };
+
+const EMPTY_REQUEST_COUNTS: RequestCounts = { total: 0, pending: 0, approved: 0, rejected: 0 };
+const EMPTY_ACTIVE_COUNTS: ActiveCounts = { total: 0, admin: 0, cashier: 0, customer: 0, unknown: 0 };
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  fontSize: 13,
+  color: "var(--d-text-1)",
+  background: "var(--d-input-bg)",
+  border: "1px solid var(--d-border)",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+function MiniStatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
+  return (
+    <div style={{ minWidth: 130, background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 12, padding: "12px 14px" }}>
+      <p style={{ fontSize: 10, fontWeight: 500, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</p>
+      <p style={{ fontSize: 20, fontWeight: 700, color: accent ?? "var(--d-text-1)", marginTop: 4, lineHeight: 1 }}>{value}</p>
+    </div>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", background: "var(--d-surface-hover)", color: "var(--d-text-3)", border: "1px solid var(--d-border)" }}>
+      {role}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: SignupRequest["status"] }) {
+  const styles: React.CSSProperties =
+    status === "pending"
+      ? { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px solid var(--d-warning)" }
+      : status === "approved"
+        ? { color: "var(--d-success)", background: "var(--d-success-soft)", border: "1px solid var(--d-success)" }
+        : { color: "var(--d-error)", background: "var(--d-error-soft)", border: "1px solid var(--d-error)" };
+  return (
+    <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, textTransform: "capitalize", ...styles }}>
+      {status}
+    </span>
+  );
+}
+
+export default function UsersPage() {
+  const [status, setStatus] = useState("all");
+  const [role, setRole] = useState("all");
+  const [query, setQuery] = useState("");
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
+  const [requests, setRequests] = useState<SignupRequest[]>([]);
+  const [requestCounts, setRequestCounts] = useState<RequestCounts>(EMPTY_REQUEST_COUNTS);
+  const [activeCounts, setActiveCounts] = useState<ActiveCounts>(EMPTY_ACTIVE_COUNTS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteRole, setInviteRole] = useState<"cashier" | "admin">("cashier");
+  const [inviting, setInviting] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createRole, setCreateRole] = useState<"cashier" | "admin">("cashier");
+  const [createPassword, setCreatePassword] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createResult, setCreateResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const [approvedCreds, setApprovedCreds] = useState<{ email: string; password: string } | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const usersParams = new URLSearchParams();
+      usersParams.set("role", role);
+      if (query.trim()) usersParams.set("q", query.trim());
+
+      const [requestsRes, usersRes] = await Promise.all([
+        fetch(`/api/admin/signup-requests?status=${status}`, { cache: "no-store" }),
+        fetch(`/api/admin/users?${usersParams.toString()}`, { cache: "no-store" }),
+      ]);
+
+      const requestsRaw = await requestsRes.text();
+      let requestsData: { error?: string; requests?: SignupRequest[]; counts?: RequestCounts } = {};
+      try { requestsData = requestsRaw ? (JSON.parse(requestsRaw) as typeof requestsData) : {}; }
+      catch { throw new Error("Invalid signup request response"); }
+      if (!requestsRes.ok) throw new Error(requestsData?.error || "Failed to load users");
+
+      const usersRaw = await usersRes.text();
+      let usersData: { error?: string; users?: ActiveUser[]; counts?: ActiveCounts } = {};
+      try { usersData = usersRaw ? (JSON.parse(usersRaw) as typeof usersData) : {}; }
+      catch { throw new Error("Invalid active users response"); }
+      if (!usersRes.ok) throw new Error(usersData?.error || "Failed to load active users");
+
+      setRequests(requestsData.requests || []);
+      setRequestCounts(requestsData.counts || EMPTY_REQUEST_COUNTS);
+      setActiveUsers(usersData.users || []);
+      setActiveCounts(usersData.counts || EMPTY_ACTIVE_COUNTS);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load users");
+      setActiveUsers([]); setRequests([]);
+      setRequestCounts(EMPTY_REQUEST_COUNTS); setActiveCounts(EMPTY_ACTIVE_COUNTS);
+    } finally {
+      setLoading(false);
+    }
+  }, [status, role, query]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function createUserDirect() {
+    if (!createEmail.trim() || !createPassword.trim()) return;
+    setCreating(true); setCreateResult(null);
+    try {
+      const res = await fetch("/api/admin/users/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: createEmail.trim(), full_name: createName.trim(), role: createRole, password: createPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCreateResult({ ok: false, msg: data?.error || "Gagal cipta akaun" });
+      } else {
+        setCreateResult({ ok: true, msg: `Akaun ${createEmail.trim()} berjaya dicipta` });
+        setCreateEmail(""); setCreateName(""); setCreateRole("cashier"); setCreatePassword("");
+        await load();
+      }
+    } catch {
+      setCreateResult({ ok: false, msg: "Ralat rangkaian" });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function sendInvite() {
+    if (!inviteEmail.trim()) return;
+    setInviting(true); setInviteResult(null);
+    try {
+      const res = await fetch("/api/admin/users/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail.trim(), full_name: inviteName.trim(), role: inviteRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setInviteResult({ ok: false, msg: data?.error || "Gagal hantar jemputan" });
+      } else {
+        setInviteResult({ ok: true, msg: `Jemputan dihantar ke ${inviteEmail.trim()}` });
+        setInviteEmail(""); setInviteName(""); setInviteRole("cashier");
+        await load();
+      }
+    } catch {
+      setInviteResult({ ok: false, msg: "Ralat rangkaian" });
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function reviewRequest(id: string, action: "approve" | "reject") {
+    setProcessingId(id); setError(null);
+    try {
+      const req = requests.find(r => r.id === id);
+      const res = await fetch(`/api/admin/signup-requests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const raw = await res.text();
+      const data = raw ? (JSON.parse(raw) as { error?: string; temp_password?: string }) : {};
+      if (!res.ok) throw new Error(data?.error || "Action failed");
+      if (action === "approve" && data.temp_password && req) {
+        setApprovedCreds({ email: req.email, password: data.temp_password });
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function deleteUser(userId: string) {
+    setDeletingUserId(userId); setError(null);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data?.error || "Gagal padam pengguna");
+      setEditingUserId(null);
+      setConfirmDeleteId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal padam pengguna");
+    } finally {
+      setDeletingUserId(null);
+    }
+  }
+
+  const filteredRequests = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return requests;
+    return requests.filter(r =>
+      r.full_name.toLowerCase().includes(q) ||
+      r.email.toLowerCase().includes(q) ||
+      r.requested_role.toLowerCase().includes(q)
+    );
+  }, [query, requests]);
+
+  return (
+    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Users</h1>
+          <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
+            Semak akaun aktif + signup request, approve/reject akaun, dan track growth pengguna.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={() => { setShowCreateModal(true); setCreateResult(null); }}
+            style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--d-surface)", color: "var(--d-text-1)", border: "1px solid var(--d-border)", cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            + Tambah Terus
+          </button>
+          <button
+            onClick={() => { setShowInviteModal(true); setInviteResult(null); }}
+            style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--d-accent)", color: "#fff", border: "none", cursor: "pointer", whiteSpace: "nowrap" }}
+          >
+            + Jemput via Email
+          </button>
+        </div>
+      </div>
+
+      {/* Temp Password Modal — shown after approving a new user */}
+      {approvedCreds && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--d-surface)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 400, border: "1px solid var(--d-border)" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--d-success)", marginBottom: 6 }}>Akaun Diluluskan</p>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 14 }}>Butiran Log Masuk</h2>
+            <p style={{ fontSize: 13, color: "var(--d-text-3)", marginBottom: 18 }}>
+              Akaun baru telah dicipta. Kongsikan butiran ini dengan staf — password boleh ditukar selepas log masuk pertama.
+            </p>
+            <div style={{ background: "var(--d-bg)", borderRadius: 10, padding: "14px 16px", marginBottom: 20, border: "1px solid var(--d-border)" }}>
+              <div style={{ marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: "var(--d-text-3)", marginBottom: 3 }}>EMAIL</p>
+                <p style={{ fontSize: 14, fontWeight: 600, color: "var(--d-text-1)", wordBreak: "break-all" }}>{approvedCreds.email}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: "var(--d-text-3)", marginBottom: 3 }}>PASSWORD SEMENTARA</p>
+                <p style={{ fontSize: 18, fontWeight: 700, color: "var(--d-accent)", letterSpacing: "0.08em", fontFamily: "monospace" }}>{approvedCreds.password}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setApprovedCreds(null)}
+              style={{ width: "100%", padding: "11px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+            >
+              Saya Dah Catat — Tutup
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Modal */}
+      {showInviteModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--d-surface)", borderRadius: 16, padding: 24, width: "100%", maxWidth: 420, border: "1px solid var(--d-border)" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 4 }}>Jemput Staf</h2>
+            <p style={{ fontSize: 13, color: "var(--d-text-3)", marginBottom: 20 }}>
+              Email jemputan akan dihantar. Staf klik link dan set password sendiri.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Email *</label>
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={e => setInviteEmail(e.target.value)}
+                  placeholder="staff@email.com"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Nama penuh</label>
+                <input
+                  type="text"
+                  value={inviteName}
+                  onChange={e => setInviteName(e.target.value)}
+                  placeholder="cth: Ahmad bin Ali"
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Role</label>
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value as "cashier" | "admin")} style={inputStyle}>
+                  <option value="cashier">Cashier (Staf)</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+
+            {inviteResult && (
+              <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, fontSize: 13, background: inviteResult.ok ? "var(--d-success-soft)" : "var(--d-error-soft)", color: inviteResult.ok ? "var(--d-success)" : "var(--d-error)", border: `1px solid ${inviteResult.ok ? "var(--d-success)" : "var(--d-error)"}` }}>
+                {inviteResult.ok ? "✓ " : "✗ "}{inviteResult.msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => { setShowInviteModal(false); setInviteResult(null); }}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid var(--d-border)", background: "transparent", color: "var(--d-text-2)", fontSize: 13, cursor: "pointer" }}
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => void sendInvite()}
+                disabled={inviting || !inviteEmail.trim()}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: inviting || !inviteEmail.trim() ? 0.6 : 1 }}
+              >
+                {inviting ? "Menghantar..." : "Hantar Jemputan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Direct Modal */}
+      {showCreateModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "var(--d-surface)", borderRadius: 16, padding: 24, width: "100%", maxWidth: 420, border: "1px solid var(--d-border)" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 4 }}>Tambah Staf Terus</h2>
+            <p style={{ fontSize: 13, color: "var(--d-text-3)", marginBottom: 20 }}>
+              Cipta akaun dengan password yang anda tetapkan sendiri. Tiada email jemputan dihantar — kongsikan butiran log masuk terus kepada staf.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Email *</label>
+                <input type="email" value={createEmail} onChange={e => setCreateEmail(e.target.value)} placeholder="staff@email.com" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Nama penuh</label>
+                <input type="text" value={createName} onChange={e => setCreateName(e.target.value)} placeholder="cth: Siti binti Rahman" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Password *</label>
+                <input type="text" value={createPassword} onChange={e => setCreatePassword(e.target.value)} placeholder="Min. 6 aksara" style={inputStyle} autoComplete="off" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--d-text-2)", display: "block", marginBottom: 5 }}>Role</label>
+                <select value={createRole} onChange={e => setCreateRole(e.target.value as "cashier" | "admin")} style={inputStyle}>
+                  <option value="cashier">Cashier (Staf)</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+
+            {createResult && (
+              <div style={{ marginBottom: 16, padding: "10px 14px", borderRadius: 8, fontSize: 13, background: createResult.ok ? "var(--d-success-soft)" : "var(--d-error-soft)", color: createResult.ok ? "var(--d-success)" : "var(--d-error)", border: `1px solid ${createResult.ok ? "var(--d-success)" : "var(--d-error)"}` }}>
+                {createResult.ok ? "✓ " : "✗ "}{createResult.msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => { setShowCreateModal(false); setCreateResult(null); }}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid var(--d-border)", background: "transparent", color: "var(--d-text-2)", fontSize: 13, cursor: "pointer" }}
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => void createUserDirect()}
+                disabled={creating || !createEmail.trim() || !createPassword.trim()}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "none", background: "var(--d-accent)", color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: creating || !createEmail.trim() || !createPassword.trim() ? 0.6 : 1 }}
+              >
+                {creating ? "Mencipta..." : "Cipta Akaun"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active accounts stats */}
+      <p style={{ fontSize: 11, fontWeight: 600, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Active Accounts</p>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        <MiniStatCard label="Total" value={activeCounts.total} />
+        <MiniStatCard label="Admin" value={activeCounts.admin} accent="var(--d-success)" />
+        <MiniStatCard label="Cashier" value={activeCounts.cashier} accent="var(--d-warning)" />
+        <MiniStatCard label="Customer" value={activeCounts.customer} />
+      </div>
+
+      {/* Filter bar */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+          gap: 10,
+          background: "var(--d-surface)",
+          border: "1px solid var(--d-border)",
+          borderRadius: 14,
+          padding: "14px 16px",
+          marginBottom: 16,
+        }}
+      >
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name/email/role" style={inputStyle} />
+        <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle}>
+          <option value="all">All roles</option>
+          <option value="admin">Admin</option>
+          <option value="cashier">Cashier</option>
+          <option value="customer">Customer</option>
+          <option value="unknown">Unknown</option>
+        </select>
+        <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
+          <option value="all">All status</option>
+          <option value="pending">Pending</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <button type="button" onClick={() => void load()} style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#fff", background: "var(--d-accent)", border: "none", cursor: "pointer" }}>
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ marginBottom: 14, padding: "10px 14px", borderRadius: 10, fontSize: 13, color: "var(--d-error)", background: "var(--d-error-soft)", border: "1px solid var(--d-error)" }}>
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "20px 18px", fontSize: 13, color: "var(--d-text-3)" }}>
+          Loading users...
+        </div>
+      )}
+
+      {!loading && activeUsers.length === 0 && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
+          No active users found.
+        </div>
+      )}
+
+      {/* Active users list */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {!loading && activeUsers.map(user => (
+          <div key={user.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{user.full_name || "No name"}</p>
+                <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>{user.email || "—"}</p>
+                <div style={{ marginTop: 8 }}><RoleBadge role={user.role} /></div>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--d-text-3)", textAlign: "right" }}>
+                <p>Created: {user.created_at ? new Date(user.created_at).toLocaleString() : "—"}</p>
+                <p>Last sign in: {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : "—"}</p>
+                <button
+                  type="button"
+                  onClick={() => setEditingUserId(editingUserId === user.id ? null : user.id)}
+                  style={{ marginTop: 8, padding: "5px 12px", borderRadius: 7, fontSize: 12, color: "var(--d-text-2)", background: "transparent", border: "1px solid var(--d-border)", cursor: "pointer" }}
+                >
+                  {editingUserId === user.id ? "Cancel" : "Edit"}
+                </button>
+              </div>
+            </div>
+
+            {editingUserId === user.id && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--d-border)", display: "flex", flexDirection: "column", gap: 8 }}>
+                <input defaultValue={user.full_name} placeholder="Full name" id={`edit-name-${user.id}`} style={inputStyle} />
+                <input defaultValue="" placeholder="Phone (optional)" id={`edit-phone-${user.id}`} style={inputStyle} />
+                <select defaultValue={user.role} id={`edit-role-${user.id}`} style={inputStyle}>
+                  <option value="admin">Admin</option>
+                  <option value="cashier">Cashier</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const nameEl = document.getElementById(`edit-name-${user.id}`) as HTMLInputElement;
+                    const phoneEl = document.getElementById(`edit-phone-${user.id}`) as HTMLInputElement;
+                    const roleEl = document.getElementById(`edit-role-${user.id}`) as HTMLSelectElement;
+                    try {
+                      await fetch("/api/admin/users", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          user_id: user.id,
+                          full_name: nameEl?.value || user.full_name,
+                          phone: phoneEl?.value || "",
+                          role: roleEl?.value || user.role,
+                        }),
+                      });
+                      setEditingUserId(null);
+                      void load();
+                    } catch {}
+                  }}
+                  style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "#fff", background: "var(--d-accent)", border: "none", cursor: "pointer" }}
+                >
+                  Save Changes
+                </button>
+
+                {/* Delete — require double confirm */}
+                {confirmDeleteId !== user.id ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(user.id)}
+                    style={{ padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, color: "var(--d-error)", background: "transparent", border: "1px solid var(--d-error)", cursor: "pointer" }}
+                  >
+                    Padam Pengguna
+                  </button>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      style={{ flex: 1, padding: "9px 0", borderRadius: 8, fontSize: 13, color: "var(--d-text-2)", background: "transparent", border: "1px solid var(--d-border)", cursor: "pointer" }}
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteUser(user.id)}
+                      disabled={deletingUserId === user.id}
+                      style={{ flex: 2, padding: "9px 0", borderRadius: 8, fontSize: 13, fontWeight: 700, color: "#fff", background: "var(--d-error)", border: "none", cursor: deletingUserId === user.id ? "not-allowed" : "pointer", opacity: deletingUserId === user.id ? 0.6 : 1 }}
+                    >
+                      {deletingUserId === user.id ? "Memadamkan..." : "Ya, Padam Sekarang"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Divider */}
+      <div style={{ borderTop: "1px solid var(--d-border)", margin: "28px 0" }} />
+
+      {/* Signup Requests */}
+      <p style={{ fontSize: 11, fontWeight: 600, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>Signup Requests</p>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
+        <MiniStatCard label="Total" value={requestCounts.total} />
+        <MiniStatCard label="Pending" value={requestCounts.pending} accent="var(--d-warning)" />
+        <MiniStatCard label="Approved" value={requestCounts.approved} accent="var(--d-success)" />
+        <MiniStatCard label="Rejected" value={requestCounts.rejected} accent="var(--d-error)" />
+      </div>
+
+      {!loading && filteredRequests.length === 0 && (
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
+          No user requests found.
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {!loading && filteredRequests.map(request => (
+          <div key={request.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{request.full_name}</p>
+                <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>{request.email}</p>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                  <RoleBadge role={request.requested_role} />
+                  <StatusBadge status={request.status} />
+                </div>
+                <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 8 }}>
+                  Requested: {new Date(request.requested_at).toLocaleString()}
+                </p>
+                {request.reviewed_at && (
+                  <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>
+                    Reviewed: {new Date(request.reviewed_at).toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              {request.status === "pending" && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => void reviewRequest(request.id, "approve")}
+                    disabled={processingId === request.id}
+                    style={{
+                      padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      color: "#fff", background: "var(--d-success)", border: "none",
+                      cursor: processingId === request.id ? "not-allowed" : "pointer",
+                      opacity: processingId === request.id ? 0.5 : 1,
+                    }}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void reviewRequest(request.id, "reject")}
+                    disabled={processingId === request.id}
+                    style={{
+                      padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600,
+                      color: "#fff", background: "var(--d-accent)", border: "none",
+                      cursor: processingId === request.id ? "not-allowed" : "pointer",
+                      opacity: processingId === request.id ? 0.5 : 1,
+                    }}
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {request.review_note && (
+              <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--d-border-soft)", background: "var(--d-surface-hover)", fontSize: 12, color: "var(--d-text-3)" }}>
+                Note: {request.review_note}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

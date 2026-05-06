@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { requireAdminApi } from "@/lib/admin-api-auth";
+
+const supabase = createSupabaseAdminClient();
+
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+export async function PUT(req: Request, { params }: RouteContext) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
+  const { id } = await params;
+  const body = await req.json();
+  const name = String(body?.name || "").trim();
+
+  if (!name) {
+    return NextResponse.json({ error: "Name required" }, { status: 400 });
+  }
+
+  const { error } = await supabase.from("categories").update({ name }).eq("id", id);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true });
+}
+
+export async function DELETE(_: Request, { params }: RouteContext) {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
+  const { id } = await params;
+
+  const { error } = await supabase.from("categories").delete().eq("id", id);
+
+  if (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ success: true });
+}

@@ -1,0 +1,27 @@
+import { NextRequest, NextResponse } from "next/server";
+import { requireStaffApi } from "@/lib/staff-api-auth";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+
+const PROMO_CODE = "B1F1_KOPI";
+
+function normalizePhone(phone: string) {
+  return phone.replace(/\s+/g, "").replace(/^(\+?60|0)/, "60").toLowerCase();
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await requireStaffApi();
+  if (!auth.ok) return auth.response;
+
+  const phone = String(req.nextUrl.searchParams.get("phone") || "").trim();
+  if (!phone) return NextResponse.json({ error: "phone required" }, { status: 400 });
+
+  const supabase = createSupabaseAdminClient();
+  const { data } = await supabase
+    .from("member_promo_redemptions")
+    .select("id")
+    .eq("phone", normalizePhone(phone))
+    .eq("promo_code", PROMO_CODE)
+    .maybeSingle();
+
+  return NextResponse.json({ redeemed: Boolean(data) });
+}
