@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-api-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { computeMembershipTier, getLoyaltyConfig } from "@/lib/loyalty";
 
 type CustomerRow = {
   id: string;
@@ -21,8 +22,6 @@ type LoyaltyRow = {
   customer_id: string;
   points_change: number | null;
 };
-
-const LOYALTY_POINTS_EXPIRY_DAYS = 365;
 
 function isMissingRelationError(message: string | null | undefined) {
   const m = String(message || "").toLowerCase();
@@ -65,12 +64,15 @@ export async function GET(req: Request) {
       consent_email: Boolean(row.consent_email),
     }));
 
+    const config = await getLoyaltyConfig();
     const customerIds = rows.map(row => row.id);
     const pointsByCustomer = new Map<string, number>();
+    const spend12mByCustomer = new Map<string, number>();
     if (customerIds.length > 0) {
       const cutoffIso = new Date(
-        Date.now() - LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+        Date.now() - config.expiryDays * 24 * 60 * 60 * 1000
       ).toISOString();
+      const yearAgoIso = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
 
       // Batch into chunks of 100 to avoid URL length limits with many customer IDs.
       const CHUNK = 100;
@@ -90,6 +92,20 @@ export async function GET(req: Request) {
         for (const row of (loyaltyRows || []) as LoyaltyRow[]) {
           const current = pointsByCustomer.get(row.customer_id) || 0;
           pointsByCustomer.set(row.customer_id, current + Number(row.points_change || 0));
+        }
+
+        // Rolling 12-month paid spend per customer → membership tier.
+        const { data: spendRows } = await supabase
+          .from("orders")
+          .select("customer_id,total")
+          .in("customer_id", chunk)
+          .eq("payment_status", "paid")
+          .gte("created_at", yearAgoIso)
+          .limit(10000);
+        for (const row of (spendRows || []) as Array<{ customer_id: string; total: number | null }>) {
+          if (!row.customer_id) continue;
+          const current = spend12mByCustomer.get(row.customer_id) || 0;
+          spend12mByCustomer.set(row.customer_id, current + Number(row.total || 0));
         }
       }
     }
@@ -125,6 +141,7 @@ export async function GET(req: Request) {
       customers: filtered.map(row => ({
         ...row,
         loyalty_points: pointsByCustomer.get(row.id) || 0,
+        tier: computeMembershipTier(spend12mByCustomer.get(row.id) || 0, config).name,
       })),
       summary,
     });

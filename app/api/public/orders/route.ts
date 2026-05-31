@@ -8,6 +8,7 @@ import {
 } from "@/lib/customer-orders";
 import { createChipPurchase, getChipConfigStatus } from "@/lib/chip";
 import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import { applyReferralOnSignup, ensureReferralCode } from "@/lib/loyalty";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -228,6 +229,8 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     let customerId: string | null = existingCustomer?.id || null;
+    const isNewCustomer = !customerId;
+    const referralCode = String(body.referral_code || "").trim();
 
     if (!customerId) {
       const { data: newCustomer } = await supabase
@@ -238,6 +241,14 @@ export async function POST(req: Request) {
       customerId = newCustomer?.id || null;
     } else if (!existingCustomer?.consent_whatsapp) {
       await supabase.from("customers").update({ consent_whatsapp: true }).eq("id", customerId);
+    }
+
+    if (customerId) {
+      // Give every customer a referral code, and record who referred them.
+      await ensureReferralCode(customerId);
+      if (isNewCustomer && referralCode) {
+        await applyReferralOnSignup(customerId, referralCode);
+      }
     }
 
     const orderBase = {

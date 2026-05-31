@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
+import { calculateRedeem, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
 
 const supabase = createSupabaseAdminClient();
 
@@ -69,12 +71,6 @@ type CustomerPayload = {
   consent_whatsapp?: boolean;
   consent_email?: boolean;
 };
-
-const LOYALTY_EARN_PER_RM = 1;
-const LOYALTY_REDEEM_RM_PER_POINT = 0.05; // 100 pts = RM 5
-const LOYALTY_REDEEM_MIN_POINTS = 50;
-const LOYALTY_REDEEM_MAX_RATIO = 0.5; // max 50% of order total
-const LOYALTY_POINTS_EXPIRY_DAYS = 365;
 
 function normalizePhone(value: string) {
   return value.replace(/[^\d+]/g, "").trim();
@@ -174,9 +170,9 @@ async function insertOrderItemAddons(
   }
 }
 
-async function getLoyaltyPointsBalance(customerId: string) {
+async function getLoyaltyPointsBalance(customerId: string, expiryDays: number) {
   const cutoffIso = new Date(
-    Date.now() - LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+    Date.now() - expiryDays * 24 * 60 * 60 * 1000
   ).toISOString();
 
   const { data: ledgerRows, error: ledgerError } = await supabase
@@ -210,38 +206,10 @@ async function getLoyaltyPointsBalanceLegacyView(customerId: string) {
   return Number(row?.points_balance || 0);
 }
 
-async function writeLoyaltyLedgerEntry(payload: {
-  customerId: string;
-  orderId: string;
-  entryType: "earn" | "redeem";
-  pointsChange: number;
-  createdBy: string;
-  note: string;
-}) {
-  if (!payload.pointsChange) return;
-
-  const expiresAt = payload.entryType === "earn"
-    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-    : null;
-
-  const { error } = await supabase.from("loyalty_ledger").insert([
-    {
-      customer_id: payload.customerId,
-      order_id: payload.orderId,
-      entry_type: payload.entryType,
-      points_change: payload.pointsChange,
-      created_by: payload.createdBy,
-      note: payload.note,
-      ...(expiresAt ? { expires_at: expiresAt } : {}),
-    },
-  ]);
-
-  if (error && !isMissingRelationError(error.message)) {
-    throw error;
-  }
-}
-
-async function upsertCustomerAndTrackOrder(payload: CustomerPayload | undefined, orderTotal: number) {
+// Resolves/creates the customer profile (name, phone, consents) for an order.
+// Order stats (total_orders/total_spend/last_order_at) and loyalty earn are
+// handled exclusively by applyCustomerOrderPaidSettlement to avoid double-count.
+async function upsertCustomerAndTrackOrder(payload: CustomerPayload | undefined) {
   if (!payload) return;
 
   const customerId = String(payload.id || "").trim() || null;
@@ -297,9 +265,6 @@ async function upsertCustomerAndTrackOrder(payload: CustomerPayload | undefined,
             : consentEmail
               ? existing.consent_email_at
               : null,
-        total_orders: Number(existing.total_orders || 0) + 1,
-        total_spend: Number(existing.total_spend || 0) + Number(orderTotal || 0),
-        last_order_at: nowIso,
         updated_at: nowIso,
       })
       .eq("id", existing.id);
@@ -316,9 +281,8 @@ async function upsertCustomerAndTrackOrder(payload: CustomerPayload | undefined,
       consent_email: consentEmail,
       consent_whatsapp_at: consentWhatsapp ? nowIso : null,
       consent_email_at: consentEmail ? nowIso : null,
-      total_orders: 1,
-      total_spend: Number(orderTotal || 0),
-      last_order_at: nowIso,
+      total_orders: 0,
+      total_spend: 0,
       updated_at: nowIso,
     },
   ]).select("id").single();
@@ -630,31 +594,56 @@ export async function POST(req: Request) {
       // If reserveErr (unique violation = already redeemed or concurrent request) → skip discount
     }
 
+    const config = await getLoyaltyConfig();
     const totalAfterDiscount = Math.max(Number(total || 0), 0);
+
+    // Resolve/link the customer profile (no stats bump — settlement owns that).
+    const linkedCustomerId = await upsertCustomerAndTrackOrder(body.customer);
+
+    if (linkedCustomerId) {
+      const { error: linkCustomerError } = await supabase
+        .from("orders")
+        .update({ customer_id: linkedCustomerId })
+        .eq("id", order.id);
+
+      if (linkCustomerError && !isMissingRelationError(linkCustomerError.message)) {
+        throw linkCustomerError;
+      }
+    }
+
+    // ── Loyalty redeem: compute (config-driven, identical to PWA) then
+    //    deduct atomically so concurrent orders can't overspend points. ──
     const requestedRedeemPoints = Math.max(0, Math.floor(Number(body.loyalty_redeem_points || 0)));
     let appliedRedeemPoints = 0;
     let appliedRedeemAmount = 0;
 
-    const requestedCustomerId = String(body?.customer?.id || "").trim();
-    if (requestedRedeemPoints > 0 && requestedCustomerId) {
+    if (requestedRedeemPoints > 0 && linkedCustomerId) {
       let availablePoints = 0;
       try {
-        availablePoints = await getLoyaltyPointsBalance(requestedCustomerId);
+        availablePoints = await getLoyaltyPointsBalance(linkedCustomerId, config.expiryDays);
       } catch (error) {
         if (error instanceof Error && isMissingRelationError(error.message)) {
-          availablePoints = await getLoyaltyPointsBalanceLegacyView(requestedCustomerId);
+          availablePoints = await getLoyaltyPointsBalanceLegacyView(linkedCustomerId);
         } else {
           throw error;
         }
       }
 
-      const maxRedeemAmountByCap = totalAfterDiscount * LOYALTY_REDEEM_MAX_RATIO;
-      const maxByAmount = Math.floor(maxRedeemAmountByCap / LOYALTY_REDEEM_RM_PER_POINT);
-      appliedRedeemPoints = Math.min(requestedRedeemPoints, availablePoints, maxByAmount);
-      if (appliedRedeemPoints < LOYALTY_REDEEM_MIN_POINTS) {
-        appliedRedeemPoints = 0;
+      const redeem = calculateRedeem(requestedRedeemPoints, availablePoints, totalAfterDiscount, config);
+      if (redeem.redeem_points > 0) {
+        const redeemResult = await redeemPointsAtomic({
+          customerId: linkedCustomerId,
+          points: redeem.redeem_points,
+          orderId: order.id,
+          source: "order",
+          note: `Redeem on order ${receiptNumber}`,
+          eventKey: `redeem:${order.id}`,
+        });
+        if (redeemResult.ok) {
+          appliedRedeemPoints = redeem.redeem_points;
+          appliedRedeemAmount = redeem.redeem_amount;
+        }
       }
-      appliedRedeemAmount = appliedRedeemPoints * LOYALTY_REDEEM_RM_PER_POINT;
     }
 
     total = Math.max(totalAfterDiscount - appliedRedeemAmount, 0);
@@ -681,41 +670,23 @@ export async function POST(req: Request) {
         .is("order_id", null);
     }
 
-    const linkedCustomerId = await upsertCustomerAndTrackOrder(body.customer, total);
-
     if (linkedCustomerId) {
-      const { error: linkCustomerError } = await supabase
-        .from("orders")
-        .update({ customer_id: linkedCustomerId })
-        .eq("id", order.id);
-
-      if (linkCustomerError && !isMissingRelationError(linkCustomerError.message)) {
-        throw linkCustomerError;
-      }
-    }
-
-    if (linkedCustomerId) {
-      const earnPoints = Math.max(0, Math.floor(Number(total || 0) * LOYALTY_EARN_PER_RM));
-      if (earnPoints > 0) {
-        await writeLoyaltyLedgerEntry({
-          customerId: linkedCustomerId,
-          orderId: order.id,
-          entryType: "earn",
-          pointsChange: earnPoints,
-          createdBy: auth.user.id,
-          note: `Earn from order ${receiptNumber}`,
-        });
-      }
-
-      if (appliedRedeemPoints > 0) {
-        await writeLoyaltyLedgerEntry({
-          customerId: linkedCustomerId,
-          orderId: order.id,
-          entryType: "redeem",
-          pointsChange: -Math.abs(appliedRedeemPoints),
-          createdBy: auth.user.id,
-          note: `Redeem on order ${receiptNumber}`,
-        });
+      // Earn + stats + referral via the single shared settlement (idempotent).
+      let earnPoints = 0;
+      try {
+        const settlement = await applyCustomerOrderPaidSettlement(
+          {
+            id: order.id,
+            customer_id: linkedCustomerId,
+            receipt_number: receiptNumber,
+            total,
+            discount_value: Number(body.discount_value || 0),
+          },
+          auth.user.id
+        );
+        earnPoints = settlement.earned;
+      } catch (settleErr) {
+        console.error("[orders] Loyalty settlement failed:", settleErr);
       }
 
       // ── WhatsApp loyalty notification ─────────────────────
@@ -727,14 +698,14 @@ export async function POST(req: Request) {
           if (customerPhone && customerConsentWa) {
             let newBalance = 0;
             try {
-              newBalance = await getLoyaltyPointsBalance(linkedCustomerId);
+              newBalance = await getLoyaltyPointsBalance(linkedCustomerId, config.expiryDays);
             } catch {
               newBalance = await getLoyaltyPointsBalanceLegacyView(linkedCustomerId);
             }
 
             const storeName = String(process.env.STORE_NAME || "Loka");
             const balanceNum = Number(newBalance || 0);
-            const redeemRm = (balanceNum * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2);
+            const redeemRm = (balanceNum * config.redeemRmPerPoint).toFixed(2);
             const custName = String(body?.customer_name || "").trim();
 
             const nowMyt = new Date();
@@ -747,7 +718,7 @@ export async function POST(req: Request) {
               });
             const purchaseDate = fmtDate(nowMyt);
             const expiryDate = fmtDate(
-              new Date(nowMyt.getTime() + LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000)
+              new Date(nowMyt.getTime() + config.expiryDays * 24 * 60 * 60 * 1000)
             );
 
             let msg = `Terima kasih${custName ? `, ${custName}` : ""}! 🎉\n\n`;

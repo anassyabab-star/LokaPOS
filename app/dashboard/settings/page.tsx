@@ -227,6 +227,136 @@ export default function SettingsPage() {
         </div>
         <p className="text-xs text-gray-400 px-1">Sekurang-kurangnya satu kaedah mesti aktif. Tekan Simpan untuk save perubahan.</p>
       </section>
+
+      <LoyaltySettingsSection />
     </div>
+  );
+}
+
+type LoyaltyConfigForm = {
+  earnPerRM: number;
+  redeemRmPerPoint: number;
+  redeemMinPoints: number;
+  redeemMaxRatio: number;
+  expiryDays: number;
+  expiringSoonDays: number;
+  checkInPoints: number;
+  referralPoints: number;
+  birthdayPoints: number;
+  voucherExpiryDays: number;
+  otpExpiryMinutes: number;
+  membershipTiers?: unknown;
+  voucherTiers?: unknown;
+};
+
+const LOYALTY_FIELDS: Array<{ key: keyof LoyaltyConfigForm; label: string; desc: string; step?: number }> = [
+  { key: "earnPerRM", label: "Earn / RM", desc: "Points dikumpul untuk setiap RM1 dibelanja", step: 0.1 },
+  { key: "redeemRmPerPoint", label: "RM / Point", desc: "Nilai RM bagi setiap point ditebus", step: 0.01 },
+  { key: "redeemMinPoints", label: "Min Tebus (pts)", desc: "Minimum points untuk satu tebusan" },
+  { key: "redeemMaxRatio", label: "Cap Tebus (%)", desc: "Maksimum % daripada jumlah order", step: 1 },
+  { key: "expiryDays", label: "Luput (hari)", desc: "Tempoh points sah sebelum luput" },
+  { key: "checkInPoints", label: "Check-in (pts)", desc: "Points setiap check-in harian" },
+  { key: "referralPoints", label: "Referral (pts)", desc: "Points untuk kedua-dua pihak rujukan" },
+  { key: "birthdayPoints", label: "Harijadi (pts)", desc: "Points bonus harijadi setahun sekali" },
+  { key: "voucherExpiryDays", label: "Voucher Luput (hari)", desc: "Tempoh voucher boleh ditebus" },
+  { key: "otpExpiryMinutes", label: "OTP Luput (minit)", desc: "Tempoh kod OTP sah" },
+];
+
+function LoyaltySettingsSection() {
+  const [cfg, setCfg] = useState<LoyaltyConfigForm | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/public/store-status", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => {
+        const lc = d?.loyalty_config || {};
+        setCfg({
+          earnPerRM: Number(lc.earnPerRM ?? 1),
+          redeemRmPerPoint: Number(lc.redeemRmPerPoint ?? 0.05),
+          redeemMinPoints: Number(lc.redeemMinPoints ?? 100),
+          // stored as ratio (0–1) but edited as percent
+          redeemMaxRatio: Math.round(Number(lc.redeemMaxRatio ?? 0.3) * 100),
+          expiryDays: Number(lc.expiryDays ?? 365),
+          expiringSoonDays: Number(lc.expiringSoonDays ?? 30),
+          checkInPoints: Number(lc.checkInPoints ?? 1),
+          referralPoints: Number(lc.referralPoints ?? 50),
+          birthdayPoints: Number(lc.birthdayPoints ?? 50),
+          voucherExpiryDays: Number(lc.voucherExpiryDays ?? 30),
+          otpExpiryMinutes: Number(lc.otpExpiryMinutes ?? 5),
+          membershipTiers: lc.membershipTiers,
+          voucherTiers: lc.voucherTiers,
+        });
+        setLoading(false);
+      })
+      .catch(() => { setError("Gagal muatkan tetapan loyalty"); setLoading(false); });
+  }, []);
+
+  async function save() {
+    if (!cfg) return;
+    setSaving(true); setError(null); setSaved(false);
+    try {
+      const payload = {
+        ...cfg,
+        redeemMaxRatio: Math.min(1, Math.max(0, cfg.redeemMaxRatio / 100)),
+      };
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loyalty_config: payload }),
+      });
+      if (!res.ok) throw new Error("Gagal simpan");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ralat");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Loyalty</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Ekonomi points — POS &amp; app pelanggan ikut nilai ini terus.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-sm font-medium text-green-600">Tersimpan</span>}
+          {error && <span className="text-sm text-red-500">{error}</span>}
+          <button onClick={save} disabled={saving || loading} className="rounded-xl bg-[#7F1D1D] px-5 py-2 text-sm font-bold text-white disabled:opacity-40 hover:bg-[#6B1818] transition-colors">
+            {saving ? "Menyimpan..." : "Simpan"}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5">
+        {loading || !cfg ? (
+          <p className="text-sm text-gray-400">Memuatkan...</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {LOYALTY_FIELDS.map(field => (
+              <div key={String(field.key)}>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">{field.label}</label>
+                <p className="text-xs text-gray-400 mb-1">{field.desc}</p>
+                <input
+                  type="number"
+                  step={field.step || 1}
+                  min={0}
+                  value={Number(cfg[field.key] as number)}
+                  onChange={e =>
+                    setCfg(prev => (prev ? { ...prev, [field.key]: Number(e.target.value) } : prev))
+                  }
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20 dark:text-white"
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-gray-400 px-1">Tier keahlian &amp; tier voucher dikekalkan automatik. Tekan Simpan untuk terpakai serta-merta.</p>
+    </section>
   );
 }

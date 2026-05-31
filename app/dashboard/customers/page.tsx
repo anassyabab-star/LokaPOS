@@ -18,6 +18,7 @@ type Customer = {
   last_order_at: string | null;
   created_at: string;
   loyalty_points: number;
+  tier?: string;
 };
 
 type Summary = { total: number; whatsapp: number; email: number; total_spend: number };
@@ -159,7 +160,12 @@ export default function CustomersPage() {
                   <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{customer.name}</p>
                   <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>{customer.phone || "No phone"}</p>
                   <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>{customer.email || "No email"}</p>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {customer.tier && (
+                      <span style={{ padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, color: "#7F1D1D", background: "rgba(127,29,29,0.1)" }}>
+                        {customer.tier}
+                      </span>
+                    )}
                     <ConsentPill active={customer.consent_whatsapp} label="WhatsApp" />
                     <ConsentPill active={customer.consent_email} label="Email" />
                   </div>

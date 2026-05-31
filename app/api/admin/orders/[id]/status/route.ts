@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { normalizeWhatsappNumber, sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 
 type AllowedOrderStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
 type OrderAction = "void" | "refund";
@@ -382,6 +383,16 @@ export async function POST(
         status: nextStatus,
       };
 
+      // Guest cash/pickup orders are paid at the counter when collected.
+      // Completing an unpaid order marks it paid and triggers loyalty earn.
+      const completingUnpaid =
+        nextStatus === "completed" &&
+        currentPaymentStatus !== "paid" &&
+        currentPaymentStatus !== "refunded";
+      if (completingUnpaid) {
+        updatePayload.payment_status = "paid";
+      }
+
       const { error: updateError } = await supabase
         .from("orders")
         .update(updatePayload)
@@ -389,6 +400,23 @@ export async function POST(
 
       if (updateError) {
         return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
+
+      if (completingUnpaid && order.customer_id) {
+        try {
+          await applyCustomerOrderPaidSettlement(
+            {
+              id: order.id,
+              customer_id: order.customer_id,
+              receipt_number: order.receipt_number,
+              total: Number(order.total || 0),
+              discount_value: null,
+            },
+            auth.user.id
+          );
+        } catch (settleErr) {
+          console.error("[order-status] settlement failed:", settleErr);
+        }
       }
 
       if (nextStatus === "ready") {

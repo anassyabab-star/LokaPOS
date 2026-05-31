@@ -106,6 +106,13 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: "/dashboard/loyalty",
+    label: "Loyalty",
+    icon: (
+      <Icon d="M12 2l2.39 4.84 5.34.78-3.86 3.77.91 5.32L12 18.5l-4.78 2.51.91-5.32L4.27 7.62l5.34-.78L12 2z" />
+    ),
+  },
+  {
     href: "/dashboard/campaigns",
     label: "Campaigns",
     icon: (
@@ -151,6 +158,7 @@ const MOBILE_MORE = [
   { href: "/dashboard/expenses", label: "Expenses", exact: false },
   { href: "/dashboard/categories", label: "Categories", exact: false },
   { href: "/dashboard/customers", label: "Customers", exact: false },
+  { href: "/dashboard/loyalty", label: "Loyalty", exact: false },
   { href: "/dashboard/shifts", label: "Shifts", exact: false },
   { href: "/dashboard/timesheets", label: "Timesheets", exact: false },
   { href: "/dashboard/campaigns", label: "Campaigns", exact: false },

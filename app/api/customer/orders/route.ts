@@ -12,9 +12,9 @@ import {
   generateOrderNumber,
   getLoyaltyPoints1y,
   insertOrderItemAddonsWithFallback,
-  LOYALTY_REDEEM_MIN_POINTS,
 } from "@/lib/customer-orders";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
+import { getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
 
 type OrderListRow = {
   id: string;
@@ -166,18 +166,19 @@ export async function POST(req: Request) {
     const paymentMethod = asValidPaymentMethod(body.payment_method);
     const paidNow = isPaymentPaid(paymentMethod);
     const requestedRedeemPoints = Math.max(0, Math.floor(Number(body.redeem_points || 0)));
+    const config = await getLoyaltyConfig();
     const availablePoints = await getLoyaltyPoints1y(customer.id);
 
-    if (requestedRedeemPoints > 0 && availablePoints < LOYALTY_REDEEM_MIN_POINTS) {
+    if (requestedRedeemPoints > 0 && availablePoints < config.redeemMinPoints) {
       return customerApiError(
         409,
         "Minimum points not reached for redeem",
         "CONFLICT",
-        { min_points: LOYALTY_REDEEM_MIN_POINTS, available_points: availablePoints }
+        { min_points: config.redeemMinPoints, available_points: availablePoints }
       );
     }
 
-    const redeem = calculateRedeem(requestedRedeemPoints, availablePoints, calculated.subtotal);
+    const redeem = calculateRedeem(requestedRedeemPoints, availablePoints, calculated.subtotal, config);
     const total = Math.max(0, calculated.subtotal - redeem.redeem_amount);
 
     const numbering = await generateOrderNumber();
@@ -304,6 +305,26 @@ export async function POST(req: Request) {
         } else if (rpcError.message?.includes("Insufficient stock")) {
           return customerApiError(400, rpcError.message, "STOCK_ERROR");
         }
+      }
+    }
+
+    // Deduct redeemed points atomically (idempotent per order via event_key).
+    if (redeem.redeem_points > 0) {
+      const redeemResult = await redeemPointsAtomic({
+        customerId: customer.id,
+        points: redeem.redeem_points,
+        orderId: order.id,
+        source: "order",
+        note: `Redeem on order ${numbering.orderNumber}`,
+        eventKey: `redeem:${order.id}`,
+      });
+      if (!redeemResult.ok) {
+        return customerApiError(
+          409,
+          "Not enough points to redeem",
+          "CONFLICT",
+          { available_points: redeemResult.balance }
+        );
       }
     }
 

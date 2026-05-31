@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import {
   Product, Shift, PaidOutEntry, CartItem, ReceiptData, SugarLevel,
   MarketingConsentMode, MemberLookup, DEFAULT_SUGAR_LEVEL, SUGAR_LEVEL_OPTIONS,
-  LOYALTY_REDEEM_RM_PER_POINT, LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO,
+  PosLoyaltyConfig, DEFAULT_POS_LOYALTY_CONFIG,
   buildCartKey, isSugarSupportedCategory, isKopiCategory, sugarLabel,
 } from "../types";
 
@@ -134,7 +134,9 @@ export function usePosState() {
   const [memberLookupMessage, setMemberLookupMessage] = useState<string | null>(null);
   const [memberLookupTone, setMemberLookupTone] = useState<"default" | "success" | "warn">("default");
   const [memberPoints, setMemberPoints] = useState(0);
+  const [loyaltyConfig, setLoyaltyConfig] = useState<PosLoyaltyConfig>(DEFAULT_POS_LOYALTY_CONFIG);
   const [memberExpiringPoints, setMemberExpiringPoints] = useState(0);
+  const [memberTier, setMemberTier] = useState<string | null>(null);
   const [redeemPointsInput, setRedeemPointsInput] = useState("");
 
   // ───── Payment ─────
@@ -360,7 +362,7 @@ export function usePosState() {
   function resetCustomerState() {
     setCustomerName(""); setCustomerPhone(""); setCustomerEmail("");
     setConsentWhatsapp(false); setConsentEmail(false);
-    setLinkedCustomerId(null); setMemberPoints(0); setMemberExpiringPoints(0);
+    setLinkedCustomerId(null); setMemberPoints(0); setMemberExpiringPoints(0); setMemberTier(null);
     setRedeemPointsInput(""); setMemberLookupMessage(null);
     setDiscountType("none"); setDiscountValue(""); setCashReceived("");
     setShowDiscountPanel(false);
@@ -398,17 +400,18 @@ export function usePosState() {
   const b1f1Discount = b1f1CartEligible ? b1f1DiscountAmount : 0;
   const totalAfterDiscount = Math.max(subtotal - discountAmount - b1f1Discount, 0);
   const requestedRedeem = Math.max(0, Math.floor(Number(redeemPointsInput || 0)));
-  const maxRedeemByAmount = Math.floor((totalAfterDiscount * LOYALTY_REDEEM_MAX_RATIO) / LOYALTY_REDEEM_RM_PER_POINT);
+  const capPct = Math.round(loyaltyConfig.redeemMaxRatio * 100);
+  const maxRedeemByAmount = Math.floor((totalAfterDiscount * loyaltyConfig.redeemMaxRatio) / loyaltyConfig.redeemRmPerPoint);
   const redeemEligibleMaxPoints = linkedCustomerId ? Math.min(memberPoints, maxRedeemByAmount) : 0;
   const candidateRedeem = linkedCustomerId ? Math.min(requestedRedeem, memberPoints, maxRedeemByAmount) : 0;
-  const appliedRedeemPoints = candidateRedeem >= LOYALTY_REDEEM_MIN_POINTS ? candidateRedeem : 0;
+  const appliedRedeemPoints = candidateRedeem >= loyaltyConfig.redeemMinPoints ? candidateRedeem : 0;
   let redeemStatusMessage: string | null = null;
   if (linkedCustomerId) {
-    if (redeemEligibleMaxPoints < LOYALTY_REDEEM_MIN_POINTS) redeemStatusMessage = `Subtotal terlalu rendah (cap 50%: ${redeemEligibleMaxPoints} pts).`;
-    else if (requestedRedeem > 0 && requestedRedeem < LOYALTY_REDEEM_MIN_POINTS) redeemStatusMessage = `Minimum: ${LOYALTY_REDEEM_MIN_POINTS} points.`;
-    else if (requestedRedeem > redeemEligibleMaxPoints) redeemStatusMessage = `Max: ${redeemEligibleMaxPoints} pts (50% cap).`;
+    if (redeemEligibleMaxPoints < loyaltyConfig.redeemMinPoints) redeemStatusMessage = `Subtotal terlalu rendah (cap ${capPct}%: ${redeemEligibleMaxPoints} pts).`;
+    else if (requestedRedeem > 0 && requestedRedeem < loyaltyConfig.redeemMinPoints) redeemStatusMessage = `Minimum: ${loyaltyConfig.redeemMinPoints} points.`;
+    else if (requestedRedeem > redeemEligibleMaxPoints) redeemStatusMessage = `Max: ${redeemEligibleMaxPoints} pts (${capPct}% cap).`;
   }
-  const redeemAmount = appliedRedeemPoints * LOYALTY_REDEEM_RM_PER_POINT;
+  const redeemAmount = appliedRedeemPoints * loyaltyConfig.redeemRmPerPoint;
   const total = Math.max(totalAfterDiscount - redeemAmount, 0);
   const balance = paymentMethod === "cash" ? cashNum - total : 0;
   const categories = ["All", ...Array.from(new Set(products.map(p => p.category).filter((v): v is string => Boolean(v))))];
@@ -423,6 +426,24 @@ export function usePosState() {
   useEffect(() => { try { window.localStorage.setItem(POS_PAID_OUT_STAFF_NAME_KEY, paidOutStaffName); } catch {} }, [paidOutStaffName]);
   useEffect(() => { try { setPrinterIp(window.localStorage.getItem(POS_PRINTER_IP_KEY) || ""); } catch {} }, []);
   useEffect(() => { try { window.localStorage.setItem(POS_PRINTER_IP_KEY, printerIp); } catch {} }, [printerIp]);
+
+  // Live loyalty config (so POS redeem maths matches the PWA + admin settings).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/public/store-status", { cache: "no-store" })
+      .then(res => res.json())
+      .then(data => {
+        const lc = data?.loyalty_config;
+        if (cancelled || !lc) return;
+        setLoyaltyConfig({
+          redeemRmPerPoint: Number(lc.redeemRmPerPoint ?? DEFAULT_POS_LOYALTY_CONFIG.redeemRmPerPoint),
+          redeemMinPoints: Number(lc.redeemMinPoints ?? DEFAULT_POS_LOYALTY_CONFIG.redeemMinPoints),
+          redeemMaxRatio: Number(lc.redeemMaxRatio ?? DEFAULT_POS_LOYALTY_CONFIG.redeemMaxRatio),
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   // Toast auto-dismiss
   useEffect(() => { if (!addedToast) return; const t = setTimeout(() => setAddedToast(null), 1200); return () => clearTimeout(t); }, [addedToast]);
@@ -462,7 +483,8 @@ export function usePosState() {
     consentEmail, setConsentEmail, linkedCustomerId, setLinkedCustomerId,
     memberLookupLoading, setMemberLookupLoading, memberLookupMessage, setMemberLookupMessage,
     memberLookupTone, setMemberLookupTone, memberPoints, setMemberPoints,
-    memberExpiringPoints, setMemberExpiringPoints, redeemPointsInput, setRedeemPointsInput,
+    memberExpiringPoints, setMemberExpiringPoints, memberTier, setMemberTier,
+    redeemPointsInput, setRedeemPointsInput,
     setConsentMode, getConsentMode, resetCustomerState,
     memberB1f1Redeemed, setMemberB1f1Redeemed,
     b1f1Applied, setB1f1Applied, b1f1DiscountAmount, setB1f1DiscountAmount,
@@ -476,7 +498,7 @@ export function usePosState() {
     submittingOrder, setSubmittingOrder,
     // Pricing derived
     subtotal, discountAmount, totalAfterDiscount, total, balance, cashNum,
-    appliedRedeemPoints, redeemAmount, redeemStatusMessage,
+    appliedRedeemPoints, redeemAmount, redeemStatusMessage, loyaltyConfig,
     // Orders
     orders, setOrders, ordersLoading, loadOrders,
     orderDetailOpen, setOrderDetailOpen, orderDetailItems, orderDetailLoading, orderDetailError, loadOrderDetail,
