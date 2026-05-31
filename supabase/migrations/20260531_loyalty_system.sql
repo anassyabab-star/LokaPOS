@@ -102,6 +102,16 @@ BEGIN
 
   PERFORM pg_advisory_xact_lock (hashtext (p_customer_id::text));
 
+  -- Idempotency: if this event_key was already recorded, this is a retry —
+  -- return the current net balance without inserting a duplicate redeem.
+  IF p_event_key IS NOT NULL
+     AND EXISTS (SELECT 1 FROM loyalty_ledger WHERE event_key = p_event_key) THEN
+    SELECT COALESCE(SUM(points_change), 0) INTO v_available
+      FROM loyalty_ledger
+      WHERE customer_id = p_customer_id;
+    RETURN v_available;
+  END IF;
+
   SELECT COALESCE(SUM(points_change), 0) INTO v_available
     FROM loyalty_ledger
     WHERE customer_id = p_customer_id;

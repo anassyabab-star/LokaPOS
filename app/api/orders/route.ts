@@ -3,7 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
-import { calculateRedeem, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
+import { calculateRedeem, getAvailablePoints, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
 
 const supabase = createSupabaseAdminClient();
 
@@ -168,26 +168,6 @@ async function insertOrderItemAddons(
   if (lastError) {
     console.warn("Failed to insert order item addons:", lastError.message || "Unknown error");
   }
-}
-
-async function getLoyaltyPointsBalance(customerId: string, expiryDays: number) {
-  const cutoffIso = new Date(
-    Date.now() - expiryDays * 24 * 60 * 60 * 1000
-  ).toISOString();
-
-  const { data: ledgerRows, error: ledgerError } = await supabase
-    .from("loyalty_ledger")
-    .select("points_change")
-    .eq("customer_id", customerId)
-    .gte("created_at", cutoffIso)
-    .limit(5000);
-
-  if (ledgerError) {
-    if (isMissingRelationError(ledgerError.message)) return 0;
-    throw ledgerError;
-  }
-
-  return (ledgerRows || []).reduce((sum, row) => sum + Number(row.points_change || 0), 0);
 }
 
 async function getLoyaltyPointsBalanceLegacyView(customerId: string) {
@@ -620,7 +600,7 @@ export async function POST(req: Request) {
     if (requestedRedeemPoints > 0 && linkedCustomerId) {
       let availablePoints = 0;
       try {
-        availablePoints = await getLoyaltyPointsBalance(linkedCustomerId, config.expiryDays);
+        availablePoints = await getAvailablePoints(linkedCustomerId, config);
       } catch (error) {
         if (error instanceof Error && isMissingRelationError(error.message)) {
           availablePoints = await getLoyaltyPointsBalanceLegacyView(linkedCustomerId);
@@ -698,7 +678,7 @@ export async function POST(req: Request) {
           if (customerPhone && customerConsentWa) {
             let newBalance = 0;
             try {
-              newBalance = await getLoyaltyPointsBalance(linkedCustomerId, config.expiryDays);
+              newBalance = await getAvailablePoints(linkedCustomerId, config);
             } catch {
               newBalance = await getLoyaltyPointsBalanceLegacyView(linkedCustomerId);
             }

@@ -275,7 +275,12 @@ export async function loadCustomerLoyalty(customerId: string, historyLimit = 100
   const config = await getLoyaltyConfig();
   const snapshot = calculateLoyaltySnapshot(rows, config);
 
-  const historyRows = rows.slice(-historyLimit).reverse();
+  // Hide inert 0-point marker rows (written by settlement purely for stats
+  // idempotency) from the customer-facing history.
+  const historyRows = rows
+    .filter(row => Number(row.points_change || 0) !== 0)
+    .slice(-historyLimit)
+    .reverse();
   const orderIds = Array.from(
     new Set(historyRows.map(row => row.order_id).filter((id): id is string => Boolean(id)))
   );

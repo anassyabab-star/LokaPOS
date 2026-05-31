@@ -145,20 +145,23 @@ export async function applyCustomerOrderPaidSettlement(
   const tier = computeMembershipTier(spend12m, config);
   const earnPoints = Math.max(0, Math.floor(total * config.earnPerRM * tier.earnMultiplier));
 
-  let inserted = true;
-  if (earnPoints > 0) {
-    inserted = await insertLedgerEvent({
-      customerId: order.customer_id,
-      orderId: order.id,
-      entryType: "earn",
-      pointsChange: earnPoints,
-      source: "order",
-      note: `Earn from order ${orderLabel}`,
-      eventKey: `earn:${order.id}`,
-      createdBy,
-      expiresAt,
-    });
-  }
+  // Always write the earn ledger row (even when earnPoints === 0) so the unique
+  // event_key is the single idempotency token for BOTH the earn AND the stats
+  // bump below. Without this, zero-earn orders (sub-RM1 totals, or earn disabled
+  // via earnPerRM=0) would re-bump total_orders/total_spend on every settlement
+  // call — and payment webhooks retry. A 0-point row is inert in every
+  // aggregation (snapshot/issued only count change > 0); history hides it.
+  const inserted = await insertLedgerEvent({
+    customerId: order.customer_id,
+    orderId: order.id,
+    entryType: "earn",
+    pointsChange: earnPoints,
+    source: "order",
+    note: `Earn from order ${orderLabel}`,
+    eventKey: `earn:${order.id}`,
+    createdBy,
+    expiresAt,
+  });
   // Concurrent settlement already wrote earn — stop before double-counting stats.
   if (!inserted) return { earned: 0 };
 

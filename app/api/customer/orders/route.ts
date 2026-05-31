@@ -10,11 +10,10 @@ import {
   calculateRedeem,
   formatSugarLevel,
   generateOrderNumber,
-  getLoyaltyPoints1y,
   insertOrderItemAddonsWithFallback,
 } from "@/lib/customer-orders";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
-import { getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
+import { getAvailablePoints, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
 
 type OrderListRow = {
   id: string;
@@ -167,7 +166,7 @@ export async function POST(req: Request) {
     const paidNow = isPaymentPaid(paymentMethod);
     const requestedRedeemPoints = Math.max(0, Math.floor(Number(body.redeem_points || 0)));
     const config = await getLoyaltyConfig();
-    const availablePoints = await getLoyaltyPoints1y(customer.id);
+    const availablePoints = await getAvailablePoints(customer.id, config);
 
     if (requestedRedeemPoints > 0 && availablePoints < config.redeemMinPoints) {
       return customerApiError(
@@ -179,25 +178,28 @@ export async function POST(req: Request) {
     }
 
     const redeem = calculateRedeem(requestedRedeemPoints, availablePoints, calculated.subtotal, config);
-    const total = Math.max(0, calculated.subtotal - redeem.redeem_amount);
 
     const numbering = await generateOrderNumber();
     const supabase = createSupabaseAdminClient();
 
+    // Insert at full price as pending. The redeem discount and paid status are
+    // applied only AFTER points are atomically deducted (below), so a failed or
+    // raced deduction can never leave a discounted/paid order with the points
+    // still sitting in the customer's balance.
     const orderInsertBasePayload = {
       receipt_number: numbering.orderNumber,
       date_key: numbering.dateKey,
       customer_id: customer.id,
       customer_name: customer.name,
       subtotal: calculated.subtotal,
-      discount_type: redeem.redeem_amount > 0 ? "fixed" : "none",
-      discount_value: redeem.redeem_amount,
-      total,
+      discount_type: "none",
+      discount_value: 0,
+      total: calculated.subtotal,
       payment_method: paymentMethod,
       cash_received: 0,
       balance: 0,
-      status: paidNow ? "preparing" : "pending",
-      payment_status: paidNow ? "paid" : "pending",
+      status: "pending",
+      payment_status: "pending",
     };
 
     let orderInsert = await supabase
@@ -309,6 +311,11 @@ export async function POST(req: Request) {
     }
 
     // Deduct redeemed points atomically (idempotent per order via event_key).
+    // The discount is applied only if the deduction succeeds — on a raced
+    // failure we proceed at full price rather than hand out a discount we never
+    // paid for in points.
+    let appliedRedeemPoints = 0;
+    let appliedRedeemAmount = 0;
     if (redeem.redeem_points > 0) {
       const redeemResult = await redeemPointsAtomic({
         customerId: customer.id,
@@ -318,14 +325,27 @@ export async function POST(req: Request) {
         note: `Redeem on order ${numbering.orderNumber}`,
         eventKey: `redeem:${order.id}`,
       });
-      if (!redeemResult.ok) {
-        return customerApiError(
-          409,
-          "Not enough points to redeem",
-          "CONFLICT",
-          { available_points: redeemResult.balance }
-        );
+      if (redeemResult.ok) {
+        appliedRedeemPoints = redeem.redeem_points;
+        appliedRedeemAmount = redeem.redeem_amount;
       }
+    }
+
+    const total = Math.max(0, calculated.subtotal - appliedRedeemAmount);
+
+    // Finalize totals + payment status now that the redeem is settled.
+    const { error: finalizeError } = await supabase
+      .from("orders")
+      .update({
+        discount_type: appliedRedeemAmount > 0 ? "fixed" : "none",
+        discount_value: appliedRedeemAmount,
+        total,
+        status: paidNow ? "preparing" : "pending",
+        payment_status: paidNow ? "paid" : "pending",
+      })
+      .eq("id", order.id);
+    if (finalizeError) {
+      return customerApiError(500, finalizeError.message, "INTERNAL_ERROR");
     }
 
     if (paidNow) {
@@ -335,7 +355,7 @@ export async function POST(req: Request) {
           customer_id: customer.id,
           receipt_number: numbering.orderNumber,
           total,
-          discount_value: redeem.redeem_amount,
+          discount_value: appliedRedeemAmount,
         },
         auth.user.id
       );
@@ -346,7 +366,8 @@ export async function POST(req: Request) {
       order_id: order.id,
       order_number: numbering.orderNumber,
       subtotal: calculated.subtotal,
-      discount: redeem.redeem_amount,
+      discount: appliedRedeemAmount,
+      redeem_points: appliedRedeemPoints,
       total,
       payment: {
         status: paidNow ? "paid" : "pending",

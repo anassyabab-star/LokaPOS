@@ -330,6 +330,30 @@ function isInsufficientPointsError(message: string | null | undefined) {
   return String(message || "").includes("INSUFFICIENT_POINTS");
 }
 
+/**
+ * FIFO available balance (expiry-aware) — the SAME number the PWA and admin
+ * dashboard show. Use this for redeem eligibility so the balance a customer
+ * sees and the balance the order route enforces never disagree.
+ */
+export async function getAvailablePoints(
+  customerId: string,
+  config?: LoyaltyConfig
+): Promise<number> {
+  const cfg = config ?? (await getLoyaltyConfig());
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("loyalty_ledger")
+    .select("points_change,created_at")
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: true })
+    .limit(10000);
+  if (error) {
+    if (isMissingRelationError(error.message)) return 0;
+    throw new Error(error.message);
+  }
+  return calculateLoyaltySnapshot((data || []) as LoyaltyLedgerRowLike[], cfg).pointsAvailable;
+}
+
 /** Net ledger balance across ALL entries (the strict non-negative invariant). */
 export async function getNetPointsBalance(customerId: string): Promise<number> {
   const supabase = createSupabaseAdminClient();
@@ -383,6 +407,10 @@ export async function redeemPointsAtomic(params: {
   if (isInsufficientPointsError(error.message)) {
     return { ok: false, balance: null, error: "INSUFFICIENT_POINTS" };
   }
+  // event_key already recorded — the redeem is already applied (idempotent retry).
+  if (params.eventKey && isUniqueViolation(error.message)) {
+    return { ok: true, balance: await getNetPointsBalance(params.customerId).catch(() => null) };
+  }
   if (!isMissingRelationError(error.message)) {
     console.error("[loyalty] redeem RPC error:", error.message);
     return { ok: false, balance: null, error: "ERROR" };
@@ -402,9 +430,15 @@ export async function redeemPointsAtomic(params: {
       ...(params.eventKey ? { event_key: params.eventKey } : {}),
     },
   ]);
-  if (insertError && !isMissingRelationError(insertError.message)) {
-    console.error("[loyalty] redeem fallback insert error:", insertError.message);
-    return { ok: false, balance, error: "ERROR" };
+  if (insertError) {
+    // event_key collided — already applied; treat as an idempotent success.
+    if (params.eventKey && isUniqueViolation(insertError.message)) {
+      return { ok: true, balance };
+    }
+    if (!isMissingRelationError(insertError.message)) {
+      console.error("[loyalty] redeem fallback insert error:", insertError.message);
+      return { ok: false, balance, error: "ERROR" };
+    }
   }
   return { ok: true, balance: balance - points };
 }

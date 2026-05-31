@@ -239,24 +239,6 @@ export async function calculateCustomerOrderItems(items: CustomerOrderRequestIte
   return { items: calculatedItems, subtotal, requestedQtyByProductId: qtyByProductId };
 }
 
-export async function getLoyaltyPoints1y(customerId: string) {
-  const supabase = createSupabaseAdminClient();
-  const cutoffIso = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("loyalty_ledger")
-    .select("points_change")
-    .eq("customer_id", customerId)
-    .gte("created_at", cutoffIso)
-    .limit(5000);
-
-  if (error) {
-    if (isMissingRelationError(error.message)) return 0;
-    throw new Error(error.message);
-  }
-
-  return (data || []).reduce((sum, row) => sum + Number(row.points_change || 0), 0);
-}
-
 export async function insertOrderItemAddonsWithFallback(
   orderItemId: string,
   addonSnapshots: Array<{ id: string; name: string; price: number }>
