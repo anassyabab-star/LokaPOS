@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireCustomerApi } from "@/lib/customer-api-auth";
 import { resolveOrCreateCustomerForUser } from "@/lib/customer-api";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { statusOnPaid } from "@/lib/kds";
 import {
   createToyyibBill,
   getToyyibpayConfig,
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
         .from("orders")
         .update({
           payment_status: "paid",
-          status: String(order.status || "").toLowerCase() === "pending" ? "preparing" : order.status,
+          status: await statusOnPaid(order.status),
         })
         .eq("id", order.id)
         .neq("payment_status", "paid")

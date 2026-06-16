@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { verifyChipPurchase, verifyChipSignature } from "@/lib/chip";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
+import { statusOnPaid } from "@/lib/kds";
 
 export async function POST(req: Request) {
   try {
@@ -33,12 +34,13 @@ export async function POST(req: Request) {
 
     const supabase = createSupabaseAdminClient();
 
-    // Update order payment status
+    // Update order payment status (KDS off → land "completed", skip the queue)
+    const paidStatus = await statusOnPaid("pending");
     const { data: order, error: updateError } = await supabase
       .from("orders")
       .update({
         payment_status: "paid",
-        status: "preparing",
+        status: paidStatus,
       })
       .eq("id", orderId)
       .neq("payment_status", "paid")

@@ -14,6 +14,7 @@ import {
 } from "@/lib/customer-orders";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 import { getAvailablePoints, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
+import { statusOnPaid } from "@/lib/kds";
 
 type OrderListRow = {
   id: string;
@@ -334,13 +335,15 @@ export async function POST(req: Request) {
     const total = Math.max(0, calculated.subtotal - appliedRedeemAmount);
 
     // Finalize totals + payment status now that the redeem is settled.
+    // KDS off → a paid order lands "completed" (skip the kitchen queue).
+    const finalStatus = paidNow ? await statusOnPaid("pending") : "pending";
     const { error: finalizeError } = await supabase
       .from("orders")
       .update({
         discount_type: appliedRedeemAmount > 0 ? "fixed" : "none",
         discount_value: appliedRedeemAmount,
         total,
-        status: paidNow ? "preparing" : "pending",
+        status: finalStatus,
         payment_status: paidNow ? "paid" : "pending",
       })
       .eq("id", order.id);

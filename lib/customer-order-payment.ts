@@ -188,3 +188,114 @@ export async function applyCustomerOrderPaidSettlement(
 
   return { earned: earnPoints };
 }
+
+type OrderReversalInput = {
+  id: string;
+  customer_id: string | null;
+  receipt_number: string | null;
+  total: number | null;
+};
+
+/**
+ * Reverse the loyalty a refunded / voided order moved:
+ *   - cancel the points the customer EARNED from this order (negative adjust)
+ *   - give back the points the customer REDEEMED on this order (positive adjust,
+ *     fresh expiry so the customer keeps them)
+ *   - roll back the stats bump (total_orders / total_spend) — but only when the
+ *     earn was actually reversed (i.e. the order had been settled/paid).
+ *
+ * Idempotent: each leg carries its own event_key so concurrent or retried
+ * refund/void calls reverse the loyalty at most once. Mirrors syababfresh's
+ * reverseOrderLoyalty, adapted to LokaPOS's FIFO ledger model.
+ */
+export async function reverseOrderLoyalty(
+  order: OrderReversalInput,
+  createdBy: string | null
+): Promise<{ reversed: boolean; earnReversed: number; redeemReturned: number }> {
+  const noop = { reversed: false, earnReversed: 0, redeemReturned: 0 };
+  if (!order.customer_id) return noop;
+
+  const supabase = createSupabaseAdminClient();
+  const config = await getLoyaltyConfig();
+  const total = Number(order.total || 0);
+  const orderLabel = String(order.receipt_number || order.id.slice(0, 8));
+
+  // What did this order actually move? (earn rows are positive, redeem negative.)
+  const { data: txs, error: txError } = await supabase
+    .from("loyalty_ledger")
+    .select("entry_type,points_change")
+    .eq("order_id", order.id);
+  if (txError) {
+    if (isMissingRelationError(txError.message)) return noop;
+    throw new Error(txError.message);
+  }
+  const earned = (txs || [])
+    .filter(t => t.entry_type === "earn")
+    .reduce((sum, t) => sum + Number(t.points_change || 0), 0); // positive
+  const redeemed = (txs || [])
+    .filter(t => t.entry_type === "redeem")
+    .reduce((sum, t) => sum + Math.abs(Number(t.points_change || 0)), 0); // magnitude
+  if (earned <= 0 && redeemed <= 0) return noop;
+
+  let earnReversed = 0;
+  let redeemReturned = 0;
+  let didReverse = false;
+
+  // Cancel earned points (clawback) + roll back the stats the settlement bumped.
+  // The clawback may push the net balance negative if the customer already spent
+  // them — that is correct accounting; future redeems are blocked by the redeem
+  // RPC until the balance recovers. Guarded on earned > 0: the loyalty_ledger
+  // CHECK forbids a 0-point row, and a 0-earn order is a sub-RM1 edge whose stats
+  // skew is negligible.
+  if (earned > 0) {
+    const inserted = await insertLedgerEvent({
+      customerId: order.customer_id,
+      orderId: order.id,
+      entryType: "adjust",
+      pointsChange: -earned,
+      source: "refund",
+      note: `Reverse earn — refund/void order ${orderLabel}`,
+      eventKey: `reverse-earn:${order.id}`,
+      createdBy,
+    });
+    if (inserted) {
+      earnReversed = earned;
+      didReverse = true;
+      const { data: customerRow } = await supabase
+        .from("customers")
+        .select("id,total_orders,total_spend")
+        .eq("id", order.customer_id)
+        .maybeSingle();
+      if (customerRow) {
+        await supabase
+          .from("customers")
+          .update({
+            total_orders: Math.max(0, Number(customerRow.total_orders || 0) - 1),
+            total_spend: Math.max(0, Number(customerRow.total_spend || 0) - total),
+          })
+          .eq("id", order.customer_id);
+      }
+    }
+  }
+
+  // Return redeemed points to the customer with a fresh expiry window.
+  if (redeemed > 0) {
+    const inserted = await insertLedgerEvent({
+      customerId: order.customer_id,
+      orderId: order.id,
+      entryType: "adjust",
+      pointsChange: redeemed,
+      source: "refund",
+      note: `Return redeemed points — refund/void order ${orderLabel}`,
+      eventKey: `reverse-redeem:${order.id}`,
+      createdBy,
+      expiresAt: loyaltyExpiresAt(config),
+    });
+    if (inserted) {
+      redeemReturned = redeemed;
+      didReverse = true;
+    }
+  }
+
+  return { reversed: didReverse, earnReversed, redeemReturned };
+}

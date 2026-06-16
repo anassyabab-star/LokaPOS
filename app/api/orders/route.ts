@@ -4,6 +4,7 @@ import { requireStaffApi } from "@/lib/staff-api-auth";
 import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 import { calculateRedeem, getAvailablePoints, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
+import { isKdsEnabled } from "@/lib/kds";
 
 const supabase = createSupabaseAdminClient();
 
@@ -371,6 +372,10 @@ export async function POST(req: Request) {
       }
     }
 
+    // POS orders are paid at the counter. With the kitchen flow on they enter the
+    // KDS queue as "pending"; with it off they land straight in as "completed".
+    const kdsEnabled = await isKdsEnabled();
+
     const orderInsertBasePayload = {
       receipt_number: receiptNumber,
       date_key: dateKey,
@@ -382,7 +387,7 @@ export async function POST(req: Request) {
       payment_method: body.payment_method || "cash",
       cash_received: Number(body.cash_received || 0),
       balance: 0,
-      status: "pending",
+      status: kdsEnabled ? "pending" : "completed",
       payment_status: "paid",
     };
 

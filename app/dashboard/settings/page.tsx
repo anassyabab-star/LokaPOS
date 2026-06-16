@@ -228,8 +228,95 @@ export default function SettingsPage() {
         <p className="text-xs text-gray-400 px-1">Sekurang-kurangnya satu kaedah mesti aktif. Tekan Simpan untuk save perubahan.</p>
       </section>
 
+      <KdsSettingsSection />
+
       <LoyaltySettingsSection />
     </div>
+  );
+}
+
+function KdsSettingsSection() {
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/settings")
+      .then(r => r.json())
+      .then(d => setEnabled(d?.kds_enabled === true))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function toggleKds() {
+    const next = !enabled;
+    setEnabled(next);
+    setSaving(true); setError(null); setSaved(false);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kds_enabled: next }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        setEnabled(!next); // revert
+        const msg = String(d?.error || "");
+        setError(
+          /column|schema|kds_enabled/i.test(msg)
+            ? "Perlu jalankan migration 20260616_kds_toggle.sql dahulu"
+            : msg || "Gagal simpan"
+        );
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setEnabled(!next);
+      setError("Tiada sambungan");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Kitchen Display (KDS)</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Aliran dapur — order lalu queue pending → preparing → ready</p>
+        </div>
+        {saved && (
+          <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><polyline points="20 6 9 17 4 12"/></svg>
+            Tersimpan
+          </span>
+        )}
+      </div>
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex items-center gap-4">
+            <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-base transition-colors ${enabled ? "bg-[#7F1D1D]/10" : "bg-gray-100 dark:bg-gray-700 grayscale"}`}>🍳</div>
+            <div>
+              <p className={`text-sm font-semibold transition-colors ${enabled ? "text-gray-900 dark:text-white" : "text-gray-400"}`}>Guna Kitchen Display</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {enabled
+                  ? "Order lalu aliran dapur — staff advance di skrin KDS."
+                  : "Dimatikan — order terus jadi 'completed' selepas dibayar."}
+              </p>
+            </div>
+          </div>
+          {loading ? (
+            <div className="h-6 w-11 rounded-full bg-gray-100 dark:bg-gray-700 animate-pulse" />
+          ) : (
+            <Toggle enabled={enabled} onToggle={() => { if (!saving) void toggleKds(); }} />
+          )}
+        </div>
+      </div>
+      {error && <p className="text-xs text-amber-600 px-1">{error}</p>}
+    </section>
   );
 }
 

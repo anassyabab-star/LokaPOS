@@ -58,7 +58,7 @@ export type LoyaltyConfig = {
 
 export const DEFAULT_LOYALTY_CONFIG: LoyaltyConfig = {
   earnPerRM: 1,
-  redeemRmPerPoint: 0.05, // 100 pts = RM5
+  redeemRmPerPoint: 0.01, // 100 pts = RM1 (selaras dengan syababfresh)
   redeemMinPoints: 100, // resolves the historic 50-vs-100 split → 100
   redeemMaxRatio: 0.3, // resolves the historic 0.3-vs-0.5 split → 0.3 (conservative)
   expiryDays: 365,
@@ -68,17 +68,19 @@ export const DEFAULT_LOYALTY_CONFIG: LoyaltyConfig = {
   birthdayPoints: 50,
   voucherExpiryDays: 30,
   otpExpiryMinutes: 5,
+  // Tier multiplier spread 1×–3× (nama LokaPOS kekal, threshold kekal).
   membershipTiers: [
     { name: "Bronze", minSpend: 0, earnMultiplier: 1 },
-    { name: "Silver", minSpend: 500, earnMultiplier: 1 },
-    { name: "Gold", minSpend: 1500, earnMultiplier: 1.25 },
-    { name: "Platinum", minSpend: 3000, earnMultiplier: 1.5 },
+    { name: "Silver", minSpend: 500, earnMultiplier: 1.5 },
+    { name: "Gold", minSpend: 1500, earnMultiplier: 2 },
+    { name: "Platinum", minSpend: 3000, earnMultiplier: 3 },
   ],
+  // Amount = points × redeemRmPerPoint (0.01) supaya selaras dengan kadar redeem.
   voucherTiers: [
-    { points: 100, amount: 5, label: "RM5" },
-    { points: 300, amount: 15, label: "RM15" },
-    { points: 500, amount: 25, label: "RM25" },
-    { points: 1000, amount: 50, label: "RM50" },
+    { points: 100, amount: 1, label: "RM1" },
+    { points: 500, amount: 5, label: "RM5" },
+    { points: 1000, amount: 10, label: "RM10" },
+    { points: 2000, amount: 20, label: "RM20" },
   ],
 };
 
@@ -99,7 +101,7 @@ function parseTiers(raw: unknown, fallback: LoyaltyTier[]): LoyaltyTier[] {
       return {
         name,
         minSpend: Math.max(0, toNumber(obj.minSpend, 0)),
-        earnMultiplier: Math.max(0, toNumber(obj.earnMultiplier, 1)) || 1,
+        earnMultiplier: Math.min(100, Math.max(0, toNumber(obj.earnMultiplier, 1))) || 1,
       };
     })
     .filter((t): t is LoyaltyTier => Boolean(t))
@@ -128,23 +130,34 @@ function parseVoucherTiers(
   return parsed.length > 0 ? parsed : fallback;
 }
 
-/** Merge a raw JSONB blob with defaults into a fully-populated LoyaltyConfig. */
+/** Clamp to [min, max] with a fallback for non-finite input. */
+function clamp(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Merge a raw JSONB blob with defaults into a fully-populated LoyaltyConfig.
+ *
+ * Every field is bounded by a sane upper limit (not just a floor) so a corrupted
+ * or tampered loyalty_config can never blow up the economy (e.g. earnPerRM=1e9).
+ * This is defense-in-depth — the store_settings row itself must also be
+ * write-protected by RLS (see 20260616_security_hardening.sql). */
 export function parseLoyaltyConfig(raw: unknown): LoyaltyConfig {
   const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const d = DEFAULT_LOYALTY_CONFIG;
-  const redeemRmPerPoint = Math.max(0, toNumber(obj.redeemRmPerPoint, d.redeemRmPerPoint)) || d.redeemRmPerPoint;
+  const redeemRmPerPoint = clamp(toNumber(obj.redeemRmPerPoint, d.redeemRmPerPoint), 0, 10) || d.redeemRmPerPoint;
   return {
-    earnPerRM: Math.max(0, toNumber(obj.earnPerRM, d.earnPerRM)),
+    earnPerRM: clamp(toNumber(obj.earnPerRM, d.earnPerRM), 0, 1000),
     redeemRmPerPoint,
-    redeemMinPoints: Math.max(0, Math.floor(toNumber(obj.redeemMinPoints, d.redeemMinPoints))),
-    redeemMaxRatio: Math.min(1, Math.max(0, toNumber(obj.redeemMaxRatio, d.redeemMaxRatio))),
-    expiryDays: Math.max(1, Math.floor(toNumber(obj.expiryDays, d.expiryDays))),
-    expiringSoonDays: Math.max(1, Math.floor(toNumber(obj.expiringSoonDays, d.expiringSoonDays))),
-    checkInPoints: Math.max(0, Math.floor(toNumber(obj.checkInPoints, d.checkInPoints))),
-    referralPoints: Math.max(0, Math.floor(toNumber(obj.referralPoints, d.referralPoints))),
-    birthdayPoints: Math.max(0, Math.floor(toNumber(obj.birthdayPoints, d.birthdayPoints))),
-    voucherExpiryDays: Math.max(1, Math.floor(toNumber(obj.voucherExpiryDays, d.voucherExpiryDays))),
-    otpExpiryMinutes: Math.max(1, Math.floor(toNumber(obj.otpExpiryMinutes, d.otpExpiryMinutes))),
+    redeemMinPoints: Math.floor(clamp(toNumber(obj.redeemMinPoints, d.redeemMinPoints), 0, 1_000_000)),
+    redeemMaxRatio: clamp(toNumber(obj.redeemMaxRatio, d.redeemMaxRatio), 0, 1),
+    expiryDays: Math.floor(clamp(toNumber(obj.expiryDays, d.expiryDays), 1, 36_500)),
+    expiringSoonDays: Math.floor(clamp(toNumber(obj.expiringSoonDays, d.expiringSoonDays), 1, 36_500)),
+    checkInPoints: Math.floor(clamp(toNumber(obj.checkInPoints, d.checkInPoints), 0, 100_000)),
+    referralPoints: Math.floor(clamp(toNumber(obj.referralPoints, d.referralPoints), 0, 100_000)),
+    birthdayPoints: Math.floor(clamp(toNumber(obj.birthdayPoints, d.birthdayPoints), 0, 100_000)),
+    voucherExpiryDays: Math.floor(clamp(toNumber(obj.voucherExpiryDays, d.voucherExpiryDays), 1, 36_500)),
+    otpExpiryMinutes: Math.floor(clamp(toNumber(obj.otpExpiryMinutes, d.otpExpiryMinutes), 1, 1_440)),
     membershipTiers: parseTiers(obj.membershipTiers, d.membershipTiers),
     voucherTiers: parseVoucherTiers(obj.voucherTiers, redeemRmPerPoint, d.voucherTiers),
   };

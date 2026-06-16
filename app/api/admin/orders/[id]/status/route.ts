@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { normalizeWhatsappNumber, sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
-import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
+import { applyCustomerOrderPaidSettlement, reverseOrderLoyalty } from "@/lib/customer-order-payment";
 
 type AllowedOrderStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
 type OrderAction = "void" | "refund";
@@ -343,6 +343,22 @@ export async function POST(
         .eq("id", orderId);
       if (updateError) {
         return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
+
+      // Reverse loyalty the order moved: claw back earned points + give back any
+      // redeemed points (idempotent). Never let a loyalty hiccup fail the refund.
+      try {
+        await reverseOrderLoyalty(
+          {
+            id: order.id,
+            customer_id: order.customer_id,
+            receipt_number: order.receipt_number,
+            total: order.total,
+          },
+          auth.user.id
+        );
+      } catch (reverseErr) {
+        console.error("[order-status] loyalty reverse failed:", reverseErr);
       }
 
       let stockRestoreWarning: string | null = null;

@@ -170,6 +170,11 @@ export default function CustomerApp() {
   // Referral code captured from ?ref= (applied on first guest order)
   const [referralInput, setReferralInput] = useState("");
 
+  // Direct points-at-checkout (config-driven, mirrors POS). Rate/min/ratio come
+  // from store-status so the client preview matches what the server enforces.
+  const [redeemCfg, setRedeemCfg] = useState({ rmPerPoint: 0.01, minPoints: 100, maxRatio: 0.3 });
+  const [useRedeem, setUseRedeem] = useState(false);
+
   // OTP gate (phone verification before redeem / check-in)
   const [otpGate, setOtpGate] = useState<null | { retry: () => void }>(null);
   const [otpCode, setOtpCode] = useState("");
@@ -236,6 +241,14 @@ export default function CustomerApp() {
       .then(d => {
         setStoreOpen(Boolean(d.is_open));
         if (d.payment_methods) setEnabledPayments(d.payment_methods);
+        const lc = d?.loyalty_config;
+        if (lc) {
+          setRedeemCfg({
+            rmPerPoint: Number(lc.redeemRmPerPoint) || 0.01,
+            minPoints: Number(lc.redeemMinPoints) || 100,
+            maxRatio: Number(lc.redeemMaxRatio) || 0.3,
+          });
+        }
         const vt = d?.loyalty_config?.voucherTiers;
         if (Array.isArray(vt) && vt.length > 0) {
           setRewardTiers(
@@ -327,6 +340,20 @@ export default function CustomerApp() {
   const cartItems = useMemo(() => Object.values(cart), [cart]);
   const cartCount = useMemo(() => cartItems.reduce((s, i) => s + i.qty, 0), [cartItems]);
   const cartTotal = useMemo(() => cartItems.reduce((s, i) => s + i.unit_price * i.qty, 0), [cartItems]);
+
+  // Points-as-discount preview — same clamps as the server (calculateRedeem):
+  // capped by available balance, the max-ratio of the order, and the min-points
+  // floor. Server re-verifies (and OTP-gates) before committing.
+  const redeemCalc = useMemo(() => {
+    if (!useRedeem || loyaltyPoints < redeemCfg.minPoints || cartTotal <= 0) {
+      return { points: 0, amount: 0 };
+    }
+    const maxByRatio = Math.floor((cartTotal * redeemCfg.maxRatio) / redeemCfg.rmPerPoint);
+    const points = Math.min(loyaltyPoints, maxByRatio);
+    if (points < redeemCfg.minPoints) return { points: 0, amount: 0 };
+    return { points, amount: points * redeemCfg.rmPerPoint };
+  }, [useRedeem, loyaltyPoints, redeemCfg, cartTotal]);
+  const checkoutTotal = Math.max(0, cartTotal - redeemCalc.amount);
 
   const activeOrder = trackedOrders.find(o => ["pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
   const activeOrders = trackedOrders.filter(o => ["pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
@@ -452,10 +479,16 @@ export default function CustomerApp() {
       try { localStorage.setItem("loka_guest_name", custName.trim()); localStorage.setItem("loka_guest_phone", custPhone.trim()); } catch {}
       const res = await fetch("/api/public/orders", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_name: custName.trim(), customer_phone: custPhone.trim(), payment_method: payMethod, referral_code: referralInput.trim() || undefined, items: cartItems.map(i => ({ product_id: i.product_id, variant_id: i.variant_id, addon_ids: i.addon_ids, sugar_level: i.sugar_level, qty: i.qty })) })
+        body: JSON.stringify({ customer_name: custName.trim(), customer_phone: custPhone.trim(), payment_method: payMethod, referral_code: referralInput.trim() || undefined, redeem_points: redeemCalc.points > 0 ? redeemCalc.points : undefined, items: cartItems.map(i => ({ product_id: i.product_id, variant_id: i.variant_id, addon_ids: i.addon_ids, sugar_level: i.sugar_level, qty: i.qty })) })
       });
       const data = await res.json();
       if (!res.ok) {
+        // Spending points needs a verified phone — gate then retry the order.
+        if (redeemCalc.points > 0 && isOtpRequired(res.status, data)) {
+          setPlacing(false);
+          openOtpGate(() => void placeOrder());
+          return;
+        }
         if (data.store_closed) throw new Error("⏰ Kedai sedang tutup. Sila cuba semula semasa waktu operasi.");
         throw new Error(data.error || "Gagal buat order");
       }
@@ -473,6 +506,8 @@ export default function CustomerApp() {
       }
 
       setCart({});
+      setUseRedeem(false);
+      if (redeemCalc.points > 0) setLoyaltyPoints(p => Math.max(0, p - redeemCalc.points));
       setShowCheckout(false);
       setCheckoutStep(1);
       setSuccessData({ receiptNumber: data.order_number || orderId?.slice(0, 8) || "—", total: data.total || cartTotal, orderId });
@@ -1303,6 +1338,38 @@ export default function CustomerApp() {
                       ))}
                     </div>
                   </div>
+                  {/* Guna mata — points as a direct discount (OTP-gated on submit) */}
+                  {loyaltyPoints >= redeemCfg.minPoints && (
+                    <div className="rounded-2xl bg-white border border-gray-200 p-4">
+                      <button
+                        type="button"
+                        onClick={() => setUseRedeem(v => !v)}
+                        className="flex w-full items-center justify-between gap-3"
+                      >
+                        <div className="text-left">
+                          <p className="text-sm font-bold text-gray-900">Guna mata ganjaran</p>
+                          <p className="text-[11px] text-gray-400">
+                            Anda ada {loyaltyPoints} mata
+                            {useRedeem && redeemCalc.points > 0
+                              ? ` · guna ${redeemCalc.points} (−${fm(redeemCalc.amount)})`
+                              : ` · maks ${Math.round(redeemCfg.maxRatio * 100)}% order`}
+                          </p>
+                        </div>
+                        <span
+                          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${useRedeem ? "bg-[#7F1D1D]" : "bg-gray-200"}`}
+                        >
+                          <span
+                            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${useRedeem ? "left-[22px]" : "left-0.5"}`}
+                          />
+                        </span>
+                      </button>
+                      {useRedeem && redeemCalc.points === 0 && (
+                        <p className="mt-2 text-[11px] text-amber-600">
+                          Mata tidak mencukupi untuk order ini (min {redeemCfg.minPoints} mata).
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {/* Order summary */}
                   <div className="rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-1.5">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ringkasan</p>
@@ -1312,16 +1379,22 @@ export default function CustomerApp() {
                         <span className="font-semibold text-gray-900">{fm(item.unit_price * item.qty)}</span>
                       </div>
                     ))}
+                    {redeemCalc.amount > 0 && (
+                      <div className="flex justify-between text-xs pt-0.5">
+                        <span className="text-gray-600">Tebus mata ({redeemCalc.points} pts)</span>
+                        <span className="font-semibold text-green-600">−{fm(redeemCalc.amount)}</span>
+                      </div>
+                    )}
                     <div className="border-t border-gray-200 pt-1.5 flex justify-between">
                       <span className="text-sm font-bold text-gray-900">Jumlah</span>
-                      <span className="text-sm font-bold text-[#7F1D1D]">{fm(cartTotal)}</span>
+                      <span className="text-sm font-bold text-[#7F1D1D]">{fm(checkoutTotal)}</span>
                     </div>
                   </div>
                 </div>
                 <div className="border-t border-gray-100 px-4 py-4 pb-[env(safe-area-inset-bottom,12px)]">
                   {checkoutErr && <p className="text-xs text-red-500 mb-2 text-center">{checkoutErr}</p>}
                   <button onClick={() => void placeOrder()} disabled={placing || cartItems.length === 0} className="w-full rounded-2xl bg-[#7F1D1D] py-4 text-base font-bold text-white disabled:opacity-50 active:bg-[#6B1818] shadow-lg">
-                    {placing ? "Memproses..." : `Bayar ${fm(cartTotal)}`}
+                    {placing ? "Memproses..." : `Bayar ${fm(checkoutTotal)}`}
                   </button>
                 </div>
               </>
