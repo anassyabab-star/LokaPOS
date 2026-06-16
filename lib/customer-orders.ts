@@ -1,9 +1,9 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isMissingRelationError } from "@/lib/customer-api";
 
-export const LOYALTY_REDEEM_RM_PER_POINT = 0.05; // 100 pts = RM5
-export const LOYALTY_REDEEM_MIN_POINTS = 100;
-export const LOYALTY_REDEEM_MAX_RATIO = 0.3; // max 30% per order
+// Economy constants and calculateRedeem now live in lib/loyalty.ts (single
+// source of truth). Re-exported here so existing importers keep working.
+export { calculateRedeem } from "@/lib/loyalty";
 
 export type CustomerOrderRequestItem = {
   product_id: string;
@@ -237,44 +237,6 @@ export async function calculateCustomerOrderItems(items: CustomerOrderRequestIte
   }
 
   return { items: calculatedItems, subtotal, requestedQtyByProductId: qtyByProductId };
-}
-
-export async function getLoyaltyPoints1y(customerId: string) {
-  const supabase = createSupabaseAdminClient();
-  const cutoffIso = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("loyalty_ledger")
-    .select("points_change")
-    .eq("customer_id", customerId)
-    .gte("created_at", cutoffIso)
-    .limit(5000);
-
-  if (error) {
-    if (isMissingRelationError(error.message)) return 0;
-    throw new Error(error.message);
-  }
-
-  return (data || []).reduce((sum, row) => sum + Number(row.points_change || 0), 0);
-}
-
-export function calculateRedeem(
-  requestedRedeemPoints: number,
-  availablePoints: number,
-  subtotal: number
-) {
-  const points = Math.max(0, Math.floor(Number(requestedRedeemPoints || 0)));
-  if (points <= 0 || availablePoints <= 0) {
-    return { redeem_points: 0, redeem_amount: 0 };
-  }
-
-  const maxAmountByRatio = subtotal * LOYALTY_REDEEM_MAX_RATIO;
-  const maxPointsByRatio = Math.floor(maxAmountByRatio / LOYALTY_REDEEM_RM_PER_POINT);
-  let appliedPoints = Math.min(points, availablePoints, maxPointsByRatio);
-  if (appliedPoints < LOYALTY_REDEEM_MIN_POINTS) {
-    appliedPoints = 0;
-  }
-  const redeemAmount = appliedPoints * LOYALTY_REDEEM_RM_PER_POINT;
-  return { redeem_points: appliedPoints, redeem_amount: redeemAmount };
 }
 
 export async function insertOrderItemAddonsWithFallback(

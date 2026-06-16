@@ -1,7 +1,7 @@
 "use client";
 
 import { usePos } from "../pos-context";
-import { sugarLabel, LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO, LOYALTY_REDEEM_RM_PER_POINT, isKopiCategory } from "../types";
+import { sugarLabel, isKopiCategory } from "../types";
 
 export default function CartOverlay() {
   const s = usePos();
@@ -23,9 +23,9 @@ export default function CartOverlay() {
         {/* Points quick-action banner */}
         {(() => {
           if (!s.linkedCustomerId || s.memberPoints <= 0) return null;
-          const maxByAmt = Math.floor((s.totalAfterDiscount * LOYALTY_REDEEM_MAX_RATIO) / LOYALTY_REDEEM_RM_PER_POINT);
+          const maxByAmt = Math.floor((s.totalAfterDiscount * s.loyaltyConfig.redeemMaxRatio) / s.loyaltyConfig.redeemRmPerPoint);
           const eligibleMax = Math.min(s.memberPoints, maxByAmt);
-          const canRedeem = eligibleMax >= LOYALTY_REDEEM_MIN_POINTS;
+          const canRedeem = eligibleMax >= s.loyaltyConfig.redeemMinPoints;
           const applied = s.appliedRedeemPoints > 0;
           return (
             <div className={`flex items-center justify-between border-b px-4 py-2.5 ${applied ? "border-green-200 bg-green-50" : "border-blue-100 bg-blue-50"}`}>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 import { getToyyibpayConfig, isToyyibFailedStatus, isToyyibPaidStatus } from "@/lib/toyyibpay";
+import { statusOnPaid } from "@/lib/kds";
 
 type OrderRow = {
   id: string;
@@ -118,11 +119,10 @@ async function handleCallback(req: Request) {
       });
     }
 
+    // KDS off → a paid order lands "completed" (skip the kitchen queue).
     const nextOrderStatus =
       nextPaymentStatus === "paid"
-        ? currentStatus === "pending"
-          ? "preparing"
-          : currentStatus || "preparing"
+        ? await statusOnPaid(currentStatus)
         : currentStatus || "pending";
 
     const { data: updatedOrder, error: updateError } = await supabase

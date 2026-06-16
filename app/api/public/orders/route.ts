@@ -8,6 +8,15 @@ import {
 } from "@/lib/customer-orders";
 import { createChipPurchase, getChipConfigStatus } from "@/lib/chip";
 import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import {
+  applyReferralOnSignup,
+  calculateRedeem,
+  ensureReferralCode,
+  getAvailablePoints,
+  getLoyaltyConfig,
+  redeemPointsAtomic,
+} from "@/lib/loyalty";
+import { normalizeOtpPhone, requirePhoneOtp } from "@/lib/phone-otp";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -228,6 +237,8 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     let customerId: string | null = existingCustomer?.id || null;
+    const isNewCustomer = !customerId;
+    const referralCode = String(body.referral_code || "").trim();
 
     if (!customerId) {
       const { data: newCustomer } = await supabase
@@ -238,6 +249,38 @@ export async function POST(req: Request) {
       customerId = newCustomer?.id || null;
     } else if (!existingCustomer?.consent_whatsapp) {
       await supabase.from("customers").update({ consent_whatsapp: true }).eq("id", customerId);
+    }
+
+    if (customerId) {
+      // Give every customer a referral code, and record who referred them.
+      await ensureReferralCode(customerId);
+      if (isNewCustomer && referralCode) {
+        await applyReferralOnSignup(customerId, referralCode);
+      }
+    }
+
+    // ── Loyalty redeem (OTP-gated): use points as a direct checkout discount ──
+    // Spending points requires a verified phone session — otherwise anyone who
+    // knows a phone number could drain that customer's balance. We resolve the
+    // applied points here (config-driven, identical maths to POS), then commit
+    // the deduction atomically AFTER the order row exists.
+    const requestedRedeemPoints = Math.max(0, Math.floor(Number(body.redeem_points || 0)));
+    const loyaltyConfig = await getLoyaltyConfig();
+    let resolvedRedeemPoints = 0;
+    let resolvedRedeemAmount = 0;
+    if (requestedRedeemPoints > 0 && customerId) {
+      const otpPhone = normalizeOtpPhone(customerPhone);
+      const guard = requirePhoneOtp(req, otpPhone);
+      if (!guard.ok) return guard.response;
+      const availablePoints = await getAvailablePoints(customerId, loyaltyConfig);
+      const redeem = calculateRedeem(
+        requestedRedeemPoints,
+        availablePoints,
+        calculated.subtotal,
+        loyaltyConfig
+      );
+      resolvedRedeemPoints = redeem.redeem_points;
+      resolvedRedeemAmount = redeem.redeem_amount;
     }
 
     const orderBase = {
@@ -269,6 +312,40 @@ export async function POST(req: Request) {
     const { data: order, error: orderError } = orderInsert;
     if (orderError || !order) {
       return NextResponse.json({ error: orderError?.message || "Gagal buat order" }, { status: 500 });
+    }
+
+    // RESERVE the loyalty points now (atomic, advisory-locked) and only apply the
+    // discount if the deduction succeeds. Deducting at creation — rather than
+    // deferring to payment — closes the free-discount window (a customer can't
+    // spend the same points elsewhere between create and pay) and the RPC's
+    // serialization prevents concurrent double-spend. If the order is later
+    // voided/refunded, reverseOrderLoyalty returns these points.
+    let finalTotal = calculated.subtotal;
+    let appliedRedeemPoints = 0;
+    let appliedRedeemAmount = 0;
+    if (resolvedRedeemPoints > 0 && customerId) {
+      const redeemResult = await redeemPointsAtomic({
+        customerId,
+        points: resolvedRedeemPoints,
+        orderId: order.id,
+        source: "order",
+        note: `Redeem on order ${numbering.orderNumber}`,
+        eventKey: `redeem:${order.id}`,
+      });
+      if (redeemResult.ok) {
+        appliedRedeemPoints = resolvedRedeemPoints;
+        appliedRedeemAmount = resolvedRedeemAmount;
+        finalTotal = Math.max(0, calculated.subtotal - appliedRedeemAmount);
+        await supabase
+          .from("orders")
+          .update({
+            discount_type: "fixed",
+            discount_value: appliedRedeemAmount,
+            total: finalTotal,
+          })
+          .eq("id", order.id);
+      }
+      // !ok (insufficient / lost race) → charge full price, no discount granted.
     }
 
     for (const item of calculated.items) {
@@ -332,7 +409,7 @@ export async function POST(req: Request) {
       if (chipStatus.configured) {
         try {
           const purchase = await createChipPurchase({
-            amount: calculated.subtotal,
+            amount: finalTotal,
             orderId: order.id,
             orderNumber: numbering.orderNumber,
             customerName: customerName,
@@ -354,10 +431,15 @@ export async function POST(req: Request) {
       const itemLines = calculated.items
         .map(i => `• ${i.product_name_snapshot}${i.variant_name ? ` (${i.variant_name})` : ""} ×${i.qty} — RM${i.line_total.toFixed(2)}`)
         .join("\n");
+      const redeemLine =
+        appliedRedeemPoints > 0
+          ? `Tebus mata: −RM${appliedRedeemAmount.toFixed(2)} (${appliedRedeemPoints} pts)\n`
+          : "";
       const waMsg =
         `✅ Order #${numbering.orderNumber} disahkan!\n\n` +
         `${itemLines}\n\n` +
-        `Jumlah: RM${calculated.subtotal.toFixed(2)}\n\n` +
+        (redeemLine ? `Subjumlah: RM${calculated.subtotal.toFixed(2)}\n${redeemLine}` : "") +
+        `Jumlah: RM${finalTotal.toFixed(2)}\n\n` +
         `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
       sendMurpatiText({ to: waPhone, message: waMsg }).catch(() => {});
     }
@@ -366,7 +448,10 @@ export async function POST(req: Request) {
       success: true,
       order_id: order.id,
       order_number: numbering.orderNumber,
-      total: calculated.subtotal,
+      subtotal: calculated.subtotal,
+      total: finalTotal,
+      redeemed_points: appliedRedeemPoints,
+      redeemed_amount: appliedRedeemAmount,
       payment_url: paymentUrl,
     });
   } catch (error) {

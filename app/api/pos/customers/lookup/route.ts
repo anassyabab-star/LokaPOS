@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
+import { calculateLoyaltySnapshot, computeMembershipTier, getLoyaltyConfig } from "@/lib/loyalty";
 
 function normalizePhone(value: string) {
   return value.replace(/[^\d+]/g, "").trim();
@@ -11,48 +12,10 @@ function isMissingRelationError(message: string | null | undefined) {
   return m.includes("does not exist") || m.includes("schema cache");
 }
 
-const LOYALTY_POINTS_EXPIRY_DAYS = 365;
-const LOYALTY_EXPIRING_SOON_DAYS = 30;
-
 type LedgerRow = {
   points_change: number | null;
   created_at: string;
 };
-
-function calculateLoyaltySnapshot(rows: LedgerRow[]) {
-  const now = Date.now();
-  const soonCutoff = now - (LOYALTY_POINTS_EXPIRY_DAYS - LOYALTY_EXPIRING_SOON_DAYS) * 24 * 60 * 60 * 1000;
-  const lots: Array<{ remaining: number; createdAtMs: number }> = [];
-
-  for (const row of rows) {
-    const change = Number(row.points_change || 0);
-    const createdAtMs = new Date(row.created_at).getTime();
-    if (!Number.isFinite(createdAtMs)) continue;
-
-    if (change > 0) {
-      lots.push({ remaining: change, createdAtMs });
-      continue;
-    }
-
-    if (change < 0) {
-      let redeem = Math.abs(change);
-      while (redeem > 0 && lots.length > 0) {
-        const lot = lots[0];
-        const used = Math.min(lot.remaining, redeem);
-        lot.remaining -= used;
-        redeem -= used;
-        if (lot.remaining <= 0) lots.shift();
-      }
-    }
-  }
-
-  const points = lots.reduce((sum, lot) => sum + lot.remaining, 0);
-  const expiringSoon = lots
-    .filter(lot => lot.createdAtMs <= soonCutoff)
-    .reduce((sum, lot) => sum + lot.remaining, 0);
-
-  return { points, expiringSoon };
-}
 
 export async function GET(req: Request) {
   const auth = await requireStaffApi();
@@ -84,40 +47,37 @@ export async function GET(req: Request) {
       return NextResponse.json({ customer: null });
     }
 
-    const cutoffIso = new Date(
-      Date.now() - LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000
-    ).toISOString();
+    const config = await getLoyaltyConfig();
+    const yearAgoIso = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+
+    // Rolling 12-month paid spend → membership tier.
+    let spend12m = 0;
+    const { data: spendRows } = await supabase
+      .from("orders")
+      .select("total")
+      .eq("customer_id", data.id)
+      .eq("payment_status", "paid")
+      .gte("created_at", yearAgoIso)
+      .limit(10000);
+    spend12m = (spendRows || []).reduce((sum, row) => sum + Number(row.total || 0), 0);
+    const tier = computeMembershipTier(spend12m, config);
 
     let loyaltyPoints = 0;
+    let expiringPoints30d = 0;
     const { data: loyaltyRows, error: loyaltyError } = await supabase
       .from("loyalty_ledger")
       .select("points_change,created_at")
       .eq("customer_id", data.id)
-      .gte("created_at", cutoffIso)
       .order("created_at", { ascending: true })
-      .limit(5000);
+      .limit(10000);
 
-    if (!loyaltyError) {
-      const snapshot = calculateLoyaltySnapshot((loyaltyRows || []) as LedgerRow[]);
-      loyaltyPoints = snapshot.points;
-      const expiringPoints30d = snapshot.expiringSoon;
-      return NextResponse.json({
-        customer: {
-          id: data.id,
-          name: data.name,
-          phone: data.phone,
-          email: data.email,
-          consent_whatsapp: Boolean(data.consent_whatsapp),
-          consent_email: Boolean(data.consent_email),
-          total_orders: Number(data.total_orders || 0),
-          total_spend: Number(data.total_spend || 0),
-          last_order_at: data.last_order_at,
-          loyalty_points: loyaltyPoints,
-          expiring_points_30d: expiringPoints30d,
-        },
-      });
-    } else if (!isMissingRelationError(loyaltyError.message)) {
+    if (loyaltyError && !isMissingRelationError(loyaltyError.message)) {
       return NextResponse.json({ error: loyaltyError.message }, { status: 500 });
+    }
+    if (!loyaltyError) {
+      const snapshot = calculateLoyaltySnapshot((loyaltyRows || []) as LedgerRow[], config);
+      loyaltyPoints = snapshot.pointsAvailable;
+      expiringPoints30d = snapshot.expiringPoints30d;
     }
 
     return NextResponse.json({
@@ -132,7 +92,9 @@ export async function GET(req: Request) {
         total_spend: Number(data.total_spend || 0),
         last_order_at: data.last_order_at,
         loyalty_points: loyaltyPoints,
-        expiring_points_30d: 0,
+        expiring_points_30d: expiringPoints30d,
+        tier: tier.name,
+        spend_12m: spend12m,
       },
     });
   } catch (error) {

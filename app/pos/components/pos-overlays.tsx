@@ -2,18 +2,19 @@
 
 import { useState, useEffect, useRef } from "react";
 import { usePos } from "../pos-context";
-import { LOYALTY_REDEEM_MIN_POINTS, LOYALTY_REDEEM_MAX_RATIO, LOYALTY_REDEEM_RM_PER_POINT, MarketingConsentMode } from "../types";
+import { MarketingConsentMode } from "../types";
 
 // ━━━━━━━━━━━━━━━ CUSTOMER OVERLAY ━━━━━━━━━━━━━━━
 export function CustomerOverlay() {
   const s = usePos();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { redeemRmPerPoint, redeemMinPoints, redeemMaxRatio } = s.loyaltyConfig;
 
   // Compute max eligible points for this order
-  const maxRedeemByAmount = Math.floor((s.totalAfterDiscount * LOYALTY_REDEEM_MAX_RATIO) / LOYALTY_REDEEM_RM_PER_POINT);
+  const maxRedeemByAmount = Math.floor((s.totalAfterDiscount * redeemMaxRatio) / redeemRmPerPoint);
   const redeemEligibleMax = s.linkedCustomerId ? Math.min(s.memberPoints, maxRedeemByAmount) : 0;
-  const canUsePoints = redeemEligibleMax >= LOYALTY_REDEEM_MIN_POINTS;
-  const pointsAlreadyApplied = Number(s.redeemPointsInput || 0) >= LOYALTY_REDEEM_MIN_POINTS;
+  const canUsePoints = redeemEligibleMax >= redeemMinPoints;
+  const pointsAlreadyApplied = Number(s.redeemPointsInput || 0) >= redeemMinPoints;
 
   // Cleanup debounce on unmount
   useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
@@ -68,12 +69,14 @@ export function CustomerOverlay() {
           <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-3">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs font-semibold text-blue-700">🏆 {s.memberPoints} pts</div>
+                <div className="text-xs font-semibold text-blue-700">
+                  🏆 {s.memberPoints} pts{s.memberTier ? ` · ${s.memberTier}` : ""}
+                </div>
                 {s.memberExpiringPoints > 0 && (
                   <div className="text-[11px] text-amber-600">{s.memberExpiringPoints} pts tamat 30 hari</div>
                 )}
                 <div className="text-[11px] text-blue-500">
-                  Nilai: RM {(s.memberPoints * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2)}
+                  Nilai: RM {(s.memberPoints * redeemRmPerPoint).toFixed(2)}
                 </div>
               </div>
               {canUsePoints && !pointsAlreadyApplied && (
@@ -95,12 +98,12 @@ export function CustomerOverlay() {
             </div>
             {pointsAlreadyApplied && (
               <div className="mt-2 text-xs font-medium text-green-700">
-                ✓ {s.redeemPointsInput} pts ditebus — diskaun RM{(Number(s.redeemPointsInput) * LOYALTY_REDEEM_RM_PER_POINT).toFixed(2)}
+                ✓ {s.redeemPointsInput} pts ditebus — diskaun RM{(Number(s.redeemPointsInput) * redeemRmPerPoint).toFixed(2)}
               </div>
             )}
-            {!canUsePoints && s.memberPoints >= LOYALTY_REDEEM_MIN_POINTS && (
+            {!canUsePoints && s.memberPoints >= redeemMinPoints && (
               <div className="mt-1 text-[11px] text-amber-600">
-                Subtotal terlalu rendah untuk tebus points (min order RM{(LOYALTY_REDEEM_MIN_POINTS * LOYALTY_REDEEM_RM_PER_POINT / LOYALTY_REDEEM_MAX_RATIO).toFixed(2)})
+                Subtotal terlalu rendah untuk tebus points (min order RM{(redeemMinPoints * redeemRmPerPoint / redeemMaxRatio).toFixed(2)})
               </div>
             )}
           </div>
@@ -120,7 +123,7 @@ export function CustomerOverlay() {
               type="number"
               value={s.redeemPointsInput}
               onChange={e => s.setRedeemPointsInput(e.target.value)}
-              placeholder={`Min ${LOYALTY_REDEEM_MIN_POINTS} pts`}
+              placeholder={`Min ${redeemMinPoints} pts`}
               className="w-full border-b border-gray-200 py-3 text-sm outline-none"
             />
             {s.redeemStatusMessage && <div className="mt-1 text-xs text-amber-600">{s.redeemStatusMessage}</div>}
@@ -144,7 +147,8 @@ async function lookupMember(s: ReturnType<typeof usePos>, phoneOverride?: string
     s.setLinkedCustomerId(c.id); s.setCustomerName(c.name || s.customerName); s.setCustomerPhone(c.phone || phone); s.setCustomerEmail(c.email || "");
     s.setConsentWhatsapp(Boolean(c.consent_whatsapp)); s.setConsentEmail(Boolean(c.consent_email));
     s.setMemberPoints(Number(c.loyalty_points || 0)); s.setMemberExpiringPoints(Number(c.expiring_points_30d || 0));
-    s.setMemberLookupTone("success"); s.setMemberLookupMessage(`Ahli: ${c.total_orders ?? 0} order · RM${Number(c.total_spend || 0).toFixed(2)} · ${Number(c.loyalty_points || 0)} pts`);
+    s.setMemberTier(c.tier || null);
+    s.setMemberLookupTone("success"); s.setMemberLookupMessage(`Ahli${c.tier ? ` (${c.tier})` : ""}: ${c.total_orders ?? 0} order · RM${Number(c.total_spend || 0).toFixed(2)} · ${Number(c.loyalty_points || 0)} pts`);
     // Check B1F1 redemption status
     try {
       const b1f1Res = await fetch(`/api/pos/promo/b1f1?phone=${encodeURIComponent(c.phone || phone)}`, { cache: "no-store" });

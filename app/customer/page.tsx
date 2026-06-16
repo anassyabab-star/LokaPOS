@@ -21,11 +21,22 @@ const SUGAR_OPTIONS = [
   { value: "none", label: "Kosong", icon: "⚪" },
 ];
 
-const REDEEM_TIERS = [
-  { points: 100, reward: "RM1", color: "from-[#7F1D1D] to-[#991B1B]" },
-  { points: 300, reward: "RM3", color: "from-[#7F1D1D] to-[#B91C1C]" },
-  { points: 500, reward: "RM5", color: "from-[#7F1D1D] to-[#DC2626]" },
-  { points: 1000, reward: "RM12", color: "from-[#5B1010] to-[#7F1D1D]" },
+type RewardTier = { points: number; reward: string; color: string };
+
+const TIER_COLORS = [
+  "from-[#7F1D1D] to-[#991B1B]",
+  "from-[#7F1D1D] to-[#B91C1C]",
+  "from-[#7F1D1D] to-[#DC2626]",
+  "from-[#5B1010] to-[#7F1D1D]",
+];
+
+// Fallback tiers (kept in sync with DEFAULT_LOYALTY_CONFIG.voucherTiers).
+// Live values arrive from /api/public/store-status.loyalty_config.voucherTiers.
+const REDEEM_TIERS: RewardTier[] = [
+  { points: 100, reward: "RM5", color: TIER_COLORS[0] },
+  { points: 300, reward: "RM15", color: TIER_COLORS[1] },
+  { points: 500, reward: "RM25", color: TIER_COLORS[2] },
+  { points: 1000, reward: "RM50", color: TIER_COLORS[3] },
 ];
 
 const MY_PREFIXES = [
@@ -148,6 +159,70 @@ export default function CustomerApp() {
   const [redeemVoucher, setRedeemVoucher] = useState<{ code: string; reward: string } | null>(null);
   const [redeemErr, setRedeemErr] = useState<string | null>(null);
 
+  // Reward tiers (config-driven via store-status)
+  const [rewardTiers, setRewardTiers] = useState<RewardTier[]>(REDEEM_TIERS);
+
+  // Membership + vouchers + referral (from track endpoint)
+  const [memberTier, setMemberTier] = useState<string | null>(null);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [activeVouchers, setActiveVouchers] = useState<Array<{ code: string; reward_label: string | null; reward_amount: number; expires_at: string | null }>>([]);
+
+  // Referral code captured from ?ref= (applied on first guest order)
+  const [referralInput, setReferralInput] = useState("");
+
+  // Direct points-at-checkout (config-driven, mirrors POS). Rate/min/ratio come
+  // from store-status so the client preview matches what the server enforces.
+  const [redeemCfg, setRedeemCfg] = useState({ rmPerPoint: 0.01, minPoints: 100, maxRatio: 0.3 });
+  const [useRedeem, setUseRedeem] = useState(false);
+
+  // OTP gate (phone verification before redeem / check-in)
+  const [otpGate, setOtpGate] = useState<null | { retry: () => void }>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpErr, setOtpErr] = useState<string | null>(null);
+  const [otpSentMsg, setOtpSentMsg] = useState<string | null>(null);
+
+  async function requestOtp() {
+    setOtpBusy(true); setOtpErr(null); setOtpSentMsg(null);
+    try {
+      const res = await fetch("/api/public/otp/request", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: custPhone.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Gagal hantar kod");
+      setOtpSentMsg("Kod dihantar ke WhatsApp anda.");
+    } catch (e) { setOtpErr(e instanceof Error ? e.message : "Ralat"); }
+    finally { setOtpBusy(false); }
+  }
+
+  function openOtpGate(retry: () => void) {
+    setOtpCode(""); setOtpErr(null); setOtpSentMsg(null);
+    setOtpGate({ retry });
+    void requestOtp();
+  }
+
+  async function verifyOtpAndRetry() {
+    if (!otpCode.trim() || otpBusy) return;
+    setOtpBusy(true); setOtpErr(null);
+    try {
+      const res = await fetch("/api/public/otp/verify", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: custPhone.trim(), code: otpCode.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Kod salah");
+      const retry = otpGate?.retry;
+      setOtpGate(null); setOtpCode(""); setOtpSentMsg(null);
+      retry?.();
+    } catch (e) { setOtpErr(e instanceof Error ? e.message : "Ralat"); }
+    finally { setOtpBusy(false); }
+  }
+
+  function isOtpRequired(status: number, data: { code?: string }) {
+    return status === 401 || data?.code === "OTP_REQUIRED" || data?.code === "OTP_PHONE_MISMATCH";
+  }
+
   // Load catalog
   function fetchCatalog() {
     setLoading(true); setCatalogError(false);
@@ -166,6 +241,24 @@ export default function CustomerApp() {
       .then(d => {
         setStoreOpen(Boolean(d.is_open));
         if (d.payment_methods) setEnabledPayments(d.payment_methods);
+        const lc = d?.loyalty_config;
+        if (lc) {
+          setRedeemCfg({
+            rmPerPoint: Number(lc.redeemRmPerPoint) || 0.01,
+            minPoints: Number(lc.redeemMinPoints) || 100,
+            maxRatio: Number(lc.redeemMaxRatio) || 0.3,
+          });
+        }
+        const vt = d?.loyalty_config?.voucherTiers;
+        if (Array.isArray(vt) && vt.length > 0) {
+          setRewardTiers(
+            vt.map((t: { points: number; label?: string; amount?: number }, i: number) => ({
+              points: Number(t.points),
+              reward: String(t.label || `RM${t.amount ?? ""}`),
+              color: TIER_COLORS[i % TIER_COLORS.length],
+            }))
+          );
+        }
       })
       .catch(() => setStoreOpen(null));
   }, []);
@@ -183,6 +276,9 @@ export default function CustomerApp() {
       }
       const savedCart = localStorage.getItem("loka_cart");
       if (savedCart) setCart(JSON.parse(savedCart));
+      const urlRef = new URLSearchParams(window.location.search).get("ref");
+      const ref = (urlRef || localStorage.getItem("loka_referral_code") || "").trim();
+      if (ref) { setReferralInput(ref); localStorage.setItem("loka_referral_code", ref); }
     } catch {}
     setCartLoaded(true);
   }, []);
@@ -216,6 +312,9 @@ export default function CustomerApp() {
         setTrackedOrders(data.orders);
         if (typeof data.loyalty_points === "number") setLoyaltyPoints(data.loyalty_points);
         if (typeof data.expiring_points_30d === "number") setExpiringPoints30d(data.expiring_points_30d);
+        if (typeof data.tier === "string") setMemberTier(data.tier);
+        if (typeof data.referral_code === "string") setReferralCode(data.referral_code);
+        if (Array.isArray(data.vouchers)) setActiveVouchers(data.vouchers);
       }
     } catch {} finally { setTrackingLoading(false); }
   }, [custPhone]);
@@ -241,6 +340,20 @@ export default function CustomerApp() {
   const cartItems = useMemo(() => Object.values(cart), [cart]);
   const cartCount = useMemo(() => cartItems.reduce((s, i) => s + i.qty, 0), [cartItems]);
   const cartTotal = useMemo(() => cartItems.reduce((s, i) => s + i.unit_price * i.qty, 0), [cartItems]);
+
+  // Points-as-discount preview — same clamps as the server (calculateRedeem):
+  // capped by available balance, the max-ratio of the order, and the min-points
+  // floor. Server re-verifies (and OTP-gates) before committing.
+  const redeemCalc = useMemo(() => {
+    if (!useRedeem || loyaltyPoints < redeemCfg.minPoints || cartTotal <= 0) {
+      return { points: 0, amount: 0 };
+    }
+    const maxByRatio = Math.floor((cartTotal * redeemCfg.maxRatio) / redeemCfg.rmPerPoint);
+    const points = Math.min(loyaltyPoints, maxByRatio);
+    if (points < redeemCfg.minPoints) return { points: 0, amount: 0 };
+    return { points, amount: points * redeemCfg.rmPerPoint };
+  }, [useRedeem, loyaltyPoints, redeemCfg, cartTotal]);
+  const checkoutTotal = Math.max(0, cartTotal - redeemCalc.amount);
 
   const activeOrder = trackedOrders.find(o => ["pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
   const activeOrders = trackedOrders.filter(o => ["pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
@@ -319,17 +432,23 @@ export default function CustomerApp() {
 
   async function doRedeem() {
     if (!redeemTier || !custPhone.trim() || redeeming) return;
+    const tier = redeemTier;
     setRedeeming(true); setRedeemErr(null);
     try {
       const res = await fetch("/api/public/redeem", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: custPhone.trim(), points: redeemTier.points }),
+        body: JSON.stringify({ phone: custPhone.trim(), points: tier.points }),
       });
       const data = await res.json();
+      if (isOtpRequired(res.status, data)) {
+        setRedeeming(false);
+        openOtpGate(() => void doRedeem());
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Gagal menebus");
-      setLoyaltyPoints(p => Math.max(0, p - redeemTier.points));
       setRedeemVoucher({ code: data.code, reward: data.reward });
       setRedeemTier(null);
+      void loadTrackedOrders(); // refresh balance + vouchers from server
     } catch (e) { setRedeemErr(e instanceof Error ? e.message : "Ralat berlaku"); }
     finally { setRedeeming(false); }
   }
@@ -340,6 +459,11 @@ export default function CustomerApp() {
     try {
       const res = await fetch("/api/public/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: custPhone.trim() }) });
       const data = await res.json();
+      if (isOtpRequired(res.status, data)) {
+        setCheckingIn(false);
+        openOtpGate(() => void doCheckIn());
+        return;
+      }
       if (data.already_checked_in) { setCheckedInToday(true); setCheckInMsg("Dah check-in hari ini!"); }
       else if (data.success) { setCheckedInToday(true); setLoyaltyPoints(p => p + (data.points_earned || 1)); setCheckInMsg(`+${data.points_earned || 1} pt berjaya ditambah!`); }
       else { setCheckInMsg(data.error || "Gagal check-in"); }
@@ -355,10 +479,16 @@ export default function CustomerApp() {
       try { localStorage.setItem("loka_guest_name", custName.trim()); localStorage.setItem("loka_guest_phone", custPhone.trim()); } catch {}
       const res = await fetch("/api/public/orders", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_name: custName.trim(), customer_phone: custPhone.trim(), payment_method: payMethod, items: cartItems.map(i => ({ product_id: i.product_id, variant_id: i.variant_id, addon_ids: i.addon_ids, sugar_level: i.sugar_level, qty: i.qty })) })
+        body: JSON.stringify({ customer_name: custName.trim(), customer_phone: custPhone.trim(), payment_method: payMethod, referral_code: referralInput.trim() || undefined, redeem_points: redeemCalc.points > 0 ? redeemCalc.points : undefined, items: cartItems.map(i => ({ product_id: i.product_id, variant_id: i.variant_id, addon_ids: i.addon_ids, sugar_level: i.sugar_level, qty: i.qty })) })
       });
       const data = await res.json();
       if (!res.ok) {
+        // Spending points needs a verified phone — gate then retry the order.
+        if (redeemCalc.points > 0 && isOtpRequired(res.status, data)) {
+          setPlacing(false);
+          openOtpGate(() => void placeOrder());
+          return;
+        }
         if (data.store_closed) throw new Error("⏰ Kedai sedang tutup. Sila cuba semula semasa waktu operasi.");
         throw new Error(data.error || "Gagal buat order");
       }
@@ -376,6 +506,8 @@ export default function CustomerApp() {
       }
 
       setCart({});
+      setUseRedeem(false);
+      if (redeemCalc.points > 0) setLoyaltyPoints(p => Math.max(0, p - redeemCalc.points));
       setShowCheckout(false);
       setCheckoutStep(1);
       setSuccessData({ receiptNumber: data.order_number || orderId?.slice(0, 8) || "—", total: data.total || cartTotal, orderId });
@@ -457,7 +589,7 @@ export default function CustomerApp() {
                     </div>
                     <div className="flex-1 rounded-2xl bg-white/10 px-3 py-2.5 border border-white/10">
                       <p className="text-[9px] font-semibold text-red-200/60 uppercase tracking-wider">Tier</p>
-                      <p className="text-sm font-bold text-white mt-1">{getTier(loyaltyPoints)}</p>
+                      <p className="text-sm font-bold text-white mt-1">{memberTier || getTier(loyaltyPoints)}</p>
                     </div>
                   </div>
                 </div>
@@ -650,7 +782,7 @@ export default function CustomerApp() {
                       <div className="text-[10px] text-red-200 font-medium">mata</div>
                     </div>
                   </div>
-                  <span className="rounded-full bg-white/20 px-4 py-1 text-xs font-bold text-white">{getTier(loyaltyPoints)}</span>
+                  <span className="rounded-full bg-white/20 px-4 py-1 text-xs font-bold text-white">{memberTier || getTier(loyaltyPoints)}</span>
                   {/* Tier progress */}
                   <div className="mt-4 w-full">
                     <div className="flex justify-between mb-1.5">
@@ -745,7 +877,7 @@ export default function CustomerApp() {
                     <span className="text-xs text-gray-400">{loyaltyPoints} pts ada</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    {REDEEM_TIERS.map(tier => {
+                    {rewardTiers.map(tier => {
                       const canRedeem = loyaltyPoints >= tier.points && custPhone.trim();
                       return (
                         <button key={tier.points} onClick={() => canRedeem && setRedeemTier(tier)} className={`rounded-2xl bg-gradient-to-br ${tier.color} p-4 shadow-md relative overflow-hidden text-left transition-transform ${canRedeem ? "active:scale-[0.97]" : "opacity-50 cursor-not-allowed"}`}>
@@ -764,6 +896,36 @@ export default function CustomerApp() {
                     })}
                   </div>
                 </div>
+
+                {/* Voucher aktif */}
+                {activeVouchers.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 mb-3">🎟️ Voucher Anda</h3>
+                    <div className="space-y-2">
+                      {activeVouchers.map(v => (
+                        <div key={v.code} className="flex items-center justify-between rounded-2xl border border-dashed border-[#7F1D1D]/40 bg-white p-3.5">
+                          <div>
+                            <p className="text-lg font-black tracking-widest text-[#7F1D1D]">{v.code}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {v.reward_label || `RM${v.reward_amount}`} OFF
+                              {v.expires_at ? ` • sah hingga ${new Date(v.expires_at).toLocaleDateString("ms-MY", { day: "numeric", month: "short" })}` : ""}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-[#7F1D1D]/10 px-3 py-1 text-[10px] font-bold text-[#7F1D1D]">Tunjuk kaunter</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Kod rujukan */}
+                {referralCode && (
+                  <div className="rounded-2xl bg-gradient-to-br from-[#7F1D1D] to-[#B91C1C] p-4 text-white">
+                    <p className="text-xs font-bold uppercase tracking-wider text-white/70">Kod Rujukan Anda</p>
+                    <p className="mt-1 text-2xl font-black tracking-widest">{referralCode}</p>
+                    <p className="mt-1 text-[11px] text-white/80">Kongsi dengan kawan — kamu berdua dapat bonus points bila mereka order kali pertama.</p>
+                  </div>
+                )}
 
                 {/* How it works */}
                 <div className="rounded-2xl bg-gray-50 border border-gray-100 p-4">
@@ -871,7 +1033,7 @@ export default function CustomerApp() {
                   <p className="text-lg font-bold text-gray-900 truncate">{custName || "Tetamu"}</p>
                   <p className="text-sm text-gray-400">{custPhone || "Belum set telefon"}</p>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-[10px] font-bold text-[#7F1D1D] bg-[#7F1D1D]/10 px-2 py-0.5 rounded-full">{getTier(loyaltyPoints)}</span>
+                    <span className="text-[10px] font-bold text-[#7F1D1D] bg-[#7F1D1D]/10 px-2 py-0.5 rounded-full">{memberTier || getTier(loyaltyPoints)}</span>
                     <span className="text-[10px] text-gray-400">{loyaltyPoints} pts</span>
                   </div>
                 </div>
@@ -1176,6 +1338,38 @@ export default function CustomerApp() {
                       ))}
                     </div>
                   </div>
+                  {/* Guna mata — points as a direct discount (OTP-gated on submit) */}
+                  {loyaltyPoints >= redeemCfg.minPoints && (
+                    <div className="rounded-2xl bg-white border border-gray-200 p-4">
+                      <button
+                        type="button"
+                        onClick={() => setUseRedeem(v => !v)}
+                        className="flex w-full items-center justify-between gap-3"
+                      >
+                        <div className="text-left">
+                          <p className="text-sm font-bold text-gray-900">Guna mata ganjaran</p>
+                          <p className="text-[11px] text-gray-400">
+                            Anda ada {loyaltyPoints} mata
+                            {useRedeem && redeemCalc.points > 0
+                              ? ` · guna ${redeemCalc.points} (−${fm(redeemCalc.amount)})`
+                              : ` · maks ${Math.round(redeemCfg.maxRatio * 100)}% order`}
+                          </p>
+                        </div>
+                        <span
+                          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${useRedeem ? "bg-[#7F1D1D]" : "bg-gray-200"}`}
+                        >
+                          <span
+                            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${useRedeem ? "left-[22px]" : "left-0.5"}`}
+                          />
+                        </span>
+                      </button>
+                      {useRedeem && redeemCalc.points === 0 && (
+                        <p className="mt-2 text-[11px] text-amber-600">
+                          Mata tidak mencukupi untuk order ini (min {redeemCfg.minPoints} mata).
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {/* Order summary */}
                   <div className="rounded-2xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-1.5">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Ringkasan</p>
@@ -1185,16 +1379,22 @@ export default function CustomerApp() {
                         <span className="font-semibold text-gray-900">{fm(item.unit_price * item.qty)}</span>
                       </div>
                     ))}
+                    {redeemCalc.amount > 0 && (
+                      <div className="flex justify-between text-xs pt-0.5">
+                        <span className="text-gray-600">Tebus mata ({redeemCalc.points} pts)</span>
+                        <span className="font-semibold text-green-600">−{fm(redeemCalc.amount)}</span>
+                      </div>
+                    )}
                     <div className="border-t border-gray-200 pt-1.5 flex justify-between">
                       <span className="text-sm font-bold text-gray-900">Jumlah</span>
-                      <span className="text-sm font-bold text-[#7F1D1D]">{fm(cartTotal)}</span>
+                      <span className="text-sm font-bold text-[#7F1D1D]">{fm(checkoutTotal)}</span>
                     </div>
                   </div>
                 </div>
                 <div className="border-t border-gray-100 px-4 py-4 pb-[env(safe-area-inset-bottom,12px)]">
                   {checkoutErr && <p className="text-xs text-red-500 mb-2 text-center">{checkoutErr}</p>}
                   <button onClick={() => void placeOrder()} disabled={placing || cartItems.length === 0} className="w-full rounded-2xl bg-[#7F1D1D] py-4 text-base font-bold text-white disabled:opacity-50 active:bg-[#6B1818] shadow-lg">
-                    {placing ? "Memproses..." : `Bayar ${fm(cartTotal)}`}
+                    {placing ? "Memproses..." : `Bayar ${fm(checkoutTotal)}`}
                   </button>
                 </div>
               </>
@@ -1256,6 +1456,40 @@ export default function CustomerApp() {
               <button onClick={() => { setRedeemVoucher(null); setTab("rewards"); }} className="mt-5 w-full rounded-2xl bg-[#7F1D1D] py-4 text-base font-bold text-white shadow-lg active:bg-[#6B1818]">
                 Selesai
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ━━━ OTP VERIFICATION ━━━ */}
+        {otpGate && (
+          <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40" onClick={() => setOtpGate(null)}>
+            <div className="w-full max-w-lg rounded-t-3xl bg-white p-6 anim-fade-scale" onClick={e => e.stopPropagation()}>
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-200" />
+              <h2 className="text-lg font-bold text-gray-900">Sahkan No. Telefon</h2>
+              <p className="text-sm text-gray-400 mt-1">
+                Kami hantar kod 6-digit ke WhatsApp <span className="font-semibold text-gray-600">{custPhone.trim()}</span>.
+              </p>
+              <input
+                inputMode="numeric"
+                maxLength={6}
+                value={otpCode}
+                onChange={e => setOtpCode(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="• • • • • •"
+                className="mt-4 w-full rounded-2xl border border-gray-200 py-4 text-center text-2xl font-black tracking-[0.4em] outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20"
+              />
+              {otpSentMsg && <p className="mt-2 text-xs text-green-600 text-center">{otpSentMsg}</p>}
+              {otpErr && <p className="mt-2 text-xs text-red-500 text-center">{otpErr}</p>}
+              <button
+                onClick={() => void verifyOtpAndRetry()}
+                disabled={otpBusy || otpCode.length < 4}
+                className="mt-4 w-full rounded-2xl bg-[#7F1D1D] py-4 text-sm font-bold text-white disabled:opacity-40 active:bg-[#6B1818]"
+              >
+                {otpBusy ? "Mengesahkan..." : "Sahkan & Teruskan"}
+              </button>
+              <button onClick={() => void requestOtp()} disabled={otpBusy} className="mt-2 w-full py-2 text-xs font-semibold text-[#7F1D1D] disabled:opacity-40">
+                Hantar semula kod
+              </button>
+              <button onClick={() => setOtpGate(null)} className="w-full py-2 text-xs text-gray-400">Batal</button>
             </div>
           </div>
         )}

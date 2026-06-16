@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { calculateLoyaltySnapshot, getLoyaltyConfig } from "@/lib/loyalty";
 
-export const LOYALTY_POINTS_EXPIRY_DAYS = 365;
-export const LOYALTY_EXPIRING_SOON_DAYS = 30;
+export { calculateLoyaltySnapshot } from "@/lib/loyalty";
 
 type CustomerApiErrorCode =
   | "VALIDATION_ERROR"
@@ -243,51 +243,6 @@ export async function resolveOrCreateCustomerForUser(
   return customer;
 }
 
-export function calculateLoyaltySnapshot(rows: LoyaltyLedgerRow[]) {
-  const nowMs = Date.now();
-  const expiryCutoffMs = nowMs - LOYALTY_POINTS_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-  const expiringSoonCutoffMs =
-    nowMs - (LOYALTY_POINTS_EXPIRY_DAYS - LOYALTY_EXPIRING_SOON_DAYS) * 24 * 60 * 60 * 1000;
-  const lots: Array<{ remaining: number; createdAtMs: number }> = [];
-
-  for (const row of rows) {
-    const change = Number(row.points_change || 0);
-    const createdAtMs = new Date(row.created_at).getTime();
-    if (!Number.isFinite(createdAtMs)) continue;
-
-    if (change > 0) {
-      lots.push({ remaining: change, createdAtMs });
-      continue;
-    }
-
-    if (change < 0) {
-      let redeem = Math.abs(change);
-      while (redeem > 0 && lots.length > 0) {
-        const lot = lots[0];
-        const used = Math.min(lot.remaining, redeem);
-        lot.remaining -= used;
-        redeem -= used;
-        if (lot.remaining <= 0) lots.shift();
-      }
-    }
-  }
-
-  let pointsAvailable = 0;
-  let expiringPoints30d = 0;
-  for (const lot of lots) {
-    if (lot.createdAtMs < expiryCutoffMs) continue;
-    pointsAvailable += lot.remaining;
-    if (lot.createdAtMs <= expiringSoonCutoffMs) {
-      expiringPoints30d += lot.remaining;
-    }
-  }
-
-  return {
-    pointsAvailable,
-    expiringPoints30d,
-  };
-}
-
 export async function loadCustomerLoyalty(customerId: string, historyLimit = 100) {
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
@@ -317,9 +272,15 @@ export async function loadCustomerLoyalty(customerId: string, historyLimit = 100
   }
 
   const rows = (data || []) as LoyaltyLedgerRow[];
-  const snapshot = calculateLoyaltySnapshot(rows);
+  const config = await getLoyaltyConfig();
+  const snapshot = calculateLoyaltySnapshot(rows, config);
 
-  const historyRows = rows.slice(-historyLimit).reverse();
+  // Hide inert 0-point marker rows (written by settlement purely for stats
+  // idempotency) from the customer-facing history.
+  const historyRows = rows
+    .filter(row => Number(row.points_change || 0) !== 0)
+    .slice(-historyLimit)
+    .reverse();
   const orderIds = Array.from(
     new Set(historyRows.map(row => row.order_id).filter((id): id is string => Boolean(id)))
   );

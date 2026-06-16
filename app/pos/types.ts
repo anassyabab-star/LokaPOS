@@ -90,6 +90,7 @@ export type MemberLookup = {
   last_order_at: string | null;
   loyalty_points: number;
   expiring_points_30d: number;
+  tier?: string;
 };
 
 export type CheckoutTab = "items" | "customer" | "promo" | "payment";
@@ -105,9 +106,24 @@ export const SUGAR_LEVEL_OPTIONS: Array<{ value: SugarLevel; label: string; emoj
 export const DEFAULT_SUGAR_LEVEL: SugarLevel = "normal";
 export const PAYMENT_METHODS: Array<"cash" | "qr" | "card"> = ["cash", "qr", "card"];
 export const DISCOUNT_TYPES: Array<"percent" | "fixed" | "none"> = ["percent", "fixed", "none"];
+// Client-side fallback defaults — kept in sync with DEFAULT_LOYALTY_CONFIG in
+// lib/loyalty.ts. The live values are fetched from /api/public/store-status and
+// flow through `s.loyaltyConfig`; these are only used before that resolves.
 export const LOYALTY_REDEEM_RM_PER_POINT = 0.05;
-export const LOYALTY_REDEEM_MIN_POINTS = 50;
-export const LOYALTY_REDEEM_MAX_RATIO = 0.5;
+export const LOYALTY_REDEEM_MIN_POINTS = 100;
+export const LOYALTY_REDEEM_MAX_RATIO = 0.3;
+
+export type PosLoyaltyConfig = {
+  redeemRmPerPoint: number;
+  redeemMinPoints: number;
+  redeemMaxRatio: number;
+};
+
+export const DEFAULT_POS_LOYALTY_CONFIG: PosLoyaltyConfig = {
+  redeemRmPerPoint: LOYALTY_REDEEM_RM_PER_POINT,
+  redeemMinPoints: LOYALTY_REDEEM_MIN_POINTS,
+  redeemMaxRatio: LOYALTY_REDEEM_MAX_RATIO,
+};
 
 export function buildCartKey(
   productId: string,
