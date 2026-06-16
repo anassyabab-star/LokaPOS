@@ -1,0 +1,7 @@
+-- loyalty_ledger table, indexes, and views
+-- Canonical definition is in schema_v1_core.sql.
+-- This file was the original standalone definition; retained here for reference only.
+-- Do NOT run this file independently — schema_v1_core.sql is the source of truth.
+--
+-- Table: public.loyalty_ledger (see schema_v1_core.sql:228)
+-- View:  public.customer_loyalty_balances (see schema_v1_core.sql:253)
