@@ -111,10 +111,10 @@ export default function MenuPage() {
                   </span>
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">
-                      <span className="h-[7px] w-[7px] flex-none animate-blink rounded-full bg-melon" />
-                      <span className="font-sans text-[14px] font-semibold text-cream">Order in progress</span>
+                      <span className="h-[7px] w-[7px] flex-none rounded-full bg-melon" />
+                      <span className="font-sans text-[14px] font-semibold text-cream">Your latest order</span>
                     </span>
-                    <span className="mt-0.5 block font-sans text-[12px] text-muted-3">Tap to track →</span>
+                    <span className="mt-0.5 block font-sans text-[12px] text-muted-3">Tap to view receipt →</span>
                   </span>
                 </Link>
                 <button onClick={() => setLastOrder(null)} className="px-1.5 pb-1 text-[18px] leading-none text-muted-3 active:opacity-60" aria-label="Dismiss">×</button>
