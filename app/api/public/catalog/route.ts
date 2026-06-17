@@ -59,7 +59,29 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ categories: cats || [], products: mapped });
+    // Bestsellers: rank product ids by total quantity sold (most-ordered first).
+    // Cheap JS tally over recent order_items; client falls back if empty.
+    let bestsellers: string[] = [];
+    try {
+      const { data: oi } = await supabase
+        .from("order_items")
+        .select("product_id, qty")
+        .limit(10000);
+      const tally = new Map<string, number>();
+      for (const r of (oi || []) as Array<{ product_id: string | null; qty: number | null }>) {
+        if (!r.product_id) continue;
+        tally.set(r.product_id, (tally.get(r.product_id) || 0) + Number(r.qty || 0));
+      }
+      const available = new Set(mapped.map(p => p.id));
+      bestsellers = [...tally.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([id]) => id)
+        .filter(id => available.has(id));
+    } catch {
+      bestsellers = [];
+    }
+
+    return NextResponse.json({ categories: cats || [], products: mapped, bestsellers });
   } catch (err) {
     return NextResponse.json({ error: "Failed to load catalog" }, { status: 500 });
   }
