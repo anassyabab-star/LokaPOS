@@ -117,9 +117,9 @@ export default function SettingsPage() {
   const enabledCount = settings ? Object.values(settings.payment_methods).filter(Boolean).length : 0;
 
   return (
-    <div className="p-6 max-w-3xl space-y-8">
+    <div className="max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+        <h1 className="sr-only">Settings</h1>
         <p className="text-sm text-gray-500 mt-1">Konfigurasi operasi dan pengalaman pelanggan</p>
       </div>
 

@@ -319,7 +319,7 @@ export default function TimesheetsPage() {
     <div style={{ padding: "24px 0" }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--d-text-1)", margin: 0 }}>Timesheet</h1>
+        <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}>Timesheet</h1>
         <p style={{ fontSize: 13, color: "var(--d-text-2)", marginTop: 4 }}>Rekod kehadiran & pengiraan gaji staf</p>
       </div>
 

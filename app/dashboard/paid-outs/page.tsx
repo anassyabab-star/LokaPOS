@@ -86,10 +86,10 @@ export default function PaidOutsPage() {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+    <div style={{ color: "var(--ink)" }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Paid Outs</h1>
+        <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}>Paid Outs</h1>
         <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
           Audit duit keluar cash drawer untuk belian segera + bukti invoice.
         </p>

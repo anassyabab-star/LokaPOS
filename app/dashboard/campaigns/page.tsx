@@ -471,7 +471,7 @@ export default function CampaignsPage() {
       {/* Page header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--d-text-1)", letterSpacing: "-0.02em" }}>Campaigns</h1>
+          <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}>Campaigns</h1>
           <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
             Queue CRM recipients, then send WhatsApp in controlled batches via Murpati.
           </p>

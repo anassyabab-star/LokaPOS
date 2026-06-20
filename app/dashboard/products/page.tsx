@@ -407,12 +407,12 @@ export default function ProductsPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+    <div style={{ color: "var(--ink)" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Products</h1>
-          <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>Manage your product catalogue, variants, addons, and stock.</p>
+          <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}>Products</h1>
+          <p style={{ fontSize: 13.5, color: "var(--muted)" }}>Manage your product catalogue, variants, addons, and stock.</p>
         </div>
         <button
           type="button"
@@ -427,14 +427,15 @@ export default function ProductsPage() {
       {showCreateForm && (
         <div
           style={{
-            background: "var(--d-surface)",
-            border: "1px solid var(--d-border)",
-            borderRadius: 14,
+            background: "var(--card)",
+            border: "1px solid var(--hairline)",
+            borderRadius: 16,
             padding: 20,
             marginBottom: 20,
+            boxShadow: "var(--shadow-sm)",
           }}
         >
-          <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)", marginBottom: 14 }}>New Product</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)", marginBottom: 14 }}>New Product</p>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10, marginBottom: 14 }}>
             <input placeholder="Product name" value={newName} onChange={e => setNewName(e.target.value)} style={inputStyle} />

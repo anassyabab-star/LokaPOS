@@ -83,10 +83,10 @@ export default function CategoriesPage() {
   const cancelEdit = () => { setEditingId(null); setName(""); };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+    <div style={{ color: "var(--ink)" }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Categories</h1>
+        <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}>Categories</h1>
         <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>Manage category list used by products.</p>
       </div>
 
