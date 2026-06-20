@@ -29,25 +29,25 @@ export default function SalesChart({ data }: Props) {
         <AreaChart data={formattedData}>
           <defs>
             <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#7F1D1D" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#7F1D1D" stopOpacity={0.05} />
+              <stop offset="5%" stopColor="var(--maroon)" stopOpacity={0.35} />
+              <stop offset="95%" stopColor="var(--maroon)" stopOpacity={0.05} />
             </linearGradient>
           </defs>
 
           <CartesianGrid
-            stroke="#1f2937"
+            stroke="var(--hairline)"
             strokeDasharray="3 3"
             vertical={false}
           />
           <XAxis
             dataKey="label"
-            stroke="#666"
+            stroke="var(--muted-2)"
             fontSize={10}
             tickLine={false}
             axisLine={false}
           />
           <YAxis
-            stroke="#666"
+            stroke="var(--muted-2)"
             fontSize={10}
             tickLine={false}
             axisLine={false}
@@ -61,10 +61,12 @@ export default function SalesChart({ data }: Props) {
             formatter={(value: unknown) => [`RM ${Number(value || 0).toFixed(2)}`, "Sales"]}
             labelFormatter={(label: unknown) => `Date: ${String(label ?? "")}`}
             contentStyle={{
-              backgroundColor: "#111",
-              border: "1px solid #333",
-              borderRadius: "6px",
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--hairline)",
+              borderRadius: "10px",
               fontSize: "12px",
+              color: "var(--ink)",
+              boxShadow: "var(--shadow)",
             }}
           />
           <Area
@@ -76,13 +78,13 @@ export default function SalesChart({ data }: Props) {
           <Line
             type="monotone"
             dataKey="total"
-            stroke="#7F1D1D"
+            stroke="var(--maroon)"
             strokeWidth={2.5}
             dot={{
               r: 3,
-              stroke: "#7F1D1D",
+              stroke: "var(--maroon)",
               strokeWidth: 2,
-              fill: "#000",
+              fill: "var(--card)",
             }}
             activeDot={{ r: 5 }}
           />

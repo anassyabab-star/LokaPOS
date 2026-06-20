@@ -7,18 +7,9 @@ import React from "react";
 
 /* ── Layout ─────────────────────────────────────────── */
 export function PageWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--d-bg)",
-        padding: "28px 28px 40px",
-        color: "var(--d-text-1)",
-      }}
-    >
-      {children}
-    </div>
-  );
+  // The dashboard shell (layout.tsx) now owns the page background, padding,
+  // scroll and max-width — so this is just a passthrough.
+  return <>{children}</>;
 }
 
 export function PageHeader({
@@ -30,33 +21,22 @@ export function PageHeader({
   desc?: string;
   action?: React.ReactNode;
 }) {
+  // The section title lives in the app topbar now; keep a visually-hidden H1 for
+  // accessibility and surface only the description + action here.
   return (
     <div
       style={{
         display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "space-between",
+        alignItems: "center",
+        justifyContent: desc ? "space-between" : "flex-end",
         gap: 16,
-        marginBottom: 24,
+        marginBottom: 18,
       }}
     >
-      <div>
-        <h1
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            color: "var(--d-text-1)",
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {title}
-        </h1>
-        {desc && (
-          <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
-            {desc}
-          </p>
-        )}
-      </div>
+      <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}>
+        {title}
+      </h1>
+      {desc && <p style={{ fontSize: 13.5, color: "var(--muted)" }}>{desc}</p>}
       {action}
     </div>
   );
@@ -76,9 +56,10 @@ export function Card({
     <div
       className={className}
       style={{
-        background: "var(--d-surface)",
-        border: "1px solid var(--d-border)",
-        borderRadius: 14,
+        background: "var(--card)",
+        border: "1px solid var(--hairline)",
+        borderRadius: 16,
+        boxShadow: "var(--shadow-sm)",
         ...style,
       }}
     >
@@ -140,31 +121,33 @@ export function StatCard({
   accent?: string;
 }) {
   return (
-    <Card style={{ padding: "14px 16px" }}>
+    <Card style={{ padding: "16px 18px" }}>
       <p
         style={{
           fontSize: 11,
-          fontWeight: 500,
-          color: "var(--d-text-3)",
+          fontWeight: 600,
+          color: "var(--muted-2)",
           textTransform: "uppercase",
-          letterSpacing: "0.05em",
+          letterSpacing: "0.13em",
         }}
       >
         {label}
       </p>
       <p
         style={{
-          fontSize: 24,
-          fontWeight: 700,
-          color: accent ?? "var(--d-text-1)",
-          marginTop: 6,
+          fontFamily: "var(--font-space-grotesk), sans-serif",
+          fontSize: 28,
+          fontWeight: 600,
+          color: accent ?? "var(--ink)",
+          marginTop: 8,
           lineHeight: 1,
+          letterSpacing: "-0.01em",
         }}
       >
         {value}
       </p>
       {sub && (
-        <p style={{ fontSize: 11, color: "var(--d-text-3)", marginTop: 4 }}>
+        <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
           {sub}
         </p>
       )}

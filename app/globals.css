@@ -17,31 +17,39 @@
   --app-text: #e5e7eb;
   --app-muted: #9ca3af;
 
-  /* Dashboard design tokens */
-  --d-bg: #0d0d0f;
-  --d-sidebar: #111113;
-  --d-surface: #18181b;
-  --d-surface-hover: #1e1e22;
-  --d-border: #27272a;
-  --d-border-soft: #222226;
-  --d-text-1: #fafafa;
-  --d-text-2: #a1a1aa;
-  --d-text-3: #71717a;
-  --d-accent: #7f1d1d;
-  --d-accent-hover: #6b1818;
-  --d-accent-soft: rgba(127, 29, 29, 0.14);
-  --d-success: #16a34a;
-  --d-success-soft: rgba(22, 163, 74, 0.12);
-  --d-warning: #d97706;
-  --d-warning-soft: rgba(217, 119, 6, 0.12);
-  --d-error: #dc2626;
-  --d-error-soft: rgba(220, 38, 38, 0.12);
-  --d-info: #2563eb;
-  --d-info-soft: rgba(37, 99, 235, 0.12);
-  --d-nav-active-bg: rgba(127, 29, 29, 0.14);
-  --d-input-bg: #0d0d0f;
-  --d-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --d-shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+  /* Dashboard design tokens — warm Loka admin (redesign), dark default */
+  --d-bg: #160F0A;
+  --d-sidebar: #1C130D;
+  --d-surface: #241912;
+  --d-surface-hover: #2E2017;
+  --d-border: #3A2A20;
+  --d-border-soft: #2E2118;
+  --d-text-1: #F1E8DA;
+  --d-text-2: #B7A48D;
+  --d-text-3: #8A7461;
+  --d-accent: #C24B3A;
+  --d-accent-hover: #D5604E;
+  --d-accent-soft: rgba(232, 96, 76, 0.16);
+  --d-success: #5BA46E;
+  --d-success-soft: rgba(63, 125, 79, 0.22);
+  --d-warning: #D9A441;
+  --d-warning-soft: rgba(217, 164, 65, 0.18);
+  --d-error: #E8604C;
+  --d-error-soft: rgba(232, 96, 76, 0.2);
+  --d-info: #6BA3C2;
+  --d-info-soft: rgba(107, 163, 194, 0.16);
+  --d-nav-active-bg: rgba(232, 96, 76, 0.16);
+  --d-input-bg: #1F140E;
+  --d-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 14px 40px -24px rgba(0,0,0,0.8);
+  --d-shadow-md: 0 8px 24px -8px rgba(0,0,0,0.7);
+
+  /* Loka admin redesign tokens (prototype) — dark */
+  --maroon:#C24B3A; --maroon-hover:#D5604E; --ink:#F1E8DA; --cream:#F6EFE3; --cream-2:#1F140E;
+  --card:#241912; --hairline:#3A2A20; --muted:#B7A48D; --muted-2:#8A7461;
+  --melon:#E8604C; --leaf:#5BA46E; --page-bg:#160F0A; --sidebar:#1C130D; --topbar:#1C130D;
+  --text:#F1E8DA; --field:#1F140E; --active-nav:rgba(232,96,76,0.16); --tile:#241912;
+  --leaf-bg:rgba(63,125,79,0.22); --melon-bg:rgba(232,96,76,0.2); --muted-bg:rgba(183,164,141,0.16); --maroon-bg:rgba(194,75,58,0.18);
+  --shadow:0 1px 2px rgba(0,0,0,0.4), 0 14px 40px -24px rgba(0,0,0,0.8); --shadow-sm:0 1px 2px rgba(0,0,0,0.4);
 }
 
 /* ━━━ POS-specific design tokens ━━━ */
@@ -144,31 +152,39 @@
   --app-text: #111827;
   --app-muted: #6b7280;
 
-  /* Dashboard design tokens — light */
-  --d-bg: #f4f4f6;
-  --d-sidebar: #ffffff;
-  --d-surface: #ffffff;
-  --d-surface-hover: #f9f9fb;
-  --d-border: #e4e4e7;
-  --d-border-soft: #ececef;
-  --d-text-1: #09090b;
-  --d-text-2: #52525b;
-  --d-text-3: #a1a1aa;
-  --d-accent: #7f1d1d;
-  --d-accent-hover: #6b1818;
-  --d-accent-soft: rgba(127, 29, 29, 0.08);
-  --d-success: #15803d;
-  --d-success-soft: rgba(21, 128, 61, 0.1);
-  --d-warning: #b45309;
+  /* Dashboard design tokens — warm Loka admin (redesign), light */
+  --d-bg: #F4ECE1;
+  --d-sidebar: #FFFFFF;
+  --d-surface: #FFFFFF;
+  --d-surface-hover: #FBF7F0;
+  --d-border: #EADFCD;
+  --d-border-soft: #EFE6D6;
+  --d-text-1: #2A1D16;
+  --d-text-2: #8A7461;
+  --d-text-3: #B7A48D;
+  --d-accent: #7F1D1D;
+  --d-accent-hover: #6B1818;
+  --d-accent-soft: rgba(127, 29, 29, 0.09);
+  --d-success: #3F7D4F;
+  --d-success-soft: rgba(63, 125, 79, 0.12);
+  --d-warning: #B45309;
   --d-warning-soft: rgba(180, 83, 9, 0.1);
-  --d-error: #b91c1c;
-  --d-error-soft: rgba(185, 28, 28, 0.08);
+  --d-error: #C0392B;
+  --d-error-soft: rgba(232, 96, 76, 0.13);
   --d-info: #1d4ed8;
   --d-info-soft: rgba(29, 78, 216, 0.08);
-  --d-nav-active-bg: rgba(127, 29, 29, 0.08);
-  --d-input-bg: #fafafa;
-  --d-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
-  --d-shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+  --d-nav-active-bg: rgba(127, 29, 29, 0.09);
+  --d-input-bg: #FBF7F0;
+  --d-shadow: 0 1px 2px rgba(42,29,22,0.05), 0 10px 30px -20px rgba(42,29,22,0.25);
+  --d-shadow-md: 0 8px 24px -10px rgba(42,29,22,0.22);
+
+  /* Loka admin redesign tokens (prototype) — light */
+  --maroon:#7F1D1D; --maroon-hover:#6B1818; --ink:#2A1D16; --cream:#F6EFE3; --cream-2:#F4ECE1;
+  --card:#FFFFFF; --hairline:#EADFCD; --muted:#8A7461; --muted-2:#B7A48D;
+  --melon:#E8604C; --leaf:#3F7D4F; --page-bg:#F4ECE1; --sidebar:#FFFFFF; --topbar:#FFFFFF;
+  --text:#2A1D16; --field:#FBF7F0; --active-nav:rgba(127,29,29,0.09); --tile:#F6EFE3;
+  --leaf-bg:rgba(63,125,79,0.12); --melon-bg:rgba(232,96,76,0.13); --muted-bg:rgba(138,116,97,0.13); --maroon-bg:rgba(127,29,29,0.10);
+  --shadow:0 1px 2px rgba(42,29,22,0.05), 0 10px 30px -20px rgba(42,29,22,0.25); --shadow-sm:0 1px 2px rgba(42,29,22,0.06);
 }
 
 body {
@@ -180,6 +196,25 @@ body {
 a {
   @apply text-inherit no-underline;
 }
+
+/* Warm-token remap for LIGHT-first Tailwind utilities used inside the admin
+   (settings etc.). Maps to themed CSS vars so they're correct in BOTH light and
+   dark — fixes dark-mode "invisible" text/cards. Scoped to .theme-scope (admin). */
+.theme-scope .bg-white { background-color: var(--card) !important; }
+.theme-scope .bg-gray-50,
+.theme-scope .bg-gray-100,
+.theme-scope .bg-\[\#fafafa\],
+.theme-scope .bg-\[\#f9fafb\] { background-color: var(--field) !important; }
+.theme-scope .text-black,
+.theme-scope .text-gray-900,
+.theme-scope .text-gray-800 { color: var(--ink) !important; }
+.theme-scope .text-gray-700,
+.theme-scope .text-gray-600 { color: var(--muted) !important; }
+.theme-scope .text-gray-500,
+.theme-scope .text-gray-400 { color: var(--muted-2) !important; }
+.theme-scope .border-gray-100,
+.theme-scope .border-gray-200,
+.theme-scope .border-gray-300 { border-color: var(--hairline) !important; }
 
 /* Light-mode adaptation layer for existing dark-first admin/customer UI. */
 :root[data-theme="light"] .theme-scope.bg-black,

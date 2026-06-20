@@ -71,7 +71,7 @@ function formatOrderStatus(status: OrderTimelineStatus) {
 
 function orderStatusBadgeStyle(status: OrderTimelineStatus): React.CSSProperties {
   if (status === "pending")   return { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px solid var(--d-warning)" };
-  if (status === "preparing") return { color: "#f59e0b", background: "rgba(245,158,11,0.12)", border: "1px solid #f59e0b" };
+  if (status === "preparing") return { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px solid var(--d-warning)" };
   if (status === "ready")     return { color: "var(--d-success)", background: "var(--d-success-soft)", border: "1px solid var(--d-success)" };
   if (status === "completed") return { color: "var(--d-info)", background: "var(--d-info-soft)", border: "1px solid var(--d-info)" };
   if (status === "cancelled") return { color: "var(--d-error)", background: "var(--d-error-soft)", border: "1px solid var(--d-error)" };
@@ -93,7 +93,7 @@ function formatOrderSource(source: OrderSource) {
 
 function orderSourceBadgeStyle(source: OrderSource): React.CSSProperties {
   if (source === "pos")          return { color: "var(--d-info)", background: "var(--d-info-soft)", border: "1px solid var(--d-info)" };
-  if (source === "customer_web") return { color: "#8b5cf6", background: "rgba(139,92,246,0.12)", border: "1px solid #8b5cf6" };
+  if (source === "customer_web") return { color: "var(--melon)", background: "var(--melon-bg)", border: "1px solid var(--melon)" };
   return { color: "var(--d-text-3)", background: "var(--d-surface-hover)", border: "1px solid var(--d-border)" };
 }
 
@@ -179,7 +179,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
 
   if (ordersError || !ordersRaw) {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+      <div style={{ color: "var(--ink)" }}>
         <h1 style={{ fontSize: 22, fontWeight: 700 }}>Orders History</h1>
         <p style={{ marginTop: 12, fontSize: 13, color: "var(--d-error)" }}>
           Failed to load orders: {ordersError?.message || "Unknown error"}
@@ -299,11 +299,11 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   }));
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--d-bg)", padding: "28px 28px 40px", color: "var(--d-text-1)" }}>
+    <div style={{ color: "var(--ink)" }}>
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>Orders History</h1>
-        <p style={{ fontSize: 13, color: "var(--d-text-3)", marginTop: 4 }}>
+      <div style={{ marginBottom: 18 }}>
+        <h1 style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 }}>Orders</h1>
+        <p style={{ fontSize: 13.5, color: "var(--muted)" }}>
           Semak order lepas, cari ikut receipt/customer, dan buka detail item bila perlu.
         </p>
       </div>
@@ -314,11 +314,12 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
           gap: 10,
-          background: "var(--d-surface)",
-          border: "1px solid var(--d-border)",
-          borderRadius: 14,
+          background: "var(--card)",
+          border: "1px solid var(--hairline)",
+          borderRadius: 16,
           padding: "14px 16px",
           marginBottom: 16,
+          boxShadow: "var(--shadow-sm)",
         }}
       >
         <input
@@ -422,10 +423,11 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
             <div
               key={order.id}
               style={{
-                background: "var(--d-surface)",
-                border: "1px solid var(--d-border)",
-                borderRadius: 14,
+                background: "var(--card)",
+                border: "1px solid var(--hairline)",
+                borderRadius: 16,
                 padding: "16px 18px",
+                boxShadow: "var(--shadow-sm)",
               }}
             >
               {/* Order header */}
