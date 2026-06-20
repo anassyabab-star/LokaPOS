@@ -433,7 +433,7 @@ export default function UsersPage() {
           gap: 10,
           background: "var(--d-surface)",
           border: "1px solid var(--d-border)",
-          borderRadius: 14,
+          borderRadius: 16,
           padding: "14px 16px",
           marginBottom: 16,
         }}
@@ -464,13 +464,13 @@ export default function UsersPage() {
       )}
 
       {loading && (
-        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "20px 18px", fontSize: 13, color: "var(--d-text-3)" }}>
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "20px 18px", fontSize: 13, color: "var(--d-text-3)" }}>
           Loading users...
         </div>
       )}
 
       {!loading && activeUsers.length === 0 && (
-        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
           No active users found.
         </div>
       )}
@@ -478,7 +478,7 @@ export default function UsersPage() {
       {/* Active users list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {!loading && activeUsers.map(user => (
-          <div key={user.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+          <div key={user.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
               <div>
                 <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{user.full_name || "No name"}</p>
@@ -579,14 +579,14 @@ export default function UsersPage() {
       </div>
 
       {!loading && filteredRequests.length === 0 && (
-        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "40px 20px", textAlign: "center", fontSize: 14, color: "var(--d-text-2)" }}>
           No user requests found.
         </div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {!loading && filteredRequests.map(request => (
-          <div key={request.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+          <div key={request.id} style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
               <div>
                 <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{request.full_name}</p>

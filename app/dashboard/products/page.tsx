@@ -542,7 +542,7 @@ export default function ProductsPage() {
               style={{
                 background: "var(--d-surface)",
                 border: isRestockTarget ? "1px solid var(--d-accent)" : "1px solid var(--d-border)",
-                borderRadius: 14,
+                borderRadius: 16,
                 padding: "16px 18px",
                 boxShadow: isRestockTarget ? "0 0 0 2px var(--d-accent-soft)" : "none",
               }}

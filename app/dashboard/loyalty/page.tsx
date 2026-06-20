@@ -89,7 +89,7 @@ export default function LoyaltyDashboardPage() {
       ) : (
         <>
           {/* Headline stats */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
             <StatCard label="Liability (points)" value={data.liability.points.toLocaleString()} />
             <StatCard label="Liability (RM)" value={`RM ${data.liability.value_rm.toFixed(2)}`} accent="var(--d-error)" />
             <StatCard label="Points Issued" value={data.points_issued.toLocaleString()} accent="var(--d-success)" />

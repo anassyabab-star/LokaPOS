@@ -214,7 +214,7 @@ export default function ReportsPage() {
           style={{
             background: "var(--d-surface)",
             border: "1px solid var(--d-border)",
-            borderRadius: 14,
+            borderRadius: 16,
             overflow: "hidden",
             position: "sticky",
             top: 20,
@@ -294,7 +294,7 @@ export default function ReportsPage() {
         {/* ── Right: Report content ─────────────────────── */}
         <div>
           {!selectedShiftId && !shiftsLoading && (
-            <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "40px 20px", textAlign: "center" }}>
+            <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "40px 20px", textAlign: "center" }}>
               <p style={{ fontSize: 14, color: "var(--d-text-2)" }}>Select a shift from the left to view its report.</p>
             </div>
           )}
@@ -316,7 +316,7 @@ export default function ReportsPage() {
           {report && !reportLoading && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {/* Shift header card */}
-              <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+              <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -396,11 +396,11 @@ export default function ReportsPage() {
 
               {/* Hourly chart + Payment mix side by side */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+                <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
                   <HourlyChart data={report.hourly} />
                 </div>
 
-                <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+                <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
                   <p style={{ fontSize: 10, fontWeight: 600, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
                     Payment Mix
                   </p>
@@ -409,7 +409,7 @@ export default function ReportsPage() {
               </div>
 
               {/* Top products */}
-              <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+              <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
                 <p style={{ fontSize: 10, fontWeight: 600, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
                   Top Products
                 </p>

@@ -107,7 +107,7 @@ function Card({ children, style = {} }: { children: React.ReactNode; style?: Rea
       style={{
         background: "var(--d-surface)",
         border: "1px solid var(--d-border)",
-        borderRadius: 14,
+        borderRadius: 16,
         ...style,
       }}
     >
@@ -497,7 +497,7 @@ export default function CampaignsPage() {
       </div>
 
       {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
         <StatCard label="Total Campaigns" value={summary.total} />
         <StatCard label="Draft" value={summary.draft} color="var(--d-warning)" />
         <StatCard label="Running" value={summary.running} color="var(--d-info)" />
@@ -573,7 +573,7 @@ export default function CampaignsPage() {
                 border: "1px solid var(--d-border-soft)",
               }}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 10 }}>
                 <MiniStat label="Checked" value={previewData.considered_customers} />
                 <MiniStat label="Segment Match" value={previewData.matched_customers} />
                 <MiniStat label="Eligible" value={previewData.eligible_recipients} />
@@ -641,7 +641,7 @@ export default function CampaignsPage() {
         {loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {[1, 2].map(i => (
-              <div key={i} style={{ height: 100, borderRadius: 14, background: "var(--d-surface)", border: "1px solid var(--d-border)", opacity: 0.5 }} />
+              <div key={i} style={{ height: 100, borderRadius: 16, background: "var(--d-surface)", border: "1px solid var(--d-border)", opacity: 0.5 }} />
             ))}
           </div>
         ) : campaigns.length === 0 ? (

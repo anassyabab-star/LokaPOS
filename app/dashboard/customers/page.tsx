@@ -116,7 +116,7 @@ export default function CustomersPage() {
       />
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
         <StatCard label="Total Customers" value={summary.total} />
         <StatCard label="WhatsApp Consent" value={summary.whatsapp} accent="var(--d-success)" />
         <StatCard label="Email Consent" value={summary.email} accent="var(--d-info)" />
@@ -156,18 +156,22 @@ export default function CustomersPage() {
             <Card key={customer.id} style={{ padding: 16 }}>
               <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
                 {/* Left */}
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: "var(--d-text-1)" }}>{customer.name}</p>
-                  <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>{customer.phone || "No phone"}</p>
-                  <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>{customer.email || "No email"}</p>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
-                    {customer.tier && (
-                      <span style={{ padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, color: "#7F1D1D", background: "rgba(127,29,29,0.1)" }}>
-                        {customer.tier}
-                      </span>
-                    )}
-                    <ConsentPill active={customer.consent_whatsapp} label="WhatsApp" />
-                    <ConsentPill active={customer.consent_email} label="Email" />
+                <div style={{ flex: 1, minWidth: 180, display: "flex", gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 999, flex: "none", background: "var(--maroon-bg)", color: "var(--maroon)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-space-grotesk), sans-serif", fontWeight: 600, fontSize: 15 }}>
+                    {(customer.name || "?").trim().charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontFamily: "var(--font-space-grotesk), sans-serif", fontSize: 15, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.01em" }}>{customer.name}</p>
+                    <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{customer.phone || "No phone"}{customer.email ? ` · ${customer.email}` : ""}</p>
+                    <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {customer.tier && (
+                        <span style={{ padding: "2px 10px", borderRadius: 20, fontSize: 11, fontWeight: 700, color: "var(--maroon)", background: "var(--maroon-bg)" }}>
+                          {customer.tier}
+                        </span>
+                      )}
+                      <ConsentPill active={customer.consent_whatsapp} label="WhatsApp" />
+                      <ConsentPill active={customer.consent_email} label="Email" />
+                    </div>
                   </div>
                 </div>
 

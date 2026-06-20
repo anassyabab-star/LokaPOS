@@ -392,7 +392,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
               textAlign: "center",
               background: "var(--d-surface)",
               border: "1px solid var(--d-border)",
-              borderRadius: 14,
+              borderRadius: 16,
             }}
           >
             <p style={{ fontSize: 14, color: "var(--d-text-2)" }}>No orders found.</p>

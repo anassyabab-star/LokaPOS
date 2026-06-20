@@ -95,7 +95,7 @@ export default function CategoriesPage() {
         style={{
           background: "var(--d-surface)",
           border: "1px solid var(--d-border)",
-          borderRadius: 14,
+          borderRadius: 16,
           padding: "16px 18px",
           marginBottom: 16,
         }}
@@ -151,7 +151,7 @@ export default function CategoriesPage() {
         style={{
           background: "var(--d-surface)",
           border: "1px solid var(--d-border)",
-          borderRadius: 14,
+          borderRadius: 16,
           padding: "16px 18px",
         }}
       >

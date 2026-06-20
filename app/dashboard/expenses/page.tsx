@@ -229,7 +229,7 @@ export default function ExpensesPage() {
       {/* Two-column layout: Add Expense + Monthly Breakdown */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
         {/* Add Expense */}
-        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: showAddExpenseForm ? 14 : 0 }}>
             <div>
               <p style={{ fontSize: 15, fontWeight: 700 }}>Add Expense</p>
@@ -298,7 +298,7 @@ export default function ExpensesPage() {
         </div>
 
         {/* Monthly Breakdown */}
-        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+        <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <p style={{ fontSize: 15, fontWeight: 700 }}>Monthly Breakdown</p>
             <button type="button" onClick={() => void load()} style={{ padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, color: "var(--d-text-2)", background: "transparent", border: "1px solid var(--d-border)", cursor: "pointer" }}>
@@ -338,7 +338,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Expense Records */}
-      <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 14, padding: "16px 18px" }}>
+      <div style={{ background: "var(--d-surface)", border: "1px solid var(--d-border)", borderRadius: 16, padding: "16px 18px" }}>
         <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Expense Records</p>
 
         {loading ? (
