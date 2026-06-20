@@ -417,7 +417,6 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
           const normalizedSource = normalizeOrderSource(
             sourceColumnAvailable ? String((order as { order_source?: string | null }).order_source || "") : null
           );
-          const statusIndex = ORDER_STATUS_STEPS.indexOf(normalizedStatus as (typeof ORDER_STATUS_STEPS)[number]);
 
           return (
             <div
@@ -430,105 +429,40 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                 boxShadow: "var(--shadow-sm)",
               }}
             >
-              {/* Order header */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-                {/* Left */}
-                <div>
-                  <p style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.08em", color: "var(--d-text-3)", fontWeight: 600 }}>
-                    ORDER #{displayNumber}
-                  </p>
-                  <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 3 }}>
-                    {new Date(order.created_at).toLocaleString()}
-                  </p>
-                  {order.customer_name && (
-                    <p style={{ fontSize: 12, color: "var(--d-text-2)", marginTop: 3 }}>
-                      Customer: {order.customer_name}
-                    </p>
-                  )}
-                  <div style={{ marginTop: 8 }}>
-                    <span style={{ ...badgePillStyle, ...orderSourceBadgeStyle(normalizedSource) }}>
-                      {formatOrderSource(normalizedSource)}
-                    </span>
+              {/* Order header — compact single row */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: "var(--font-space-grotesk), sans-serif", fontSize: 15, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.01em" }}>#{displayNumber}</span>
+                    <span style={{ ...badgePillStyle, ...orderSourceBadgeStyle(normalizedSource) }}>{formatOrderSource(normalizedSource)}</span>
                   </div>
+                  <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                    {new Date(order.created_at).toLocaleString()}{order.customer_name ? ` · ${order.customer_name}` : ""}
+                  </p>
                 </div>
 
-                {/* Right */}
-                <div style={{ textAlign: "right" }}>
-                  <p style={{ fontSize: 18, fontWeight: 700, color: "var(--d-text-1)" }}>
-                    RM {Number(order.total || 0).toFixed(2)}
-                  </p>
-                  <div style={{ marginTop: 6 }}>
-                    <span style={{ ...badgePillStyle, ...orderStatusBadgeStyle(normalizedStatus) }}>
-                      {formatOrderStatus(normalizedStatus)}
-                    </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ textAlign: "right" }}>
+                    <p style={{ fontFamily: "var(--font-space-grotesk), sans-serif", fontSize: 18, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.01em" }}>
+                      RM {Number(order.total || 0).toFixed(2)}
+                    </p>
+                    <p style={{ fontSize: 11, color: "var(--muted-2)", marginTop: 3, textTransform: "capitalize" }}>
+                      {order.payment_method} · {order.payment_status}
+                    </p>
                   </div>
-                  <p style={{ fontSize: 11, color: "var(--d-text-3)", marginTop: 5, textTransform: "capitalize" }}>
-                    {order.payment_method} · {order.payment_status}
-                  </p>
+                  <span style={{ ...badgePillStyle, ...orderStatusBadgeStyle(normalizedStatus) }}>
+                    {formatOrderStatus(normalizedStatus)}
+                  </span>
                   <a
                     href={`/api/orders/receipt/${order.id}`}
                     target="_blank"
                     rel="noreferrer"
-                    style={{
-                      display: "inline-block",
-                      marginTop: 8,
-                      padding: "4px 12px",
-                      borderRadius: 7,
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: "var(--d-text-2)",
-                      border: "1px solid var(--d-border)",
-                      textDecoration: "none",
-                    }}
+                    title="Print receipt"
+                    style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 9, color: "var(--muted)", border: "1px solid var(--hairline)", textDecoration: "none", flex: "none" }}
                   >
-                    Print
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect x="6" y="14" width="12" height="8" /></svg>
                   </a>
                 </div>
-              </div>
-
-              {/* Status timeline */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 14 }}>
-                {ORDER_STATUS_STEPS.map((step, idx) => {
-                  const isCurrent = normalizedStatus === step;
-                  const isDone = normalizedStatus !== "cancelled" && statusIndex >= 0 && idx <= statusIndex;
-                  let stepStyle: React.CSSProperties;
-                  if (isCurrent) {
-                    stepStyle = {
-                      background: "var(--d-accent-soft)",
-                      border: "1px solid var(--d-accent)",
-                      color: "var(--d-accent)",
-                    };
-                  } else if (isDone) {
-                    stepStyle = {
-                      background: "var(--d-surface-hover)",
-                      border: "1px solid var(--d-border)",
-                      color: "var(--d-text-2)",
-                    };
-                  } else {
-                    stepStyle = {
-                      background: "transparent",
-                      border: "1px solid var(--d-border-soft)",
-                      color: "var(--d-text-3)",
-                    };
-                  }
-                  return (
-                    <div
-                      key={step}
-                      style={{
-                        ...stepStyle,
-                        borderRadius: 7,
-                        padding: "5px 4px",
-                        textAlign: "center",
-                        fontSize: 10,
-                        fontWeight: 600,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      {step}
-                    </div>
-                  );
-                })}
               </div>
 
               {normalizedStatus === "cancelled" && (
