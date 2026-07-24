@@ -12,6 +12,10 @@ type ClockRecord = {
   hours: number;
   salary: number;
   is_open: boolean;
+  clock_in_selfie: string | null;
+  clock_out_selfie: string | null;
+  clock_in_location: string | null;
+  clock_out_location: string | null;
 };
 
 type StaffRow = {
@@ -267,6 +271,115 @@ function ProfileModal({
   );
 }
 
+/* ── Geofence settings ──────────────────────────── */
+type Geofence = { enabled: boolean; lat: number | null; lng: number | null; radius_m: number };
+const DEFAULT_GEOFENCE: Geofence = { enabled: false, lat: 2.9612697, lng: 101.755016, radius_m: 150 };
+
+function GeofenceCard() {
+  const [gf, setGf] = useState<Geofence>(DEFAULT_GEOFENCE);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/settings", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { if (d?.clockin_geofence) setGf({ ...DEFAULT_GEOFENCE, ...d.clockin_geofence }); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  function useCurrentLocation() {
+    setLocating(true);
+    setMsg(null);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setGf(g => ({ ...g, lat: pos.coords.latitude, lng: pos.coords.longitude }));
+        setLocating(false);
+        setMsg("Lokasi semasa diambil. Jangan lupa Simpan.");
+      },
+      () => { setLocating(false); setMsg("Gagal ambil lokasi. Benarkan akses GPS."); },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  }
+
+  async function save() {
+    if (gf.enabled && (gf.lat === null || gf.lng === null)) {
+      setMsg("Sila set lokasi kedai dahulu.");
+      return;
+    }
+    setSaving(true);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clockin_geofence: gf }),
+      });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setMsg(d?.error || "Gagal simpan."); return; }
+      setMsg("Tersimpan ✓");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return null;
+
+  const labelStyle: React.CSSProperties = { fontSize: 11, color: "var(--d-text-3)", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 600 };
+
+  return (
+    <div style={{ ...card, marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <div>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--d-text-1)", margin: 0 }}>Geofence Clock-In</h2>
+          <p style={{ fontSize: 12, color: "var(--d-text-3)", marginTop: 2 }}>Hadkan clock in/out kepada kawasan kedai sahaja</p>
+        </div>
+        <button
+          onClick={() => setGf(g => ({ ...g, enabled: !g.enabled }))}
+          aria-label="Toggle geofence"
+          style={{ width: 44, height: 26, borderRadius: 13, border: "none", cursor: "pointer", position: "relative", background: gf.enabled ? "var(--d-accent)" : "var(--d-surface-hover)", transition: "background 0.15s" }}
+        >
+          <span style={{ position: "absolute", top: 3, left: gf.enabled ? 21 : 3, width: 20, height: 20, borderRadius: "50%", background: "#fff", transition: "left 0.15s", boxShadow: "0 1px 2px rgba(0,0,0,0.2)" }} />
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 10, marginTop: 14, alignItems: "end" }}>
+        <div>
+          <div style={labelStyle}>Latitude</div>
+          <input type="number" step="any" value={gf.lat ?? ""} onChange={e => setGf(g => ({ ...g, lat: e.target.value === "" ? null : Number(e.target.value) }))} style={{ ...inputStyle, marginTop: 4 }} />
+        </div>
+        <div>
+          <div style={labelStyle}>Longitude</div>
+          <input type="number" step="any" value={gf.lng ?? ""} onChange={e => setGf(g => ({ ...g, lng: e.target.value === "" ? null : Number(e.target.value) }))} style={{ ...inputStyle, marginTop: 4 }} />
+        </div>
+        <div>
+          <div style={labelStyle}>Radius (m)</div>
+          <input type="number" min={20} value={gf.radius_m} onChange={e => setGf(g => ({ ...g, radius_m: Number(e.target.value) || 0 }))} style={{ ...inputStyle, marginTop: 4 }} />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={useCurrentLocation} disabled={locating}
+          style={{ padding: "8px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "1px solid var(--d-border)", background: "var(--d-surface)", color: "var(--d-text-1)", cursor: "pointer" }}>
+          {locating ? "Mengesan..." : "📍 Guna Lokasi Semasa"}
+        </button>
+        <button onClick={() => void save()} disabled={saving}
+          style={{ padding: "8px 18px", borderRadius: 8, fontSize: 12, fontWeight: 600, border: "none", background: "var(--d-accent)", color: "#fff", cursor: "pointer" }}>
+          {saving ? "Menyimpan..." : "Simpan"}
+        </button>
+        {gf.lat !== null && gf.lng !== null && (
+          <a href={`https://maps.google.com/?q=${gf.lat},${gf.lng}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--d-accent)" }}>Lihat di peta</a>
+        )}
+        {msg && <span style={{ fontSize: 12, color: "var(--d-text-2)" }}>{msg}</span>}
+      </div>
+      <p style={{ fontSize: 11, color: "var(--d-text-3)", marginTop: 12 }}>
+        Bila dihidupkan, staf hanya boleh clock in/out dalam radius ini & GPS wajib dibenarkan. Berdiri di kedai dan tekan &quot;Guna Lokasi Semasa&quot; untuk set tepat.
+      </p>
+    </div>
+  );
+}
+
 /* ── Main Page ──────────────────────────────────── */
 export default function TimesheetsPage() {
   // Date filter
@@ -369,6 +482,9 @@ export default function TimesheetsPage() {
         </div>
       </div>
 
+      {/* Geofence settings */}
+      <GeofenceCard />
+
       {/* Timesheet table */}
       <div style={{ ...card, marginBottom: 32, padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--d-border)", fontSize: 13, fontWeight: 600, color: "var(--d-text-1)" }}>
@@ -408,11 +524,11 @@ export default function TimesheetsPage() {
               {expandedUser === s.user_id && (
                 <div style={{ background: "var(--d-surface-hover)", borderTop: "1px solid var(--d-border)" }}>
                   {/* Table header */}
-                  <div style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 1fr auto", gap: 8, padding: "8px 20px", fontSize: 11, color: "var(--d-text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                    <span>Tarikh</span><span>Masuk</span><span>Keluar</span><span style={{ textAlign: "right" }}>Jam</span><span style={{ textAlign: "right" }}>Gaji</span><span>Nota</span><span />
+                  <div style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 64px 1fr auto", gap: 8, padding: "8px 20px", fontSize: 11, color: "var(--d-text-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <span>Tarikh</span><span>Masuk</span><span>Keluar</span><span style={{ textAlign: "right" }}>Jam</span><span style={{ textAlign: "right" }}>Gaji</span><span>Bukti</span><span>Nota</span><span />
                   </div>
                   {s.records.map(r => (
-                    <div key={r.id} style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 1fr auto", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border-soft)", alignItems: "center", background: r.is_open ? "rgba(245,158,11,0.04)" : undefined }}>
+                    <div key={r.id} style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 64px 1fr auto", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border-soft)", alignItems: "center", background: r.is_open ? "rgba(245,158,11,0.04)" : undefined }}>
                       <span style={{ fontSize: 12, color: "var(--d-text-2)" }}>{fmtDate(r.clock_in_at)}</span>
                       <span style={{ fontSize: 13, fontWeight: 500, color: "var(--d-text-1)" }}>{fmtTime(r.clock_in_at)}</span>
                       <span style={{ fontSize: 13, fontWeight: 500, color: r.is_open ? "var(--d-warning)" : "var(--d-text-1)" }}>
@@ -420,6 +536,17 @@ export default function TimesheetsPage() {
                       </span>
                       <span style={{ fontSize: 12, color: "var(--d-text-2)", textAlign: "right" }}>{r.is_open ? "—" : fmtHours(r.duration_minutes)}</span>
                       <span style={{ fontSize: 13, fontWeight: 600, color: "var(--d-accent)", textAlign: "right" }}>{r.salary > 0 ? `RM ${r.salary.toFixed(2)}` : "—"}</span>
+                      <span style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                        {[
+                          { url: r.clock_in_selfie, loc: r.clock_in_location, label: "Masuk" },
+                          { url: r.clock_out_selfie, loc: r.clock_out_location, label: "Keluar" },
+                        ].filter(x => x.url).map((x, i) => (
+                          <a key={i} href={x.loc ? `https://maps.google.com/?q=${x.loc}` : x.url!} target="_blank" rel="noreferrer" title={`${x.label}${x.loc ? " · buka lokasi" : ""}`}>
+                            <img src={x.url!} alt={x.label} style={{ width: 26, height: 26, borderRadius: 4, objectFit: "cover", border: "1px solid var(--d-border)" }} />
+                          </a>
+                        ))}
+                        {!r.clock_in_selfie && !r.clock_out_selfie && <span style={{ fontSize: 11, color: "var(--d-text-3)" }}>—</span>}
+                      </span>
                       <span style={{ fontSize: 12, color: "var(--d-text-3)" }}>{r.notes || ""}</span>
                       <button
                         onClick={() => setEditRecord({ record: r, staffName: s.name })}
@@ -429,11 +556,11 @@ export default function TimesheetsPage() {
                       </button>
                     </div>
                   ))}
-                  <div style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 1fr auto", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border)", background: "var(--d-accent-soft)" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "110px 70px 70px 70px 80px 64px 1fr auto", gap: 8, padding: "10px 20px", borderTop: "1px solid var(--d-border)", background: "var(--d-accent-soft)" }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "var(--d-text-1)", gridColumn: "1/4" }}>Jumlah</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "var(--d-text-1)", textAlign: "right" }}>{fmtHours(s.total_minutes)}</span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: "var(--d-accent)", textAlign: "right" }}>{s.total_salary > 0 ? `RM ${s.total_salary.toFixed(2)}` : "—"}</span>
-                    <span /><span />
+                    <span /><span /><span />
                   </div>
                 </div>
               )}

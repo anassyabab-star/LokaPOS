@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
     // Include ALL sessions (open + completed) so admin can see and fix incomplete ones
     let query = supabase
       .from("staff_clockins")
-      .select("id, user_id, clock_in_at, clock_out_at, duration_minutes, notes")
+      .select("id, user_id, clock_in_at, clock_out_at, duration_minutes, notes, clock_in_selfie, clock_out_selfie, clock_in_location, clock_out_location")
       .order("clock_in_at", { ascending: false });
 
     if (userId) query = query.eq("user_id", userId);
@@ -60,6 +60,10 @@ export async function GET(req: NextRequest) {
         hours: number;
         salary: number;
         is_open: boolean;
+        clock_in_selfie: string | null;
+        clock_out_selfie: string | null;
+        clock_in_location: string | null;
+        clock_out_location: string | null;
       }>;
       total_minutes: number;
       total_hours: number;
@@ -96,6 +100,10 @@ export async function GET(req: NextRequest) {
         hours: Math.round(hours * 100) / 100,
         salary: Math.round(salary * 100) / 100,
         is_open: isOpen,
+        clock_in_selfie: row.clock_in_selfie ?? null,
+        clock_out_selfie: row.clock_out_selfie ?? null,
+        clock_in_location: row.clock_in_location ?? null,
+        clock_out_location: row.clock_out_location ?? null,
       });
 
       // Only completed sessions count toward salary
