@@ -17,6 +17,8 @@ import {
   redeemPointsAtomic,
 } from "@/lib/loyalty";
 import { normalizeOtpPhone, requirePhoneOtp } from "@/lib/phone-otp";
+import { loadRedeemableCoupon } from "@/lib/coupons";
+import { computeVoucherDiscount, type CartItemLite } from "@/lib/rewards-vouchers";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -34,6 +36,19 @@ function pickAddonItemId(row: ItemAddonRow) {
 function pickAddonName(row: ItemAddonRow) {
   return String(row.addon_name_snapshot || row.addon_name || row.name || "").trim();
 }
+function couponErrorMessage(
+  reason: "disabled" | "not_found" | "wrong_customer" | "expired" | "used"
+): string {
+  switch (reason) {
+    case "disabled": return "Coupon tidak aktif buat masa ini.";
+    case "not_found": return "Kod coupon tidak sah.";
+    case "wrong_customer": return "Coupon ini bukan milik nombor telefon ini.";
+    case "expired": return "Coupon telah tamat tempoh.";
+    case "used": return "Coupon telah digunakan.";
+    default: return "Coupon tidak sah.";
+  }
+}
+
 function formatSugarLevel(value: string | null | undefined) {
   const key = String(value || "").toLowerCase();
   if (!key || key === "null") return null;
@@ -283,6 +298,56 @@ export async function POST(req: Request) {
       resolvedRedeemAmount = redeem.redeem_amount;
     }
 
+    // ── Coupon (mutually exclusive with points — one benefit per order) ──
+    const couponCode = String(body.coupon_code || "").trim().toUpperCase();
+    if (couponCode && requestedRedeemPoints > 0) {
+      return NextResponse.json(
+        { error: "Hanya satu diskaun setiap order — mata ATAU coupon." },
+        { status: 400 }
+      );
+    }
+    let resolvedCoupon: { code: string; discount: number } | null = null;
+    if (couponCode && customerId) {
+      const loaded = await loadRedeemableCoupon(couponCode, customerId);
+      if (!loaded.ok) {
+        return NextResponse.json({ error: couponErrorMessage(loaded.reason) }, { status: 400 });
+      }
+      // Category-scoped coupons need product → category.
+      let categoryByProductId: Map<string, string | null> | undefined;
+      if (loaded.voucher.reward_category_id) {
+        const productIds = Array.from(
+          new Set(calculated.items.map(i => i.product_id).filter(Boolean))
+        ) as string[];
+        categoryByProductId = new Map();
+        if (productIds.length > 0) {
+          const { data: prodRows } = await supabase
+            .from("products")
+            .select("id,category_id")
+            .in("id", productIds);
+          for (const p of prodRows || []) {
+            categoryByProductId.set(String(p.id), p.category_id ? String(p.category_id) : null);
+          }
+        }
+      }
+      const cartItems: CartItemLite[] = calculated.items.map(i => ({
+        product_id: i.product_id,
+        line_total: Number(i.line_total || 0),
+      }));
+      const discount = computeVoucherDiscount(
+        loaded.voucher,
+        cartItems,
+        calculated.subtotal,
+        categoryByProductId
+      );
+      if (discount <= 0) {
+        return NextResponse.json(
+          { error: "Coupon tidak layak untuk order ini." },
+          { status: 400 }
+        );
+      }
+      resolvedCoupon = { code: couponCode, discount };
+    }
+
     const orderBase = {
       receipt_number: numbering.orderNumber,
       date_key: numbering.dateKey,
@@ -323,6 +388,8 @@ export async function POST(req: Request) {
     let finalTotal = calculated.subtotal;
     let appliedRedeemPoints = 0;
     let appliedRedeemAmount = 0;
+    let appliedCouponCode: string | null = null;
+    let appliedCouponDiscount = 0;
     if (resolvedRedeemPoints > 0 && customerId) {
       const redeemResult = await redeemPointsAtomic({
         customerId,
@@ -346,6 +413,26 @@ export async function POST(req: Request) {
           .eq("id", order.id);
       }
       // !ok (insufficient / lost race) → charge full price, no discount granted.
+    } else if (resolvedCoupon && customerId) {
+      // Atomically redeem the coupon voucher, then apply its discount. If the
+      // redeem loses a race (already used), the customer just pays full price.
+      const { error: couponRedeemErr } = await supabase.rpc("redeem_voucher_code", {
+        p_code: resolvedCoupon.code,
+        p_order_id: order.id,
+      });
+      if (!couponRedeemErr) {
+        appliedCouponCode = resolvedCoupon.code;
+        appliedCouponDiscount = resolvedCoupon.discount;
+        finalTotal = Math.max(0, calculated.subtotal - appliedCouponDiscount);
+        await supabase
+          .from("orders")
+          .update({
+            discount_type: "coupon",
+            discount_value: appliedCouponDiscount,
+            total: finalTotal,
+          })
+          .eq("id", order.id);
+      }
     }
 
     for (const item of calculated.items) {
@@ -435,10 +522,14 @@ export async function POST(req: Request) {
         appliedRedeemPoints > 0
           ? `Tebus mata: −RM${appliedRedeemAmount.toFixed(2)} (${appliedRedeemPoints} pts)\n`
           : "";
+      const couponLine =
+        appliedCouponDiscount > 0
+          ? `Coupon ${appliedCouponCode}: −RM${appliedCouponDiscount.toFixed(2)}\n`
+          : "";
       const waMsg =
         `✅ Order #${numbering.orderNumber} disahkan!\n\n` +
         `${itemLines}\n\n` +
-        (redeemLine ? `Subjumlah: RM${calculated.subtotal.toFixed(2)}\n${redeemLine}` : "") +
+        (redeemLine || couponLine ? `Subjumlah: RM${calculated.subtotal.toFixed(2)}\n${redeemLine}${couponLine}` : "") +
         `Jumlah: RM${finalTotal.toFixed(2)}\n\n` +
         `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
       sendMurpatiText({ to: waPhone, message: waMsg }).catch(() => {});
@@ -452,6 +543,8 @@ export async function POST(req: Request) {
       total: finalTotal,
       redeemed_points: appliedRedeemPoints,
       redeemed_amount: appliedRedeemAmount,
+      coupon_code: appliedCouponCode,
+      coupon_discount: appliedCouponDiscount,
       payment_url: paymentUrl,
     });
   } catch (error) {

@@ -54,6 +54,18 @@ export type LoyaltyConfig = {
   membershipTiers: LoyaltyTier[];
   /** Voucher redemption tiers offered in the PWA. */
   voucherTiers: LoyaltyVoucherTier[];
+  /** Master switch for the mission/challenge engine. */
+  missionsEnabled: boolean;
+  /** Master switch for the coupon engine (auto-issue + redeem). */
+  couponsEnabled: boolean;
+  /** Enforce coupon↔mission exclusivity (a couponed order skips missions). */
+  mutualExclusivityEnabled: boolean;
+  /** Require a review to complete the order journey / unlock the review reward. */
+  reviewRequired: boolean;
+  /** Points credited when a customer submits a review (0 = none). */
+  reviewPoints: number;
+  /** RM value of the voucher unlocked after a review (0 = no voucher). */
+  reviewRewardAmount: number;
 };
 
 export const DEFAULT_LOYALTY_CONFIG: LoyaltyConfig = {
@@ -82,6 +94,12 @@ export const DEFAULT_LOYALTY_CONFIG: LoyaltyConfig = {
     { points: 1000, amount: 10, label: "RM10" },
     { points: 2000, amount: 20, label: "RM20" },
   ],
+  missionsEnabled: true,
+  couponsEnabled: false, // money-affecting — owner opts in explicitly
+  mutualExclusivityEnabled: true,
+  reviewRequired: true,
+  reviewPoints: 0, // owner opts into review rewards
+  reviewRewardAmount: 0,
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -160,6 +178,12 @@ export function parseLoyaltyConfig(raw: unknown): LoyaltyConfig {
     otpExpiryMinutes: Math.floor(clamp(toNumber(obj.otpExpiryMinutes, d.otpExpiryMinutes), 1, 1_440)),
     membershipTiers: parseTiers(obj.membershipTiers, d.membershipTiers),
     voucherTiers: parseVoucherTiers(obj.voucherTiers, redeemRmPerPoint, d.voucherTiers),
+    missionsEnabled: obj.missionsEnabled !== false, // default on
+    couponsEnabled: obj.couponsEnabled === true, // default off (opt-in)
+    mutualExclusivityEnabled: obj.mutualExclusivityEnabled !== false, // default on
+    reviewRequired: obj.reviewRequired !== false, // default on
+    reviewPoints: Math.floor(clamp(toNumber(obj.reviewPoints, d.reviewPoints), 0, 100_000)),
+    reviewRewardAmount: clamp(toNumber(obj.reviewRewardAmount, d.reviewRewardAmount), 0, 100_000),
   };
 }
 

@@ -41,12 +41,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const { data: order, error } = await supabase
+    let { data: order, error } = await supabase
       .from("orders")
-      .select("id, receipt_number, customer_name, status, payment_status, total, created_at")
+      .select("id, receipt_number, customer_name, status, payment_status, total, created_at, fulfillment_stage, ready_at, picked_up_at, reviewed_at")
       .eq("id", orderId)
       .eq("customer_id", customer.id)
       .maybeSingle();
+
+    // Fallback for DBs where the Fasa-3 journey columns aren't migrated yet.
+    if (error && (String(error.message).includes("fulfillment_stage") || String(error.message).includes("does not exist"))) {
+      ({ data: order, error } = await supabase
+        .from("orders")
+        .select("id, receipt_number, customer_name, status, payment_status, total, created_at")
+        .eq("id", orderId)
+        .eq("customer_id", customer.id)
+        .maybeSingle());
+    }
 
     if (error || !order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });

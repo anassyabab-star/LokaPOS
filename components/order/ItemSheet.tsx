@@ -78,9 +78,12 @@ export function ItemSheet({ product, onClose }: { product: Product | null; onClo
         </div>
 
         {/* image header */}
-        <div className="mx-5 mt-1 flex h-[150px] items-start justify-between rounded-[18px] p-3" style={{ background: swatch }}>
+        <div className="relative mx-5 mt-1 flex h-[150px] items-start justify-between overflow-hidden rounded-[18px] p-3" style={{ background: swatch }}>
+          {product.image_url && (
+            <img src={product.image_url} alt={product.name} className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+          )}
           {product.category && (
-            <span className="rounded-full bg-cream px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-label text-maroon">
+            <span className="relative rounded-full bg-cream px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-label text-maroon">
               {product.category}
             </span>
           )}

@@ -1,13 +1,22 @@
 "use client";
 
-// Confirmation / receipt (design README §6). Per the shop's choice there is NO
-// live status timeline — orders don't need staff status updates. We show the
-// queue number, receipt and items, and tell the customer we'll call their name.
+// Confirmation / receipt + live journey (Smart Loyalty Fasa 3).
+// Polls /track for fulfillment_stage and drives the journey:
+//   received → ready → pickup (customer confirms) → review → voucher unlocked.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useOrder, rm } from "../../order-provider";
+
+type Stage = "received" | "ready" | "picked_up" | "reviewed";
+
+const STAGE_LABEL: Record<Stage, string> = {
+  received: "Diterima",
+  ready: "Sedia diambil",
+  picked_up: "Diambil",
+  reviewed: "Selesai",
+};
 
 export default function OrderPage() {
   const params = useParams<{ id: string }>();
@@ -15,12 +24,49 @@ export default function OrderPage() {
   const { lastOrder } = useOrder();
   const order = lastOrder && lastOrder.orderId === id ? lastOrder : null;
 
+  const [stage, setStage] = useState<Stage>("received");
+  const [pickupBusy, setPickupBusy] = useState(false);
+
+  const phone = order?.phone || "";
+
+  // Poll live fulfillment stage.
+  useEffect(() => {
+    if (!order || !phone) return;
+    let live = true;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/public/orders/track?order_id=${id}&phone=${encodeURIComponent(phone)}`, { cache: "no-store" });
+        const data = await res.json();
+        const s = data?.order?.fulfillment_stage as Stage | undefined;
+        if (live && s) setStage(s);
+      } catch { /* ignore */ }
+    };
+    void load();
+    const timer = setInterval(load, 15000);
+    return () => { live = false; clearInterval(timer); };
+  }, [id, phone, order]);
+
   const type = order?.type ?? "dine";
   const queue = useMemo(() => {
     const digits = (order?.receipt || id).replace(/\D/g, "").slice(-2) || "42";
     return `${type === "dine" ? "T" : "A"}${digits}`;
   }, [order?.receipt, id, type]);
   const eta = type === "dine" ? "8–10 min" : "12–15 min";
+
+  async function confirmPickup() {
+    if (!phone) return;
+    setPickupBusy(true);
+    try {
+      const res = await fetch("/api/public/orders/pickup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: id, phone }),
+      });
+      if (res.ok) setStage("picked_up");
+    } finally {
+      setPickupBusy(false);
+    }
+  }
 
   if (!order) {
     return (
@@ -30,6 +76,11 @@ export default function OrderPage() {
       </div>
     );
   }
+
+  const badgeLabel = STAGE_LABEL[stage] || "Diterima";
+  const canPickup = stage !== "picked_up" && stage !== "reviewed";
+  const canReview = stage === "picked_up";
+  const reviewed = stage === "reviewed";
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-cream">
@@ -58,20 +109,43 @@ export default function OrderPage() {
           <div className="my-4 border-t border-dashed border-hairline" />
           <div className="flex items-center justify-between">
             <span className="font-sans text-[13px] text-muted">{type === "dine" ? "Dine-in" : "Takeaway"}</span>
-            <span className="rounded-full bg-leaf/12 px-2.5 py-1 font-sans text-[11px] font-semibold text-leaf">Received</span>
+            <span className={`rounded-full px-2.5 py-1 font-sans text-[11px] font-semibold ${stage === "ready" ? "bg-maroon/12 text-maroon" : "bg-leaf/12 text-leaf"}`}>{badgeLabel}</span>
           </div>
         </div>
       </div>
 
-      {/* call-your-name note */}
+      {/* status / journey note */}
       <div className="flex-1 px-5 pt-5">
         <div className="flex items-center gap-3 rounded-[18px] border border-hairline bg-card p-4 shadow-card">
-          <div className="flex h-11 w-11 flex-none items-center justify-center rounded-[13px] bg-cream-2 text-[20px]">📣</div>
+          <div className="flex h-11 w-11 flex-none items-center justify-center rounded-[13px] bg-cream-2 text-[20px]">
+            {stage === "ready" ? "🔔" : reviewed ? "⭐" : "📣"}
+          </div>
           <div>
-            <div className="font-sans text-[14px] font-semibold text-espresso">We&apos;ll call your name when it&apos;s ready</div>
-            <div className="mt-0.5 font-sans text-[12px] text-muted">Usually about {eta}. {type === "dine" ? "We'll bring it to your table." : "Listen out at the counter."}</div>
+            <div className="font-sans text-[14px] font-semibold text-espresso">
+              {stage === "ready" ? "Pesanan anda dah siap!" : reviewed ? "Terima kasih atas review!" : stage === "picked_up" ? "Selamat menjamu selera ☕" : "We'll call your name when it's ready"}
+            </div>
+            <div className="mt-0.5 font-sans text-[12px] text-muted">
+              {stage === "ready" ? "Sila ambil di kaunter." : reviewed ? "Ganjaran anda telah dibuka." : `Usually about ${eta}.`}
+            </div>
           </div>
         </div>
+
+        {/* journey actions */}
+        {canPickup && (
+          <button onClick={() => void confirmPickup()} disabled={pickupBusy} className="mt-3.5 w-full rounded-[16px] bg-maroon py-3.5 text-center font-sans text-[14px] font-semibold text-cream active:scale-[.99] disabled:opacity-60">
+            {pickupBusy ? "…" : "Sahkan dah ambil"}
+          </button>
+        )}
+        {canReview && (
+          <Link href={`/order/${id}/review`} className="mt-3.5 block w-full rounded-[16px] bg-maroon py-3.5 text-center font-sans text-[14px] font-semibold text-cream active:scale-[.99]">
+            Beri review &amp; buka voucher →
+          </Link>
+        )}
+        {reviewed && (
+          <div className="mt-3.5 rounded-[16px] border border-leaf/40 bg-leaf/5 py-3.5 text-center font-sans text-[13px] font-semibold text-leaf">
+            ✓ Review diterima — voucher dibuka
+          </div>
+        )}
 
         {/* items summary */}
         <div className="mt-3.5 rounded-[18px] border border-hairline bg-card p-4 shadow-card">

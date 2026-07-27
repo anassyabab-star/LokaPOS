@@ -361,6 +361,22 @@ export async function POST(
         console.error("[order-status] loyalty reverse failed:", reverseErr);
       }
 
+      // Reverse any mission progress / rewards this order triggered.
+      try {
+        const { reverseMissionsOnRefund } = await import("@/lib/missions");
+        await reverseMissionsOnRefund(order.id, auth.user.id);
+      } catch (missionErr) {
+        console.error("[order-status] mission reverse failed:", missionErr);
+      }
+
+      // Reverse coupons this order issued/redeemed.
+      try {
+        const { reverseCouponsOnRefund } = await import("@/lib/coupons");
+        await reverseCouponsOnRefund(order.id);
+      } catch (couponErr) {
+        console.error("[order-status] coupon reverse failed:", couponErr);
+      }
+
       let stockRestoreWarning: string | null = null;
       if (action === "void") {
         const stockRestore = await restoreOrderStock(orderId);

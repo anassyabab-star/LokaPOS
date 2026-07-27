@@ -16,6 +16,11 @@ export default function CheckoutPage() {
   const [payment, setPayment] = useState<"online" | "counter">("counter");
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponCode, setCouponCode] = useState<string | null>(null);
+  const [couponLabel, setCouponLabel] = useState<string | null>(null);
+  const [couponMsg, setCouponMsg] = useState<string | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
 
   if (cartCount === 0) {
     // Nothing to check out — bounce to menu.
@@ -25,6 +30,37 @@ export default function CheckoutPage() {
 
   const eta = orderType === "dine" ? "8–10 min" : "12–15 min";
   const total = subtotal; // (redeem applies only for signed-in members — added later)
+
+  async function applyCoupon() {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
+    if (phone.replace(/[^\d]/g, "").length < 8) {
+      setCouponMsg("Masukkan no telefon dahulu untuk semak coupon.");
+      return;
+    }
+    setCouponChecking(true); setCouponMsg(null);
+    try {
+      const canonical = normalizeMyPhone(phone);
+      const res = await fetch(`/api/public/coupon?code=${encodeURIComponent(code)}&phone=${encodeURIComponent(canonical)}`);
+      const data = await res.json();
+      if (data?.valid) {
+        setCouponCode(code);
+        setCouponLabel(data.coupon?.label || code);
+        setCouponMsg(null);
+      } else {
+        setCouponCode(null); setCouponLabel(null);
+        setCouponMsg("Coupon tidak sah untuk nombor ini.");
+      }
+    } catch {
+      setCouponMsg("Gagal semak coupon.");
+    } finally {
+      setCouponChecking(false);
+    }
+  }
+
+  function clearCoupon() {
+    setCouponCode(null); setCouponLabel(null); setCouponInput(""); setCouponMsg(null);
+  }
 
   async function placeOrder() {
     if (!name.trim()) { setError("Sila masukkan nama"); return; }
@@ -40,6 +76,7 @@ export default function CheckoutPage() {
           customer_name: name.trim(),
           customer_phone: canonical,
           payment_method: payment === "online" ? "fpx" : "cash",
+          coupon_code: couponCode || undefined,
           items: cart.map(l => ({
             product_id: l.productId,
             variant_id: l.variantId || undefined,
@@ -127,6 +164,35 @@ export default function CheckoutPage() {
               </button>
             );
           })}
+        </div>
+
+        {/* coupon */}
+        <div className="rounded-[18px] border border-hairline bg-card p-4 shadow-card">
+          <div className="mb-2.5 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Coupon</div>
+          {couponCode ? (
+            <div className="flex items-center justify-between rounded-[12px] border border-leaf/40 bg-leaf/5 px-3.5 py-3">
+              <span className="font-sans text-[13px] font-semibold text-espresso">✓ {couponCode}{couponLabel ? ` — ${couponLabel}` : ""}</span>
+              <button onClick={clearCoupon} className="font-sans text-[12px] font-semibold text-melon active:opacity-60">Buang</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                value={couponInput}
+                onChange={e => setCouponInput(e.target.value.toUpperCase())}
+                placeholder="Kod coupon"
+                className="w-full rounded-[12px] border border-hairline bg-cream/40 px-3.5 py-3 font-sans text-[14px] uppercase text-espresso outline-none placeholder:text-muted-2 focus:border-maroon"
+              />
+              <button
+                onClick={() => void applyCoupon()}
+                disabled={couponChecking || !couponInput.trim()}
+                className="flex-none rounded-[12px] bg-maroon px-4 py-3 font-sans text-[13px] font-semibold text-cream disabled:opacity-50 active:scale-95"
+              >
+                {couponChecking ? "…" : "Guna"}
+              </button>
+            </div>
+          )}
+          {couponMsg && <p className="mt-2 font-sans text-[11px] text-melon">{couponMsg}</p>}
+          {couponCode && <p className="mt-2 font-sans text-[11px] text-muted-2">Diskaun ditolak masa pengesahan pembayaran.</p>}
         </div>
 
         {/* summary */}

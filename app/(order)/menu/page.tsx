@@ -142,9 +142,12 @@ export default function MenuPage() {
                         onClick={() => setSheet(p)}
                         className="w-[160px] flex-none snap-start overflow-hidden rounded-[18px] border border-hairline-soft bg-card text-left transition active:scale-[.99]"
                       >
-                        <div className="flex h-[116px] items-start justify-between p-2.5" style={{ background: swatchFor(p.id + p.name) }}>
+                        <div className="relative flex h-[116px] items-start justify-between p-2.5" style={{ background: swatchFor(p.id + p.name) }}>
+                          {p.image_url && (
+                            <img src={p.image_url} alt={p.name} className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                          )}
                           {p.category && (
-                            <span className="rounded-full bg-cream px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-label text-maroon">{p.category}</span>
+                            <span className="relative rounded-full bg-cream px-2.5 py-1 font-sans text-[9px] font-semibold uppercase tracking-label text-maroon">{p.category}</span>
                           )}
                         </div>
                         <div className="p-3">
@@ -189,7 +192,11 @@ export default function MenuPage() {
                         onClick={() => setSheet(p)}
                         className="flex w-full items-center gap-3.5 border-t border-hairline py-3.5 text-left transition active:opacity-70"
                       >
-                        <div className="h-[52px] w-[52px] flex-none rounded-[13px]" style={{ background: swatchFor(p.id + p.name) }} />
+                        <div className="relative h-[52px] w-[52px] flex-none overflow-hidden rounded-[13px]" style={{ background: swatchFor(p.id + p.name) }}>
+                          {p.image_url && (
+                            <img src={p.image_url} alt={p.name} className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="font-sans text-[15px] font-semibold text-espresso">{p.name}</div>
                           {p.category && <div className="mt-0.5 font-sans text-[12px] leading-snug text-muted line-clamp-1">{p.category}</div>}

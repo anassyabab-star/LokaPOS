@@ -85,6 +85,25 @@ export default function OrdersTab() {
     }
   }
 
+  const [notifiedId, setNotifiedId] = useState<string | null>(null);
+  // Mark an order "ready" and WhatsApp the customer — works even with KDS off.
+  async function notifyReady(orderId: string) {
+    setStatusError(null);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/ready`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setStatusError(data.error || "Gagal notify"); return; }
+      if (data.notified) {
+        setNotifiedId(orderId);
+        setTimeout(() => setNotifiedId(null), 2500);
+      } else {
+        setStatusError(`Ditanda sedia — WhatsApp tak dihantar (${data.reason || "?"})`);
+      }
+    } catch {
+      setStatusError("Tiada sambungan. Cuba lagi.");
+    }
+  }
+
   function openAction(orderId: string, action: "void" | "refund") {
     setPendingAction({ action, orderId });
     setSelectedReason("");
@@ -208,6 +227,11 @@ export default function OrdersTab() {
                   {st === "pending" && <button onClick={() => void updateOrderStatus(order.id, "preparing")} className="rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-medium text-white active:bg-amber-600">Preparing</button>}
                   {st === "preparing" && <button onClick={() => void updateOrderStatus(order.id, "ready")} className="rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-medium text-white active:bg-blue-600">Ready</button>}
                   {st === "ready" && <button onClick={() => void updateOrderStatus(order.id, "completed")} className="rounded-md bg-green-600 px-3 py-1.5 text-[11px] font-medium text-white active:bg-green-700">Completed</button>}
+                  {st !== "cancelled" && (
+                    <button onClick={() => void notifyReady(order.id)} className={`rounded-md px-3 py-1.5 text-[11px] font-medium text-white ${notifiedId === order.id ? "bg-green-600" : "bg-blue-500 active:bg-blue-600"}`}>
+                      {notifiedId === order.id ? "✓ Dinotify" : "🔔 Notify Sedia"}
+                    </button>
+                  )}
                   <button onClick={() => window.open(`/api/orders/receipt/${order.id}`, "_blank", "width=420,height=720")} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 active:bg-gray-100">Print</button>
                   <button onClick={() => printCupLabel(order.id)} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-[#7F1D1D] active:bg-red-50">Label</button>
                   <button onClick={() => void s.loadOrderDetail(order.id)} className="rounded-md border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-blue-600 active:bg-blue-50">View Items</button>

@@ -332,6 +332,12 @@ type LoyaltyConfigForm = {
   birthdayPoints: number;
   voucherExpiryDays: number;
   otpExpiryMinutes: number;
+  reviewPoints: number;
+  reviewRewardAmount: number;
+  missionsEnabled: boolean;
+  couponsEnabled: boolean;
+  mutualExclusivityEnabled: boolean;
+  reviewRequired: boolean;
   membershipTiers?: unknown;
   voucherTiers?: unknown;
 };
@@ -347,6 +353,15 @@ const LOYALTY_FIELDS: Array<{ key: keyof LoyaltyConfigForm; label: string; desc:
   { key: "birthdayPoints", label: "Harijadi (pts)", desc: "Points bonus harijadi setahun sekali" },
   { key: "voucherExpiryDays", label: "Voucher Luput (hari)", desc: "Tempoh voucher boleh ditebus" },
   { key: "otpExpiryMinutes", label: "OTP Luput (minit)", desc: "Tempoh kod OTP sah" },
+  { key: "reviewPoints", label: "Review (pts)", desc: "Points diberi bila customer beri review" },
+  { key: "reviewRewardAmount", label: "Review Voucher (RM)", desc: "Nilai voucher dibuka selepas review (0 = tiada)", step: 0.5 },
+];
+
+const LOYALTY_TOGGLES: Array<{ key: keyof LoyaltyConfigForm; label: string; desc: string }> = [
+  { key: "missionsEnabled", label: "Mission", desc: "Cabaran kumpul (beli X kali → reward)" },
+  { key: "couponsEnabled", label: "Coupon", desc: "Auto-keluar coupon diskaun selepas beli" },
+  { key: "mutualExclusivityEnabled", label: "Coupon ≠ Mission", desc: "Guna coupon → order tak dikira mission" },
+  { key: "reviewRequired", label: "Review wajib", desc: "Customer kena review sebelum voucher dibuka" },
 ];
 
 function LoyaltySettingsSection() {
@@ -374,6 +389,12 @@ function LoyaltySettingsSection() {
           birthdayPoints: Number(lc.birthdayPoints ?? 50),
           voucherExpiryDays: Number(lc.voucherExpiryDays ?? 30),
           otpExpiryMinutes: Number(lc.otpExpiryMinutes ?? 5),
+          reviewPoints: Number(lc.reviewPoints ?? 0),
+          reviewRewardAmount: Number(lc.reviewRewardAmount ?? 0),
+          missionsEnabled: lc.missionsEnabled !== false,
+          couponsEnabled: lc.couponsEnabled === true,
+          mutualExclusivityEnabled: lc.mutualExclusivityEnabled !== false,
+          reviewRequired: lc.reviewRequired !== false,
           membershipTiers: lc.membershipTiers,
           voucherTiers: lc.voucherTiers,
         });
@@ -443,6 +464,25 @@ function LoyaltySettingsSection() {
           </div>
         )}
       </div>
+
+      {cfg && (
+        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5 space-y-4">
+          <p className="text-sm font-bold text-gray-900 dark:text-white">Ciri Smart Loyalty</p>
+          {LOYALTY_TOGGLES.map(t => {
+            const on = Boolean(cfg[t.key]);
+            return (
+              <div key={String(t.key)} className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-semibold ${on ? "text-gray-900 dark:text-white" : "text-gray-400"}`}>{t.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{t.desc}</p>
+                </div>
+                <Toggle enabled={on} onToggle={() => setCfg(prev => (prev ? { ...prev, [t.key]: !prev[t.key] } : prev))} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <p className="text-xs text-gray-400 px-1">Tier keahlian &amp; tier voucher dikekalkan automatik. Tekan Simpan untuk terpakai serta-merta.</p>
     </section>
   );

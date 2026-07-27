@@ -28,6 +28,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/expenses", label: "Expenses", icon: <Icon d="M23 18l-9.5-9.5-5 5L1 6M17 18h6v-6" /> },
   { href: "/dashboard/customers", label: "Customers", icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z" d2="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /> },
   { href: "/dashboard/loyalty", label: "Loyalty", icon: <Icon d="M12 2l2.39 4.84 5.34.78-3.86 3.77.91 5.32L12 18.5l-4.78 2.51.91-5.32L4.27 7.62l5.34-.78L12 2z" /> },
+  { href: "/dashboard/missions", label: "Missions", icon: <Icon d="M22 11.08V12a10 10 0 11-5.93-9.14" d2="M22 4L12 14.01l-3-3" /> },
+  { href: "/dashboard/coupons", label: "Coupons", icon: <Icon d="M20 12a2 2 0 012-2V6a2 2 0 00-2-2H4a2 2 0 00-2 2v4a2 2 0 010 4v4a2 2 0 002 2h16a2 2 0 002-2v-4a2 2 0 01-2-2z" /> },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: <Icon d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6" /> },
   { href: "/dashboard/users", label: "Users", icon: <Icon d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" d2="M12 11a4 4 0 100-8 4 4 0 000 8z" /> },
   { href: "/dashboard/settings", label: "Settings", icon: <Icon d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /> },
@@ -35,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const MOBILE_PRIMARY: NavItem[] = [
-  NAV_ITEMS[14], // POS
+  NAV_ITEMS[16], // POS
   NAV_ITEMS[0],  // Overview
   NAV_ITEMS[3],  // Orders
   NAV_ITEMS[1],  // Products

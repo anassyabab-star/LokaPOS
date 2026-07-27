@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
   let expiredPointsTotal = 0;
   let birthdayAwards = 0;
   let vouchersExpired = 0;
+  let missionCyclesExpired = 0;
 
   try {
     // ── 1. Points expiry: FIFO per customer, write a negative 'expiry' adjust
@@ -91,6 +92,20 @@ export async function GET(req: NextRequest) {
       vouchersExpired = (expiredVouchers || []).length;
     }
 
+    // ── 2b. Mission cycle expiry: close in-flight cycles whose window lapsed
+    //        (housekeeping so stale progress doesn't linger as "in progress"). ──
+    const { data: expiredCycles, error: cycleError } = await supabase
+      .from("mission_progress")
+      .update({ status: "expired", updated_at: nowIso })
+      .eq("status", "in_progress")
+      .lt("window_end_at", nowIso)
+      .select("id");
+    if (cycleError && !isMissingRelationError(cycleError.message)) {
+      console.error("[loyalty-expiry] mission cycle expiry error:", cycleError.message);
+    } else {
+      missionCyclesExpired = (expiredCycles || []).length;
+    }
+
     // ── 3. Birthday bonus (once per year, idempotent via event_key) ──
     if (config.birthdayPoints > 0) {
       const { data: birthdayCustomers, error: birthdayError } = await supabase
@@ -132,6 +147,7 @@ export async function GET(req: NextRequest) {
       expired_customers: expiredCustomers,
       expired_points: expiredPointsTotal,
       vouchers_expired: vouchersExpired,
+      mission_cycles_expired: missionCyclesExpired,
       birthday_awards: birthdayAwards,
     });
   } catch (err) {

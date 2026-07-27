@@ -25,7 +25,7 @@ function isMissingRelationError(message: string | null | undefined) {
  * Returns true if a new row was written, false if it already existed
  * (unique-key collision) or the table/columns are missing.
  */
-async function insertLedgerEvent(payload: {
+export async function insertLedgerEvent(payload: {
   customerId: string;
   orderId?: string | null;
   entryType: "earn" | "redeem" | "adjust";
@@ -185,6 +185,24 @@ export async function applyCustomerOrderPaidSettlement(
 
   // Referral bonus on first paid order (idempotent).
   await applyReferralBonus(order.customer_id, config, expiresAt);
+
+  // Mission progress + auto-rewards (best-effort; never block settlement).
+  // Dynamic import avoids a static circular dependency (missions.ts imports
+  // insertLedgerEvent from this module).
+  try {
+    const { evaluateMissionsOnPaid } = await import("./missions");
+    await evaluateMissionsOnPaid(order.id, createdBy);
+  } catch {
+    // Missions must never affect payment settlement.
+  }
+
+  // Auto-issue coupons after a paid order (best-effort; gated by couponsEnabled).
+  try {
+    const { issueCouponsOnPaid } = await import("./coupons");
+    await issueCouponsOnPaid(order.id, createdBy);
+  } catch {
+    // Coupons must never affect payment settlement.
+  }
 
   return { earned: earnPoints };
 }

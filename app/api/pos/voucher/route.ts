@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const supabase = createSupabaseAdminClient();
   const { data: voucher, error } = await supabase
     .from("vouchers")
-    .select("id,code,status,reward_amount,reward_label,points_spent,expires_at,customer_id")
+    .select("id,code,status,reward_type,reward_amount,reward_label,reward_product_id,reward_category_id,points_spent,expires_at,customer_id")
     .eq("code", code)
     .maybeSingle();
 
@@ -34,8 +34,11 @@ export async function GET(req: Request) {
     voucher: {
       code: voucher.code,
       status: voucher.status,
+      reward_type: voucher.reward_type || "amount",
       reward_amount: Number(voucher.reward_amount || 0),
       reward_label: voucher.reward_label,
+      reward_product_id: voucher.reward_product_id || null,
+      reward_category_id: voucher.reward_category_id || null,
       points_spent: Number(voucher.points_spent || 0),
       expires_at: voucher.expires_at,
     },
@@ -80,6 +83,7 @@ export async function POST(req: Request) {
 
   const voucher = (Array.isArray(data) ? data[0] : data) as {
     code: string;
+    reward_type?: string;
     reward_amount: number;
     reward_label: string | null;
     points_spent: number;
@@ -89,6 +93,7 @@ export async function POST(req: Request) {
     success: true,
     voucher: {
       code: voucher?.code || code,
+      reward_type: voucher?.reward_type || "amount",
       reward_amount: Number(voucher?.reward_amount || 0),
       reward_label: voucher?.reward_label || null,
       points_spent: Number(voucher?.points_spent || 0),
