@@ -28,6 +28,13 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS buzzer_number text;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS paid_at       timestamptz;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS completed_at  timestamptz;
 
+-- Customer journey columns (originally 20260727_order_journey_phase3.sql).
+-- Re-declared here so this migration works even if that one was never applied.
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS fulfillment_stage text DEFAULT 'received';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS ready_at          timestamptz;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS picked_up_at      timestamptz;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS reviewed_at       timestamptz;
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_order_type_check') THEN
@@ -77,6 +84,11 @@ ALTER TABLE public.store_settings
 
 ALTER TABLE public.store_settings
   ADD COLUMN IF NOT EXISTS unpaid_order_expiry_minutes integer NOT NULL DEFAULT 30;
+
+-- KDS toggle column (originally 20260616_kds_toggle.sql) — re-declared here so
+-- this migration works even if that one was never applied.
+ALTER TABLE public.store_settings
+  ADD COLUMN IF NOT EXISTS kds_enabled boolean NOT NULL DEFAULT false;
 
 -- The owner's flow uses the Kitchen Display — turn it on.
 UPDATE public.store_settings SET kds_enabled = true WHERE id = 'main';
