@@ -48,13 +48,14 @@ UPDATE public.orders
    SET completed_at = COALESCE(picked_up_at, created_at)
  WHERE completed_at IS NULL AND status = 'completed';
 
+-- (orders.date_key is a DATE column — compare as dates, Malaysia business day.)
 -- Unpaid customer-web orders placed TODAY → awaiting_payment (cashier collects).
 UPDATE public.orders
    SET status = 'awaiting_payment'
  WHERE status = 'pending'
    AND payment_status = 'pending'
    AND order_source = 'customer_web'
-   AND date_key = to_char(now() AT TIME ZONE 'Asia/Kuala_Lumpur', 'YYYY-MM-DD');
+   AND date_key::date = (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date;
 
 -- Older unpaid customer-web orders were abandoned → close them (status only).
 UPDATE public.orders
@@ -62,7 +63,7 @@ UPDATE public.orders
  WHERE status = 'pending'
    AND payment_status = 'pending'
    AND order_source = 'customer_web'
-   AND date_key < to_char(now() AT TIME ZONE 'Asia/Kuala_Lumpur', 'YYYY-MM-DD');
+   AND date_key::date < (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date;
 
 CREATE INDEX IF NOT EXISTS orders_date_key_status_idx ON public.orders (date_key, status);
 CREATE INDEX IF NOT EXISTS orders_status_paid_at_idx  ON public.orders (status, paid_at);
@@ -91,15 +92,20 @@ CREATE TABLE IF NOT EXISTS public.receipt_counters (
 ALTER TABLE public.receipt_counters ENABLE ROW LEVEL SECURITY;  -- service role only
 
 -- Seed counters from existing receipts so new numbers never collide.
+-- (counter key is the ISO day as text, e.g. '2026-09-15')
 INSERT INTO public.receipt_counters (date_key, last_seq)
-SELECT date_key, MAX((regexp_match(receipt_number, '-(\d+)$'))[1]::int)
+SELECT to_char(date_key::date, 'YYYY-MM-DD'), MAX((regexp_match(receipt_number, '-(\d+)$'))[1]::int)
   FROM public.orders
  WHERE date_key IS NOT NULL AND receipt_number ~ '-\d+$'
- GROUP BY date_key
+ GROUP BY to_char(date_key::date, 'YYYY-MM-DD')
 ON CONFLICT (date_key) DO UPDATE
    SET last_seq = GREATEST(receipt_counters.last_seq, EXCLUDED.last_seq);
 
+-- Drop every earlier overload (a DB-only version may take a DATE), otherwise
+-- PostgREST cannot pick one and the app falls back to count+1 numbering.
 DROP FUNCTION IF EXISTS public.get_next_receipt_number(text);
+DROP FUNCTION IF EXISTS public.get_next_receipt_number(date);
+DROP FUNCTION IF EXISTS public.get_next_receipt_number();
 
 CREATE OR REPLACE FUNCTION public.get_next_receipt_number(p_date_key text)
 RETURNS text
