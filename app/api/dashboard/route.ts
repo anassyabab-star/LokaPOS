@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     const { data: orders, error: ordersError } = await supabase
       .from("orders")
       .select("id,total,payment_method,date_key,created_at")
-      .in("status", ["completed", "preparing", "ready"])
+      .in("status", ["pending", "preparing", "ready", "completed"]).eq("payment_status", "paid")
       .gte("date_key", start)
       .lte("date_key", end);
 
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
     const { data: yesterdayOrders, error: yesterdayError } = await supabase
       .from("orders")
       .select("total")
-      .in("status", ["completed", "preparing", "ready"])
+      .in("status", ["pending", "preparing", "ready", "completed"]).eq("payment_status", "paid")
       .eq("date_key", yesterdayStr);
 
     if (yesterdayError) throw yesterdayError;
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
         orders!inner(date_key,status),
         products!inner(name)
       `)
-      .in("orders.status", ["completed", "preparing", "ready"])
+      .in("orders.status", ["pending", "preparing", "ready", "completed"]).eq("orders.payment_status", "paid")
       .gte("orders.date_key", start)
       .lte("orders.date_key", end);
 
@@ -183,7 +183,7 @@ export async function GET(req: NextRequest) {
     const { data: monthSalesRows, error: monthSalesError } = await supabase
       .from("orders")
       .select("total")
-      .in("status", ["completed", "preparing", "ready"])
+      .in("status", ["pending", "preparing", "ready", "completed"]).eq("payment_status", "paid")
       .gte("date_key", monthStart)
       .lte("date_key", todayStr);
 

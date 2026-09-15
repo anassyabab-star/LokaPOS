@@ -7,15 +7,29 @@ export type ReceiptItemLine = {
 
 export type ReceiptPayload = {
   receiptNumber: string;
+  /** Short daily Order ID ("042") — printed large so staff/customer match it fast. */
+  shortNumber?: string | null;
   createdAt: string;
   customerName?: string | null;
   paymentMethod?: string | null;
+  /** "dine_in" | "take_away" */
+  orderType?: string | null;
+  tableNumber?: string | null;
+  buzzerNumber?: string | null;
   subtotal?: number | null;
   discount?: number | null;
   total: number;
   items: ReceiptItemLine[];
   autoPrint?: boolean;
 };
+
+/** "Dine In · Meja 7" / "Take Away · Buzzer 12" / "Take Away" / "" */
+export function receiptTargetLine(p: { orderType?: string | null; tableNumber?: string | null; buzzerNumber?: string | null }) {
+  const type = String(p.orderType || "").toLowerCase();
+  const typeLabel = type === "dine_in" ? "Dine In" : type === "take_away" ? "Take Away" : "";
+  const where = p.tableNumber ? `Meja ${p.tableNumber}` : p.buzzerNumber ? `Buzzer ${p.buzzerNumber}` : "";
+  return [typeLabel, where].filter(Boolean).join(" · ");
+}
 
 function escapeHtml(value: string) {
   return value
@@ -63,6 +77,11 @@ export function buildReceiptHtml(payload: ReceiptPayload) {
   const paymentRow = payload.paymentMethod
     ? `<div class="muted">Payment: ${escapeHtml(payload.paymentMethod.toUpperCase())}</div>`
     : "";
+  const targetLine = receiptTargetLine(payload);
+  const targetRow = targetLine ? `<div class="target">${escapeHtml(targetLine)}</div>` : "";
+  const shortRow = payload.shortNumber
+    ? `<div class="order-id">Order #${escapeHtml(String(payload.shortNumber))}</div>`
+    : "";
   const autoPrintScript = payload.autoPrint
     ? `<script>window.addEventListener("load",()=>{window.print();window.onafterprint=()=>window.close();});</script>`
     : "";
@@ -79,6 +98,8 @@ export function buildReceiptHtml(payload: ReceiptPayload) {
       .receipt { width: 80mm; margin: 0 auto; padding: 8px; color: #111; font-size: 11px; line-height: 1.35; }
       .center { text-align: center; }
       .title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+      .order-id { font-weight: 800; font-size: 18px; margin: 2px 0; letter-spacing: 0.02em; }
+      .target { font-weight: 700; font-size: 12px; margin-top: 2px; }
       .muted { color: #555; font-size: 10px; }
       .section { margin-top: 8px; }
       .line { border-bottom: 1px dashed #ddd; padding: 6px 0; }
@@ -98,8 +119,10 @@ export function buildReceiptHtml(payload: ReceiptPayload) {
     <div class="receipt">
       <div class="center">
         <div class="title">Loka POS</div>
+        ${shortRow}
         <div>Receipt #${escapeHtml(payload.receiptNumber)}</div>
         <div class="muted">${escapeHtml(createdAtLabel)}</div>
+        ${targetRow}
         ${customerRow}
         ${paymentRow}
       </div>

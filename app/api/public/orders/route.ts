@@ -19,6 +19,8 @@ import {
 import { normalizeOtpPhone, requirePhoneOtp } from "@/lib/phone-otp";
 import { loadRedeemableCoupon } from "@/lib/coupons";
 import { computeVoucherDiscount, type CartItemLite } from "@/lib/rewards-vouchers";
+import { normalizeOrderType, sanitizeTargetLabel, shortOrderNumber } from "@/lib/order-flow";
+import { isMissingColumnError } from "@/lib/order-status";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -201,6 +203,12 @@ export async function POST(req: Request) {
   const customerName = String(body.customer_name || "").trim();
   const customerPhone = String(body.customer_phone || "").trim();
   const paymentMethod = String(body.payment_method || "fpx").trim().toLowerCase();
+  // Dine In (table from the scanned QR) or Take Away. The cashier can still
+  // change these when collecting payment.
+  const requestedTable = sanitizeTargetLabel(body.table_number);
+  const orderType = normalizeOrderType(body.order_type) ?? (requestedTable ? "dine_in" : null);
+  const tableNumber = orderType === "take_away" ? null : requestedTable;
+  const paysAtCounter = paymentMethod === "cash";
 
   if (!customerName) return NextResponse.json({ error: "Nama diperlukan" }, { status: 400 });
   if (!customerPhone || customerPhone.replace(/[^\d]/g, "").length < 8) {
@@ -360,18 +368,33 @@ export async function POST(req: Request) {
       payment_method: paymentMethod,
       cash_received: 0,
       balance: 0,
-      status: "pending",
+      // Nothing reaches the kitchen until it is paid: at the counter (cashier
+      // "Terima Bayaran") or via the online-payment callback.
+      status: "awaiting_payment",
       payment_status: "pending",
+    };
+    const orderFlow = {
+      order_type: orderType,
+      table_number: tableNumber,
+      buzzer_number: null,
     };
 
     let orderInsert = await supabase
       .from("orders")
-      .insert([{ ...orderBase, order_source: "customer_web" }])
+      .insert([{ ...orderBase, ...orderFlow, order_source: "customer_web" }])
       .select("id")
       .single();
 
-    if (orderInsert.error?.message?.toLowerCase().includes("order_source")) {
-      orderInsert = await supabase.from("orders").insert([orderBase]).select("id").single();
+    // Pre-migration DBs: retry without the pay-at-counter columns, then without order_source.
+    if (orderInsert.error && isMissingColumnError(orderInsert.error.message)) {
+      orderInsert = await supabase
+        .from("orders")
+        .insert([{ ...orderBase, order_source: "customer_web" }])
+        .select("id")
+        .single();
+      if (orderInsert.error?.message?.toLowerCase().includes("order_source")) {
+        orderInsert = await supabase.from("orders").insert([orderBase]).select("id").single();
+      }
     }
 
     const { data: order, error: orderError } = orderInsert;
@@ -495,6 +518,9 @@ export async function POST(req: Request) {
       const chipStatus = getChipConfigStatus();
       if (chipStatus.configured) {
         try {
+          const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
+            .trim()
+            .replace(/\/+$/, "");
           const purchase = await createChipPurchase({
             amount: finalTotal,
             orderId: order.id,
@@ -502,6 +528,9 @@ export async function POST(req: Request) {
             customerName: customerName,
             customerEmail: null,
             customerPhone: normalizedPhone,
+            // Land back on the order tracker (QR ordering app), not the member PWA.
+            successRedirect: `${siteUrl}/order/${order.id}`,
+            failureRedirect: `${siteUrl}/order/${order.id}?payment=failed`,
           });
           paymentUrl = purchase.checkoutUrl;
         } catch (chipErr) {
@@ -526,12 +555,25 @@ export async function POST(req: Request) {
         appliedCouponDiscount > 0
           ? `Coupon ${appliedCouponCode}: −RM${appliedCouponDiscount.toFixed(2)}\n`
           : "";
+      const shortNo = shortOrderNumber(numbering.orderNumber, order.id);
+      const whereLine =
+        orderType === "dine_in" && tableNumber
+          ? `Dine In · Meja ${tableNumber}\n`
+          : orderType === "take_away"
+            ? "Take Away\n"
+            : "";
+      const nextStep = paysAtCounter
+        ? `🧾 Sila ke kaunter dan sebut Order ID *#${shortNo}* untuk bayar.\n` +
+          `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`
+        : `Selesaikan bayaran online untuk hantar pesanan ke dapur.\n` +
+          `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
       const waMsg =
-        `✅ Order #${numbering.orderNumber} disahkan!\n\n` +
-        `${itemLines}\n\n` +
+        `✅ Order #${shortNo} (${numbering.orderNumber}) diterima!\n` +
+        whereLine +
+        `\n${itemLines}\n\n` +
         (redeemLine || couponLine ? `Subjumlah: RM${calculated.subtotal.toFixed(2)}\n${redeemLine}${couponLine}` : "") +
         `Jumlah: RM${finalTotal.toFixed(2)}\n\n` +
-        `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
+        nextStep;
       sendMurpatiText({ to: waPhone, message: waMsg }).catch(() => {});
     }
 
@@ -539,6 +581,10 @@ export async function POST(req: Request) {
       success: true,
       order_id: order.id,
       order_number: numbering.orderNumber,
+      short_number: shortOrderNumber(numbering.orderNumber, order.id),
+      status: "awaiting_payment",
+      order_type: orderType,
+      table_number: tableNumber,
       subtotal: calculated.subtotal,
       total: finalTotal,
       redeemed_points: appliedRedeemPoints,

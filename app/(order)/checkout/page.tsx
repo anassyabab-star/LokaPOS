@@ -76,6 +76,10 @@ export default function CheckoutPage() {
           customer_name: name.trim(),
           customer_phone: canonical,
           payment_method: payment === "online" ? "fpx" : "cash",
+          // Dine In (table from the scanned QR) or Take Away — shown to the
+          // cashier, the kitchen display and on the cup label.
+          order_type: orderType === "dine" ? "dine_in" : "take_away",
+          table_number: orderType === "dine" ? table || undefined : undefined,
           coupon_code: couponCode || undefined,
           items: cart.map(l => ({
             product_id: l.productId,
@@ -93,6 +97,7 @@ export default function CheckoutPage() {
       setLastOrder({
         orderId,
         receipt: data.order_number || orderId.slice(0, 8),
+        shortNumber: data.short_number || undefined,
         phone: canonical,
         name: name.trim(),
         items: cart.map(l => ({ name: l.name, optionsText: l.optionsText, qty: l.qty, unitPrice: l.unitPrice })),
@@ -151,7 +156,7 @@ export default function CheckoutPage() {
           <div className="mb-2.5 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Payment</div>
           {([
             { key: "online", title: "Pay online now", sub: "Card, FPX, e-wallet" },
-            { key: "counter", title: "Pay at counter", sub: "Cash or card on pickup" },
+            { key: "counter", title: "Pay at counter", sub: "Show your Order ID to the cashier · cash, QR or card" },
           ] as const).map(opt => {
             const on = payment === opt.key;
             return (

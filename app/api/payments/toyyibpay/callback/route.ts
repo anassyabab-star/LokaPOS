@@ -125,18 +125,37 @@ async function handleCallback(req: Request) {
         ? await statusOnPaid(currentStatus)
         : currentStatus || "pending";
 
-    const { data: updatedOrder, error: updateError } = await supabase
+    const paidPayload: Record<string, unknown> = {
+      payment_status: nextPaymentStatus,
+      status: nextOrderStatus,
+    };
+    if (nextPaymentStatus === "paid") paidPayload.paid_at = new Date().toISOString();
+
+    // Never resurrect an auto-expired (cancelled) order with a late payment.
+    let { data: updatedOrder, error: updateError } = await supabase
       .from("orders")
-      .update({
-        payment_status: nextPaymentStatus,
-        status: nextOrderStatus,
-      })
+      .update(paidPayload)
       .eq("id", order.id)
       .neq("payment_status", "paid")
+      .neq("status", "cancelled")
       .select("id,customer_id,receipt_number,total,discount_value")
       .maybeSingle();
+    if (updateError && String(updateError.message).toLowerCase().includes("paid_at")) {
+      delete paidPayload.paid_at;
+      ({ data: updatedOrder, error: updateError } = await supabase
+        .from("orders")
+        .update(paidPayload)
+        .eq("id", order.id)
+        .neq("payment_status", "paid")
+        .neq("status", "cancelled")
+        .select("id,customer_id,receipt_number,total,discount_value")
+        .maybeSingle());
+    }
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+    if (!updatedOrder && currentStatus === "cancelled") {
+      console.warn(`[toyyibpay/callback] late payment on cancelled order ${order.id}`);
     }
 
     if (nextPaymentStatus === "paid" && updatedOrder) {

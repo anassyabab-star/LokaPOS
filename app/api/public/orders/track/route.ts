@@ -6,6 +6,8 @@ import {
   ensureReferralCode,
   getLoyaltyConfig,
 } from "@/lib/loyalty";
+import { isMissingColumnError } from "@/lib/order-status";
+import { shortOrderNumber } from "@/lib/order-flow";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -41,28 +43,38 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    let { data: order, error } = await supabase
-      .from("orders")
-      .select("id, receipt_number, customer_name, status, payment_status, total, created_at, fulfillment_stage, ready_at, picked_up_at, reviewed_at")
-      .eq("id", orderId)
-      .eq("customer_id", customer.id)
-      .maybeSingle();
+    const BASE = "id, receipt_number, customer_name, status, payment_status, payment_method, total, created_at";
+    const JOURNEY = ", fulfillment_stage, ready_at, picked_up_at, reviewed_at";
+    const FLOW = ", order_type, table_number, buzzer_number, paid_at, completed_at";
+    const fetchOne = (cols: string) =>
+      supabase.from("orders").select(cols).eq("id", orderId).eq("customer_id", customer.id).maybeSingle();
 
-    // Fallback for DBs where the Fasa-3 journey columns aren't migrated yet.
-    if (error && (String(error.message).includes("fulfillment_stage") || String(error.message).includes("does not exist"))) {
-      ({ data: order, error } = await supabase
-        .from("orders")
-        .select("id, receipt_number, customer_name, status, payment_status, total, created_at")
-        .eq("id", orderId)
-        .eq("customer_id", customer.id)
-        .maybeSingle());
+    // Tolerant of DBs where the journey / pay-at-counter columns aren't migrated yet.
+    let { data: order, error } = await fetchOne(BASE + JOURNEY + FLOW);
+    if (error && isMissingColumnError(error.message)) {
+      ({ data: order, error } = await fetchOne(BASE + JOURNEY));
+    }
+    if (error && isMissingColumnError(error.message)) {
+      ({ data: order, error } = await fetchOne(BASE));
     }
 
     if (error || !order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ order });
+    const row = order as unknown as { id: string; receipt_number: string | null; [k: string]: unknown };
+    return NextResponse.json({
+      order: {
+        fulfillment_stage: "received",
+        order_type: null,
+        table_number: null,
+        buzzer_number: null,
+        paid_at: null,
+        completed_at: null,
+        ...row,
+        short_number: shortOrderNumber(row.receipt_number, row.id),
+      },
+    });
   }
 
   // Track recent orders by phone (last 30 days) — loyalty points require customer auth
@@ -90,7 +102,14 @@ export async function GET(req: Request) {
           .eq("customer_id", customer.id)
           .gte("created_at", since)
           .order("created_at", { ascending: false })
-          .limit(50),
+          .limit(50)
+          .then(res => ({
+            ...res,
+            data: (res.data || []).map(o => ({
+              ...o,
+              short_number: shortOrderNumber(o.receipt_number, o.id),
+            })),
+          })),
         supabase
           .from("loyalty_ledger")
           .select("points_change, created_at")

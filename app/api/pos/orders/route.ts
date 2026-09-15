@@ -1,6 +1,31 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
+import { isMissingColumnError } from "@/lib/order-status";
+import { shortOrderNumber } from "@/lib/order-flow";
+
+const ORDER_COLS =
+  "id, receipt_number, created_at, customer_name, customer_id, payment_method, payment_status, subtotal, discount_value, total, status, order_source";
+const ORDER_FLOW_COLS = ORDER_COLS + ", order_type, table_number, buzzer_number, paid_at";
+
+type OrderDetailRow = {
+  id: string;
+  receipt_number: string | null;
+  created_at: string;
+  customer_name: string | null;
+  customer_id: string | null;
+  payment_method: string | null;
+  payment_status: string | null;
+  subtotal: number | null;
+  discount_value: number | null;
+  total: number | null;
+  status: string | null;
+  order_source?: string | null;
+  order_type?: string | null;
+  table_number?: string | null;
+  buzzer_number?: string | null;
+  paid_at?: string | null;
+};
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -42,15 +67,23 @@ export async function GET(req: Request) {
   try {
     const supabase = createSupabaseAdminClient();
 
-    // Fetch order
-    const { data: order, error: orderError } = await supabase
+    // Fetch order (tolerant of a DB without the pay-at-counter columns yet)
+    let { data: orderData, error: orderError } = await supabase
       .from("orders")
-      .select("id, receipt_number, created_at, customer_name, payment_method, subtotal, discount_value, total, status")
+      .select(ORDER_FLOW_COLS)
       .eq("id", orderId)
       .maybeSingle();
+    if (orderError && isMissingColumnError(orderError.message)) {
+      ({ data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .select(ORDER_COLS)
+        .eq("id", orderId)
+        .maybeSingle());
+    }
 
     if (orderError) return NextResponse.json({ error: orderError.message }, { status: 500 });
-    if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    if (!orderData) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    const order = orderData as unknown as OrderDetailRow;
 
     // Fetch items — try with sugar_level first, fallback without it
     let items: Array<{ id: string; product_name_snapshot: string | null; variant_id: string | null; sugar_level: string | null; price: number | null; qty: number | null; line_total: number | null }> = [];
@@ -143,13 +176,21 @@ export async function GET(req: Request) {
       order: {
         id: order.id,
         receipt_number: order.receipt_number,
+        short_number: shortOrderNumber(order.receipt_number, order.id),
         created_at: order.created_at,
         customer_name: order.customer_name,
+        customer_id: order.customer_id,
         payment_method: order.payment_method,
+        payment_status: order.payment_status,
         subtotal: Number(order.subtotal || 0),
         discount_value: Number(order.discount_value || 0),
         total: Number(order.total || 0),
         status: order.status,
+        order_source: order.order_source ?? null,
+        order_type: order.order_type ?? null,
+        table_number: order.table_number ?? null,
+        buzzer_number: order.buzzer_number ?? null,
+        paid_at: order.paid_at ?? null,
       },
       items: enrichedItems,
     });

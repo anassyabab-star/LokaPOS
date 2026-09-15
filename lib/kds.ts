@@ -45,11 +45,14 @@ export async function isKdsEnabled(): Promise<boolean> {
 /**
  * The status a just-PAID order should land in.
  *   - KDS off → "completed" (straight into the system).
- *   - KDS on  → advance pending→"preparing", else keep the already-advanced
- *               status (mirrors the previous hard-coded behaviour).
+ *   - KDS on  → "pending": the order enters the Kitchen Display's BARU lane and
+ *               the kitchen taps "Mula Buat" to advance it. An order that was
+ *               already advanced (preparing/ready/…) keeps its status.
+ *
+ * Pipeline: awaiting_payment → pending → preparing → ready → completed.
  */
 export async function statusOnPaid(currentStatus?: string | null): Promise<string> {
   if (!(await isKdsEnabled())) return "completed";
   const cur = String(currentStatus || "").toLowerCase();
-  return !cur || cur === "pending" ? "preparing" : cur;
+  return !cur || cur === "pending" || cur === "awaiting_payment" ? "pending" : cur;
 }

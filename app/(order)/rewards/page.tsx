@@ -132,7 +132,7 @@ export default function RewardsPage() {
             <div className="mb-2 px-1 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Recent</div>
             <div className="space-y-2">
               {orders.slice(0, 6).map(o => {
-                const active = ["pending", "preparing", "ready"].includes((o.status || "").toLowerCase());
+                const active = ["awaiting_payment", "pending", "preparing", "ready"].includes((o.status || "").toLowerCase());
                 return (
                   <div key={o.id} className="flex items-center gap-3 rounded-[14px] border border-hairline bg-card px-4 py-3 shadow-card">
                     <div className="flex-1 min-w-0">

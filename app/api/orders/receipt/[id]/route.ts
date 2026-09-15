@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { buildReceiptHtml, type ReceiptItemLine } from "@/lib/receipt-print";
+import { isMissingColumnError } from "@/lib/order-status";
+import { shortOrderNumber } from "@/lib/order-flow";
 
 type OrderRow = {
   id: string;
@@ -12,7 +14,13 @@ type OrderRow = {
   subtotal: number | null;
   discount_value: number | null;
   total: number | null;
+  order_type?: string | null;
+  table_number?: string | null;
+  buzzer_number?: string | null;
 };
+
+const RECEIPT_COLS = "id,receipt_number,created_at,customer_name,payment_method,subtotal,discount_value,total";
+const RECEIPT_FLOW_COLS = RECEIPT_COLS + ",order_type,table_number,buzzer_number";
 
 type OrderItemRow = {
   id: string;
@@ -92,11 +100,18 @@ export async function GET(
   try {
     const supabase = createSupabaseAdminClient();
 
-    const { data: order, error: orderError } = await supabase
+    let { data: order, error: orderError } = await supabase
       .from("orders")
-      .select("id,receipt_number,created_at,customer_name,payment_method,subtotal,discount_value,total")
+      .select(RECEIPT_FLOW_COLS)
       .eq("id", orderId)
       .maybeSingle();
+    if (orderError && isMissingColumnError(orderError.message)) {
+      ({ data: order, error: orderError } = await supabase
+        .from("orders")
+        .select(RECEIPT_COLS)
+        .eq("id", orderId)
+        .maybeSingle());
+    }
 
     if (orderError) {
       return NextResponse.json({ error: orderError.message }, { status: 500 });
@@ -105,7 +120,7 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const orderRow = order as OrderRow;
+    const orderRow = order as unknown as OrderRow;
     const { data: itemRows, error: itemsError } = await supabase
       .from("order_items")
       .select("id,product_name_snapshot,variant_id,sugar_level,price,qty,line_total")
@@ -207,9 +222,13 @@ export async function GET(
 
     const html = buildReceiptHtml({
       receiptNumber: orderRow.receipt_number || orderRow.id.slice(0, 8),
+      shortNumber: shortOrderNumber(orderRow.receipt_number, orderRow.id),
       createdAt: orderRow.created_at,
       customerName: orderRow.customer_name,
       paymentMethod: orderRow.payment_method,
+      orderType: orderRow.order_type ?? null,
+      tableNumber: orderRow.table_number ?? null,
+      buzzerNumber: orderRow.buzzer_number ?? null,
       subtotal: Number(orderRow.subtotal || 0),
       discount: Number(orderRow.discount_value || 0),
       total: Number(orderRow.total || 0),

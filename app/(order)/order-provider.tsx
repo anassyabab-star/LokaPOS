@@ -33,6 +33,8 @@ export type OrderType = "dine" | "takeaway";
 export type LastOrder = {
   orderId: string;
   receipt: string;
+  /** Short daily Order ID the customer quotes at the counter, e.g. "042". */
+  shortNumber?: string;
   phone: string;
   name: string;
   items: { name: string; optionsText: string; qty: number; unitPrice: number }[];
@@ -71,6 +73,7 @@ const Ctx = createContext<OrderState | null>(null);
 
 const CART_KEY = "loka_order_cart";
 const TABLE_KEY = "loka_order_table";
+const TYPE_KEY = "loka_order_type";
 const CONTACT_KEY = "loka_order_contact";
 const LAST_KEY = "loka_order_last";
 
@@ -80,7 +83,7 @@ function genLineId() {
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartLine[]>([]);
-  const [orderType, setOrderType] = useState<OrderType>("dine");
+  const [orderType, setOrderTypeState] = useState<OrderType>("dine");
   const [redeem, setRedeem] = useState(false);
   const [table, setTableState] = useState<string | null>(null);
   const [contact, setContactState] = useState<{ name: string; phone: string }>({ name: "", phone: "" });
@@ -95,6 +98,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       if (c) setCart(JSON.parse(c));
       const t = localStorage.getItem(TABLE_KEY);
       if (t) setTableState(t);
+      const ty = localStorage.getItem(TYPE_KEY);
+      if (ty === "dine" || ty === "takeaway") setOrderTypeState(ty);
       const ct = localStorage.getItem(CONTACT_KEY);
       if (ct) setContactState(JSON.parse(ct));
       const lo = localStorage.getItem(LAST_KEY);
@@ -111,6 +116,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   function setTable(t: string | null) {
     setTableState(t);
     try { t ? localStorage.setItem(TABLE_KEY, t) : localStorage.removeItem(TABLE_KEY); } catch {}
+  }
+  function setOrderType(t: OrderType) {
+    setOrderTypeState(t);
+    try { localStorage.setItem(TYPE_KEY, t); } catch {}
   }
   function setContact(c: { name: string; phone: string }) {
     setContactState(c);

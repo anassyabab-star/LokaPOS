@@ -1,6 +1,27 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
+import { isMissingColumnError } from "@/lib/order-status";
+import { expireStaleUnpaidOrders } from "@/lib/order-expiry";
+import { KITCHEN_ACTIVE_STATUSES, shortOrderNumber } from "@/lib/order-flow";
+
+const KDS_COLS = "id, receipt_number, customer_name, total, status, order_source, payment_status, created_at";
+const KDS_FLOW_COLS = KDS_COLS + ", order_type, table_number, buzzer_number, paid_at";
+
+type KdsOrderRow = {
+  id: string;
+  receipt_number: string | null;
+  customer_name: string | null;
+  total: number | null;
+  status: string | null;
+  order_source: string | null;
+  payment_status: string | null;
+  created_at: string;
+  order_type?: string | null;
+  table_number?: string | null;
+  buzzer_number?: string | null;
+  paid_at?: string | null;
+};
 
 type OrderItemRow = {
   id: string;
@@ -61,19 +82,38 @@ export async function GET() {
     dateKey = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
   }
 
-  // Fetch active orders (pending, preparing, ready) for today
-  const { data: orders, error: ordersError } = await supabase
-    .from("orders")
-    .select("id, receipt_number, customer_name, total, status, order_source, payment_status, created_at")
-    .in("status", ["pending", "preparing", "ready"])
-    .eq("date_key", dateKey)
-    .order("created_at", { ascending: true });
+  // Best-effort sweep of expired "awaiting_payment" orders (throttled inside).
+  try {
+    await expireStaleUnpaidOrders();
+  } catch {
+    /* never block the display */
+  }
+
+  // Active, PAID orders for today. Unpaid orders never reach the kitchen —
+  // they sit in "awaiting_payment" until the cashier collects.
+  const fetchOrders = (cols: string) =>
+    supabase
+      .from("orders")
+      .select(cols)
+      .in("status", [...KITCHEN_ACTIVE_STATUSES])
+      .eq("payment_status", "paid")
+      .eq("date_key", dateKey)
+      .order("created_at", { ascending: true });
+
+  let { data: orderRows, error: ordersError } = await fetchOrders(KDS_FLOW_COLS);
+  if (ordersError && isMissingColumnError(ordersError.message)) {
+    ({ data: orderRows, error: ordersError } = await fetchOrders(KDS_COLS));
+  }
 
   if (ordersError) {
     return NextResponse.json({ error: ordersError.message }, { status: 500 });
   }
 
-  if (!orders || orders.length === 0) {
+  // FCFS from the moment the order was PAID (that is when it entered the queue).
+  const queueSince = (o: KdsOrderRow) => new Date(o.paid_at || o.created_at).getTime();
+  const orders = ((orderRows || []) as unknown as KdsOrderRow[]).sort((a, b) => queueSince(a) - queueSince(b));
+
+  if (orders.length === 0) {
     return NextResponse.json({ orders: [] });
   }
 
@@ -134,16 +174,23 @@ export async function GET() {
         price: Number(item.price || 0),
       }));
 
-    const elapsed = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 1000);
+    const since = order.paid_at || order.created_at;
+    const elapsed = Math.floor((Date.now() - new Date(since).getTime()) / 1000);
 
     return {
       id: order.id,
       receipt_number: order.receipt_number,
+      short_number: shortOrderNumber(order.receipt_number, order.id),
       customer_name: order.customer_name || "Walk-in",
       status: order.status,
       order_source: order.order_source,
       payment_status: order.payment_status,
+      order_type: order.order_type ?? null,
+      table_number: order.table_number ?? null,
+      buzzer_number: order.buzzer_number ?? null,
       created_at: order.created_at,
+      paid_at: order.paid_at ?? null,
+      queue_since: since,
       elapsed_seconds: elapsed,
       items,
     };

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import OrderStatusActions from "./order-status-actions";
+import { orderTarget, shortOrderNumber } from "@/lib/order-flow";
 
 type OrdersPageProps = {
   searchParams?: Promise<{
@@ -46,12 +47,13 @@ function pickAddonName(row: OrderItemAddonRow) {
   return String(row.addon_name_snapshot || row.addon_name || row.name || "").trim();
 }
 
-const ORDER_STATUS_STEPS = ["pending", "preparing", "ready", "completed"] as const;
+const ORDER_STATUS_STEPS = ["awaiting_payment", "pending", "preparing", "ready", "completed"] as const;
 
 type OrderTimelineStatus = (typeof ORDER_STATUS_STEPS)[number] | "cancelled" | "unknown";
 
 function normalizeOrderStatus(value: string | null | undefined): OrderTimelineStatus {
   const status = String(value || "").trim().toLowerCase();
+  if (status === "awaiting_payment") return "awaiting_payment";
   if (status === "pending") return "pending";
   if (status === "preparing") return "preparing";
   if (status === "ready") return "ready";
@@ -61,6 +63,7 @@ function normalizeOrderStatus(value: string | null | undefined): OrderTimelineSt
 }
 
 function formatOrderStatus(status: OrderTimelineStatus) {
+  if (status === "awaiting_payment") return "Awaiting Payment";
   if (status === "pending") return "Pending";
   if (status === "preparing") return "Preparing";
   if (status === "ready") return "Ready";
@@ -70,6 +73,7 @@ function formatOrderStatus(status: OrderTimelineStatus) {
 }
 
 function orderStatusBadgeStyle(status: OrderTimelineStatus): React.CSSProperties {
+  if (status === "awaiting_payment") return { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px dashed var(--d-warning)" };
   if (status === "pending")   return { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px solid var(--d-warning)" };
   if (status === "preparing") return { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px solid var(--d-warning)" };
   if (status === "ready")     return { color: "var(--d-success)", background: "var(--d-success-soft)", border: "1px solid var(--d-success)" };
@@ -331,6 +335,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
 
         <select name="status" defaultValue={status} style={inputStyle}>
           <option value="all">All status</option>
+          <option value="awaiting_payment">Awaiting Payment</option>
           <option value="pending">Pending</option>
           <option value="preparing">Preparing</option>
           <option value="ready">Ready</option>
@@ -401,6 +406,14 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
 
         {orders.map(order => {
           const displayNumber = order.receipt_number || order.order_number || order.id.slice(0, 8);
+          const shortNumber = shortOrderNumber(order.receipt_number, order.id);
+          const target = orderTarget(order as { order_type?: string | null; table_number?: string | null; buzzer_number?: string | null });
+          const targetStyle: React.CSSProperties =
+            target.kind === "table"
+              ? { color: "var(--d-warning)", background: "var(--d-warning-soft)", border: "1px solid var(--d-warning)" }
+              : target.kind === "buzzer"
+                ? { color: "var(--d-info)", background: "var(--d-info-soft)", border: "1px solid var(--d-info)" }
+                : { color: "var(--d-text-3)", background: "var(--d-surface-hover)", border: "1px solid var(--d-border)" };
 
           const orderItems = (order.order_items || []) as Array<{
             id: string;
@@ -433,8 +446,13 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontFamily: "var(--font-space-grotesk), sans-serif", fontSize: 15, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.01em" }}>#{displayNumber}</span>
+                    <span style={{ fontFamily: "var(--font-space-grotesk), sans-serif", fontSize: 15, fontWeight: 600, color: "var(--ink)", letterSpacing: "-0.01em" }}>
+                      #{shortNumber} <span style={{ fontSize: 11, fontWeight: 500, color: "var(--muted-2)" }}>{displayNumber}</span>
+                    </span>
                     <span style={{ ...badgePillStyle, ...orderSourceBadgeStyle(normalizedSource) }}>{formatOrderSource(normalizedSource)}</span>
+                    {target.kind !== "counter" && (
+                      <span style={{ ...badgePillStyle, ...targetStyle }}>{target.text}</span>
+                    )}
                   </div>
                   <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
                     {new Date(order.created_at).toLocaleString()}{order.customer_name ? ` · ${order.customer_name}` : ""}

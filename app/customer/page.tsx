@@ -70,6 +70,7 @@ function buildKey(pid: string, vid: string | null, aids: string[], sugar: string
 }
 function statusLabel(status: string | null) {
   switch (status?.toLowerCase()) {
+    case "awaiting_payment": return "Bayar di kaunter";
     case "pending": return "Menunggu";
     case "preparing": return "Sedang Dibuat";
     case "ready": return "Sedia Diambil! 🎉";
@@ -80,6 +81,7 @@ function statusLabel(status: string | null) {
 }
 function statusStep(status: string | null) {
   switch (status?.toLowerCase()) {
+    case "awaiting_payment": return 0;
     case "pending": return 0;
     case "preparing": return 1;
     case "ready": return 2;
@@ -320,7 +322,7 @@ export default function CustomerApp() {
   }, [custPhone]);
 
   useEffect(() => { if (tab === "orders" || tab === "home") void loadTrackedOrders(); }, [tab, loadTrackedOrders]);
-  const hasActiveOrder = trackedOrders.some(o => ["pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
+  const hasActiveOrder = trackedOrders.some(o => ["awaiting_payment", "pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
   useEffect(() => {
     if (tab !== "orders" && !(tab === "home" && hasActiveOrder)) return;
     const i = setInterval(() => void loadTrackedOrders(), 10000);
@@ -355,8 +357,8 @@ export default function CustomerApp() {
   }, [useRedeem, loyaltyPoints, redeemCfg, cartTotal]);
   const checkoutTotal = Math.max(0, cartTotal - redeemCalc.amount);
 
-  const activeOrder = trackedOrders.find(o => ["pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
-  const activeOrders = trackedOrders.filter(o => ["pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
+  const activeOrder = trackedOrders.find(o => ["awaiting_payment", "pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
+  const activeOrders = trackedOrders.filter(o => ["awaiting_payment", "pending", "preparing", "ready"].includes(o.status?.toLowerCase() || ""));
   const pastOrders = trackedOrders.filter(o => ["completed", "cancelled"].includes(o.status?.toLowerCase() || ""));
   const displayedOrders = orderFilter === "active" ? activeOrders : orderFilter === "past" ? pastOrders : trackedOrders;
 

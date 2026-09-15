@@ -34,22 +34,37 @@ export async function POST(req: Request) {
 
     const supabase = createSupabaseAdminClient();
 
-    // Update order payment status (KDS off → land "completed", skip the queue)
-    const paidStatus = await statusOnPaid("pending");
-    const { data: order, error: updateError } = await supabase
+    // Update order payment status (KDS on → "pending" queue, off → "completed").
+    // A late payment on an auto-expired (cancelled) order is NOT resurrected.
+    const paidStatus = await statusOnPaid("awaiting_payment");
+    const paidAt = new Date().toISOString();
+    const paidPayload = { payment_status: "paid", status: paidStatus, paid_at: paidAt };
+    let { data: order, error: updateError } = await supabase
       .from("orders")
-      .update({
-        payment_status: "paid",
-        status: paidStatus,
-      })
+      .update(paidPayload)
       .eq("id", orderId)
       .neq("payment_status", "paid")
+      .neq("status", "cancelled")
       .select("id, customer_id, receipt_number, total, discount_value")
       .maybeSingle();
+
+    if (updateError && String(updateError.message).toLowerCase().includes("paid_at")) {
+      ({ data: order, error: updateError } = await supabase
+        .from("orders")
+        .update({ payment_status: "paid", status: paidStatus })
+        .eq("id", orderId)
+        .neq("payment_status", "paid")
+        .neq("status", "cancelled")
+        .select("id, customer_id, receipt_number, total, discount_value")
+        .maybeSingle());
+    }
 
     if (updateError) {
       console.error("CHIP callback update error:", updateError);
       return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+    if (!order) {
+      console.warn(`[chip/callback] no update for order ${orderId} — already paid or cancelled (late payment?)`);
     }
 
     // Apply loyalty settlement if order was updated

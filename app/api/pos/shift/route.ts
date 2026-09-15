@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import { getCashSalesSince } from "@/lib/shift-cash";
 
 type ShiftRow = {
   id: string;
@@ -17,10 +18,6 @@ type ShiftRow = {
   expected_cash: number | null;
   over_short: number | null;
   closing_note: string | null;
-};
-
-type OrderCashRow = {
-  total: number | null;
 };
 
 type PaidOutRow = {
@@ -45,21 +42,8 @@ async function getOpenShift(supabase: ReturnType<typeof createSupabaseAdminClien
   return (data as ShiftRow | null) || null;
 }
 
-async function getCashSalesSince(
-  supabase: ReturnType<typeof createSupabaseAdminClient>,
-  openedAt: string
-) {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("total")
-    .eq("status", "completed")
-    .eq("payment_method", "cash")
-    .eq("payment_status", "paid")
-    .gte("created_at", openedAt);
-
-  if (error) throw error;
-  return ((data || []) as OrderCashRow[]).reduce((sum, row) => sum + Number(row.total || 0), 0);
-}
+// Cash drawer maths live in lib/shift-cash.ts (counts every PAID cash order,
+// including ones still queued on the Kitchen Display).
 
 function isMissingPaidOutTable(message: string | null | undefined) {
   const m = String(message || "").toLowerCase();
@@ -228,7 +212,7 @@ export async function POST(req: Request) {
           .from("orders")
           .select("total, payment_method, status")
           .eq("date_key", shiftDate)
-          .in("status", ["completed", "preparing", "ready"]);
+          .in("status", ["pending", "preparing", "ready", "completed"]).eq("payment_status", "paid");
 
         const orders = todayOrders || [];
         const totalSales = orders.reduce((s, o) => s + Number(o.total || 0), 0);

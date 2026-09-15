@@ -17,12 +17,13 @@ const POS_PRINTER_IP_KEY = "pos_printer_ip";
 // ━━━ Navigation types ━━━
 export type MainTab = "checkout" | "orders" | "reports" | "more";
 export type CheckoutSubTab = "keypad" | "library" | "favourites";
-export type Overlay = "none" | "cart" | "payment" | "done" | "customer" | "products";
+export type Overlay = "none" | "cart" | "payment" | "done" | "customer" | "products" | "collect";
 
 // ━━━ Orders list type ━━━
 export type OrderRow = {
   id: string;
   receipt_number: string;
+  short_number?: string;
   customer_name: string;
   total: number;
   payment_method: string;
@@ -30,6 +31,10 @@ export type OrderRow = {
   status: string;
   order_source: string | null;
   created_at: string;
+  order_type?: string | null;
+  table_number?: string | null;
+  buzzer_number?: string | null;
+  paid_at?: string | null;
 };
 
 // ━━━ Order detail item ━━━
@@ -159,6 +164,10 @@ export function usePosState() {
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
   const [orderDetailError, setOrderDetailError] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
+  // "Terima Bayaran" sheet for an awaiting_payment order (QR / phone order).
+  const [collectOrderId, setCollectOrderId] = useState<string | null>(null);
+  // Table labels the store offers (store_settings.dine_in_tables).
+  const [dineInTables, setDineInTables] = useState<string[]>([]);
 
   // ───── Reports tab ─────
   const [reportRange, setReportRange] = useState<ReportRange>("today");
@@ -290,6 +299,33 @@ export function usePosState() {
     } catch { setOrderDetailError(true); } finally { setOrderDetailLoading(false); }
   }
 
+  /** Open the "Terima Bayaran" sheet for an unpaid order. */
+  function openCollectPayment(orderId: string) {
+    setCollectOrderId(orderId);
+    setOverlay("collect");
+  }
+
+  /**
+   * A scanned order QR (customer's phone screen or a cup label):
+   * unpaid → Collect Payment sheet; otherwise → the read-only detail modal.
+   */
+  async function openScannedOrder(orderId: string) {
+    try {
+      const res = await fetch(`/api/pos/orders?order_id=${encodeURIComponent(orderId)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      const status = String(data?.order?.status || "").toLowerCase();
+      const paid = String(data?.order?.payment_status || "").toLowerCase() === "paid";
+      if (res.ok && status === "awaiting_payment" && !paid) {
+        openCollectPayment(orderId);
+        return;
+      }
+    } catch { /* fall through to the detail modal */ }
+    setMainTab("orders");
+    setOverlay("none");
+    void loadOrders();
+    void loadOrderDetail(orderId);
+  }
+
   // ━━━ Reports ━━━
   // BUG-07 FIX: Add cache TTL (60s) instead of permanent cache
   const reportCache = useRef<Record<string, { data: DashboardData; timestamp: number }>>({});
@@ -311,11 +347,12 @@ export function usePosState() {
   }
 
   // ━━━ Order polling ━━━
-  // BUG-08 FIX: Reset order count when shift changes
-  const lastOrderCount = useRef(0);
+  // id → last seen status, so the POS can beep on NEW unpaid orders and on
+  // orders that just turned READY (kitchen → "Siap!"). Reset on shift change.
+  const knownOrderStatus = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
-    lastOrderCount.current = 0;
+    knownOrderStatus.current = new Map();
     reportCache.current = {};
   }, [currentShift?.id]);
 
@@ -433,8 +470,12 @@ export function usePosState() {
     fetch("/api/public/store-status", { cache: "no-store" })
       .then(res => res.json())
       .then(data => {
+        if (cancelled) return;
+        if (Array.isArray(data?.dine_in_tables)) {
+          setDineInTables(data.dine_in_tables.map((t: unknown) => String(t)).filter(Boolean));
+        }
         const lc = data?.loyalty_config;
-        if (cancelled || !lc) return;
+        if (!lc) return;
         setLoyaltyConfig({
           redeemRmPerPoint: Number(lc.redeemRmPerPoint ?? DEFAULT_POS_LOYALTY_CONFIG.redeemRmPerPoint),
           redeemMinPoints: Number(lc.redeemMinPoints ?? DEFAULT_POS_LOYALTY_CONFIG.redeemMinPoints),
@@ -503,6 +544,7 @@ export function usePosState() {
     orders, setOrders, ordersLoading, loadOrders,
     orderDetailOpen, setOrderDetailOpen, orderDetailItems, orderDetailLoading, orderDetailError, loadOrderDetail,
     showQrScanner, setShowQrScanner,
+    collectOrderId, setCollectOrderId, openCollectPayment, openScannedOrder, dineInTables,
     // Reports
     reportRange, setReportRange, reportData, reportLoading, loadReport,
     // Product management
@@ -517,6 +559,6 @@ export function usePosState() {
     // Toast + Sound
     addedToast, setAddedToast, playBeep,
     // Polling
-    lastOrderCount,
+    knownOrderStatus,
   };
 }

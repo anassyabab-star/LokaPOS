@@ -28,6 +28,9 @@ import MoreTab from "./components/more-tab";
 import CartOverlay from "./components/cart-overlay";
 import { CustomerOverlay, PaymentOverlay, DoneOverlay, PosBottomNav } from "./components/pos-overlays";
 import ProductsOverlay from "./components/products-overlay";
+import CollectPaymentSheet, { type PaidOrder } from "./components/collect-payment-sheet";
+import type { OrderRow } from "./hooks/use-pos-state";
+import { orderTarget } from "@/lib/order-flow";
 
 function POSPageInner() {
   const searchParams = useSearchParams();
@@ -42,19 +45,48 @@ function POSPageInner() {
   useEffect(() => { if (s.mainTab === "reports") void s.loadReport(s.reportRange); }, [s.mainTab, s.reportRange]);
 
   // ━━━ QR Scan ━━━
-  useEffect(() => { if (!scannedOrderId) return; s.setMainTab("orders"); s.setOverlay("none"); void s.loadOrders(); void s.loadOrderDetail(scannedOrderId); window.history.replaceState({}, "", "/pos"); }, [scannedOrderId]);
-  function handleQrScan(orderId: string) { s.setShowQrScanner(false); s.setMainTab("orders"); s.setOverlay("none"); void s.loadOrders(); void s.loadOrderDetail(orderId); }
+  // A scanned order QR (customer's phone or cup label): unpaid → Terima Bayaran, else → detail.
+  useEffect(() => { if (!scannedOrderId) return; void s.openScannedOrder(scannedOrderId); window.history.replaceState({}, "", "/pos"); }, [scannedOrderId]);
+  function handleQrScan(orderId: string) { s.setShowQrScanner(false); void s.openScannedOrder(orderId); }
 
   // ━━━ Polling ━━━
+  // Diff today's orders every 15s: beep on new unpaid (QR) orders and on
+  // orders the kitchen just marked READY, so the cashier never misses a hand-over.
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try { const res = await fetch("/api/orders?limit=1&today=1", { cache: "no-store" }); const data = await res.json(); const n = data?.orders?.length || 0;
-        if (s.lastOrderCount.current > 0 && n > s.lastOrderCount.current) { s.setAddedToast("Order baru masuk!"); s.playBeep(); s.playBeep(); if (s.mainTab === "orders") void s.loadOrders(); }
-        s.lastOrderCount.current = n;
-      } catch {}
-    }, 15000);
-    fetch("/api/orders?limit=1&today=1", { cache: "no-store" }).then(r => r.json()).then(d => { s.lastOrderCount.current = d?.orders?.length || 0; }).catch(() => {});
-    return () => clearInterval(interval);
+    let cancelled = false;
+    async function poll(initial: boolean) {
+      try {
+        const res = await fetch("/api/orders?limit=100&today=1", { cache: "no-store" });
+        const data = await res.json();
+        if (cancelled) return;
+        const list: OrderRow[] = Array.isArray(data?.orders) ? data.orders : [];
+        const prev = s.knownOrderStatus.current;
+        const lower = (v: unknown) => String(v || "").toLowerCase();
+        if (!initial && prev.size > 0) {
+          const newlyReady = list.filter(o => lower(o.status) === "ready" && prev.get(o.id) !== "ready");
+          const newUnpaid = list.filter(o => !prev.has(o.id) && lower(o.status) === "awaiting_payment");
+          const newOther = list.filter(o => !prev.has(o.id) && lower(o.status) !== "awaiting_payment" && o.order_source === "customer_web");
+          if (newlyReady.length > 0) {
+            const o = newlyReady[0];
+            s.setAddedToast(`✅ SEDIA — SERAH #${o.short_number || o.receipt_number} · ${orderTarget(o).text}${newlyReady.length > 1 ? ` (+${newlyReady.length - 1})` : ""}`);
+            s.playBeep(); setTimeout(() => s.playBeep(), 180);
+          } else if (newUnpaid.length > 0) {
+            const o = newUnpaid[0];
+            s.setAddedToast(`🧾 Order baru #${o.short_number || o.receipt_number} — belum bayar${newUnpaid.length > 1 ? ` (+${newUnpaid.length - 1})` : ""}`);
+            s.playBeep(); setTimeout(() => s.playBeep(), 180);
+          } else if (newOther.length > 0) {
+            s.setAddedToast("Order online baru masuk!");
+            s.playBeep();
+          }
+        }
+        // Keep the Orders tab + the bottom-nav "Belum Bayar" badge current on every tab.
+        s.setOrders(list);
+        s.knownOrderStatus.current = new Map(list.map(o => [o.id, lower(o.status)]));
+      } catch { /* silent */ }
+    }
+    void poll(true);
+    const interval = setInterval(() => void poll(false), 15000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [s.mainTab]);
 
   // ━━━ Actions ━━━
@@ -84,6 +116,30 @@ function POSPageInner() {
       setLastCashChange(method === "cash" ? cashVal - s.total : 0);
       s.clearCart(); s.resetCustomerState(); s.setOverlay("done"); void s.refreshShiftState({ autoPrompt: false });
     } catch (err) { pw?.close(); alert(err instanceof Error && err.name === "AbortError" ? "Timeout — server lambat respond. Cuba semula." : "Ralat pelayan"); } finally { s.setSubmittingOrder(false); }
+  }
+
+  // Cashier collected payment for a phone/QR order (Collect Payment sheet).
+  function handleCollected(order: PaidOrder, preOpened: Window | null) {
+    const target = orderTarget(order);
+    const receipt: ReceiptData = {
+      order_id: order.id,
+      receipt_number: order.receipt_number || order.short_number,
+      customerName: `${order.customer_name || "Walk-in"}${target.kind === "counter" ? "" : ` · ${target.text}`}`,
+      items: [],
+      subtotal: order.subtotal,
+      discount: order.discount_value,
+      total: order.total,
+      payment_method: (order.payment_method === "qr" || order.payment_method === "card" ? order.payment_method : "cash"),
+      created_at: order.paid_at || new Date().toISOString(),
+    };
+    s.setReceiptData(receipt);
+    setLastCashChange(order.payment_method === "cash" ? Number(order.balance || 0) : 0);
+    if (s.autoPrintEnabled) printReceipt(receipt, preOpened); else preOpened?.close();
+    if (s.autoPrintLabel) printCupLabel(order.id);
+    s.setCollectOrderId(null);
+    s.setOverlay("done");
+    void s.loadOrders();
+    void s.refreshShiftState({ autoPrompt: false });
   }
 
   function printReceipt(data: ReceiptData, ew?: Window | null) {
@@ -150,6 +206,13 @@ function POSPageInner() {
       {s.overlay === "cart" && <CartOverlay />}
       {s.overlay === "customer" && <CustomerOverlay />}
       {s.overlay === "payment" && <PaymentOverlay onCompletePayment={completePayment} />}
+      {s.overlay === "collect" && s.collectOrderId && (
+        <CollectPaymentSheet
+          orderId={s.collectOrderId}
+          onPaid={handleCollected}
+          onClose={() => { s.setCollectOrderId(null); s.setOverlay("none"); }}
+        />
+      )}
       {s.overlay === "done" && s.receiptData && <DoneOverlay onPrintReceipt={() => printReceipt(s.receiptData!)} onPrintLabel={() => s.receiptData?.order_id && printCupLabel(s.receiptData.order_id)} lastCashChange={lastCashChange} />}
       {s.addedToast && <div className="animate-toast fixed bottom-20 left-1/2 z-[60] -translate-x-1/2 rounded-lg bg-[#7F1D1D] px-4 py-2 text-sm text-white shadow-lg">{s.addedToast}</div>}
 
