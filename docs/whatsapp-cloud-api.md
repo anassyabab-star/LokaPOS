@@ -45,7 +45,7 @@ Bahasa: **Bahasa Melayu (ms)**. Guna parameter **bernombor** (`{{1}}`, `{{2}}`�
 baris baru; kod dah bersihkan.
 
 ### `loka_otp` — kategori **Authentication**
-Meta jana badan tetap. Pilihan: ✅ *Add security recommendation*, ✅ *Add expiry
+Bahasa boleh English atau Melayu — app kesan bahasa template secara automatik dari WABA (atau set `WHATSAPP_TEMPLATE_OTP_LANG=en_US`). Meta jana badan tetap. Pilihan: ✅ *Add security recommendation*, ✅ *Add expiry
 time* (5 minit), butang **Copy code**. Dihantar dengan `{{1}}` = kod dan
 parameter butang = kod.
 

@@ -54,6 +54,19 @@ export function getWhatsAppCloudConfig() {
     orderReady: String(process.env.WHATSAPP_TEMPLATE_ORDER_READY || "loka_order_ready").trim(),
     pointsReceipt: String(process.env.WHATSAPP_TEMPLATE_POINTS_RECEIPT || "loka_points_receipt").trim(),
   };
+  // Optional per-template language overrides (WHATSAPP_TEMPLATE_OTP_LANG=en_US …).
+  // Without one, the language is auto-detected from the WABA template list.
+  const templateLangs: Partial<Record<keyof WhatsAppTemplateNames, string>> = {};
+  const langEnv: Record<keyof WhatsAppTemplateNames, string | undefined> = {
+    otp: process.env.WHATSAPP_TEMPLATE_OTP_LANG,
+    orderReceived: process.env.WHATSAPP_TEMPLATE_ORDER_RECEIVED_LANG,
+    orderPaid: process.env.WHATSAPP_TEMPLATE_ORDER_PAID_LANG,
+    orderReady: process.env.WHATSAPP_TEMPLATE_ORDER_READY_LANG,
+    pointsReceipt: process.env.WHATSAPP_TEMPLATE_POINTS_RECEIPT_LANG,
+  };
+  for (const [k, v] of Object.entries(langEnv)) {
+    if (v && String(v).trim()) templateLangs[k as keyof WhatsAppTemplateNames] = String(v).trim();
+  }
   return {
     configured: Boolean(accessToken && phoneNumberId),
     hasAccessToken: Boolean(accessToken),
@@ -65,6 +78,7 @@ export function getWhatsAppCloudConfig() {
     apiVersion,
     lang,
     templates,
+    templateLangs,
     webhookVerifyToken: String(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "").trim(),
     appSecret: String(process.env.WHATSAPP_APP_SECRET || "").trim(),
   };
@@ -119,6 +133,36 @@ export async function listWhatsAppTemplates(): Promise<{ ok: boolean; templates:
   } catch (err) {
     return { ok: false, templates: [], error: err instanceof Error ? err.message : "Request failed" };
   }
+}
+
+// Template list cache (5 min) so language auto-detection doesn't hit Graph on
+// every send.
+let templateCache: { atMs: number; templates: WhatsAppTemplateInfo[] } | null = null;
+const TEMPLATE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function cachedTemplates(): Promise<WhatsAppTemplateInfo[]> {
+  const now = Date.now();
+  if (templateCache && now - templateCache.atMs < TEMPLATE_CACHE_TTL_MS) return templateCache.templates;
+  const list = await listWhatsAppTemplates();
+  if (list.ok) templateCache = { atMs: now, templates: list.templates };
+  return list.ok ? list.templates : templateCache?.templates || [];
+}
+
+/**
+ * Language code to send a template with: env override → the language the
+ * template was actually created in (from the WABA list, preferring an APPROVED
+ * entry) → WHATSAPP_TEMPLATE_LANG.
+ */
+export async function resolveTemplateLanguage(kind: keyof WhatsAppTemplateNames, name: string): Promise<string> {
+  const cfg = getWhatsAppCloudConfig();
+  const override = cfg.templateLangs[kind];
+  if (override) return override;
+  if (cfg.wabaId) {
+    const matches = (await cachedTemplates()).filter(t => t.name === name);
+    const approved = matches.find(t => t.status === "APPROVED") || matches[0];
+    if (approved?.language) return approved.language;
+  }
+  return cfg.lang;
 }
 
 /** Which gateway sends right now (env preference + what is configured). */
@@ -284,10 +328,12 @@ export async function sendTransactional(opts: {
   if (provider === "murpati") return viaMurpati({ to: opts.to, message: opts.text });
 
   const useNamed = templateParamFormat() === "named" && opts.template.kind && opts.template.kind !== "otp";
+  const lang =
+    opts.template.lang || (opts.template.kind ? await resolveTemplateLanguage(opts.template.kind, opts.template.name) : undefined);
   const cloud = await sendCloudTemplate({
     to: opts.to,
     name: opts.template.name,
-    lang: opts.template.lang,
+    lang,
     bodyParams: opts.template.bodyParams,
     buttonUrlParams: opts.template.buttonUrlParams,
     bodyParamNames: useNamed ? NAMED_PARAM_KEYS[opts.template.kind as keyof WhatsAppTemplateNames] : undefined,
