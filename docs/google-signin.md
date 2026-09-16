@@ -11,8 +11,7 @@ sahaja perlu sahkan nombor telefon (OTP WhatsApp) supaya mata loyalti
 2. **APIs & Services → OAuth consent screen**: External, nama app `Loka Coffee`, email sokongan, logo (pilihan). Scope default (`email`, `profile`, `openid`) cukup. Publish app (bukan Testing) supaya semua customer boleh log masuk.
 3. **Credentials → Create credentials → OAuth client ID** → *Web application*:
    - Authorized JavaScript origins: `https://<domain>` dan `http://localhost:3000`
-   - Authorized redirect URIs: `https://<project-ref>.supabase.co/auth/v1/callback`
-     (dapatkan `<project-ref>` dari URL projek Supabase)
+   - Authorized redirect URIs: `https://fgfnebfazthxrukrujyx.supabase.co/auth/v1/callback`
 4. Salin **Client ID** dan **Client secret**.
 
 ## 2. Supabase Dashboard
