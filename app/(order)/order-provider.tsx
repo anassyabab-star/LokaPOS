@@ -65,6 +65,10 @@ type OrderState = {
   setContact: (c: { name: string; phone: string }) => void;
   lastOrder: LastOrder | null;
   setLastOrder: (o: LastOrder | null) => void;
+  /** Referral code captured from ?ref= (applied on the first order). */
+  referral: string | null;
+  /** Forget the local member session (contact, last order, referral). */
+  clearSession: () => void;
   toast: string | null;
   showToast: (msg: string) => void;
 };
@@ -76,6 +80,7 @@ const TABLE_KEY = "loka_order_table";
 const TYPE_KEY = "loka_order_type";
 const CONTACT_KEY = "loka_order_contact";
 const LAST_KEY = "loka_order_last";
+const REF_KEY = "loka_referral_code";
 
 function genLineId() {
   return `l_${Math.random().toString(36).slice(2, 10)}`;
@@ -88,6 +93,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [table, setTableState] = useState<string | null>(null);
   const [contact, setContactState] = useState<{ name: string; phone: string }>({ name: "", phone: "" });
   const [lastOrder, setLastOrderState] = useState<LastOrder | null>(null);
+  const [referral, setReferral] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -104,6 +110,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       if (ct) setContactState(JSON.parse(ct));
       const lo = localStorage.getItem(LAST_KEY);
       if (lo) setLastOrderState(JSON.parse(lo));
+      // ?ref=CODE from a shared referral link wins over a stored one.
+      const urlRef = new URLSearchParams(window.location.search).get("ref");
+      const ref = String(urlRef || localStorage.getItem(REF_KEY) || "").trim().toUpperCase().slice(0, 32);
+      if (ref) { setReferral(ref); localStorage.setItem(REF_KEY, ref); }
     } catch {}
     setLoaded(true);
   }, []);
@@ -113,22 +123,33 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {}
   }, [cart, loaded]);
 
-  // Returning Google customer on a fresh device / cleared storage: recover the
-  // contact from the server session (this also re-mints the loyalty phone
-  // cookie), so rewards + redeem work without asking for a code.
+  // On every load, ask the server who we are. For a Google-backed session this
+  // re-mints the 30-minute loyalty phone cookie (so check-in / redeem never
+  // bounce to a code), and on a fresh device it recovers name + phone.
   useEffect(() => {
-    if (!loaded || contact.phone) return;
+    if (!loaded) return;
     let live = true;
     fetch("/api/public/me", { cache: "no-store" })
       .then(r => r.json())
       .then(d => {
         if (!live || !d?.signed_in || !d.phone) return;
-        setContact({ name: contact.name || String(d.name || ""), phone: String(d.phone) });
+        if (!contact.phone) setContact({ name: contact.name || String(d.name || ""), phone: String(d.phone) });
       })
       .catch(() => {});
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
+
+  function clearSession() {
+    setContactState({ name: "", phone: "" });
+    setLastOrderState(null);
+    setReferral(null);
+    try {
+      localStorage.removeItem(CONTACT_KEY);
+      localStorage.removeItem(LAST_KEY);
+      localStorage.removeItem(REF_KEY);
+    } catch {}
+  }
 
   function setTable(t: string | null) {
     setTableState(t);
@@ -175,7 +196,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const value: OrderState = {
     cart, addLine, setQty, removeLine, clearCart, cartCount, subtotal,
     orderType, setOrderType, redeem, setRedeem, table, setTable,
-    contact, setContact, lastOrder, setLastOrder, toast, showToast,
+    contact, setContact, lastOrder, setLastOrder, referral, clearSession, toast, showToast,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

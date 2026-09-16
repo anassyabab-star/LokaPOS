@@ -67,7 +67,7 @@ export async function requireRole(allowedRoles: AppRole[], options?: RequireRole
   if (!allowedRoles.includes(role)) {
     if (role === "cashier") redirect("/pos");
     if (role === "admin") redirect("/dashboard");
-    if (role === "customer") redirect("/customer");
+    if (role === "customer") redirect("/menu");
     redirect(loginPath);
   }
 

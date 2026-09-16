@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     if (isUniqueConstraintError(insertError.message)) {
       return NextResponse.json({
         already_checked_in: true,
-        message: "Dah check-in hari ini. Jumpa lagi esok!",
+        message: "Already checked in today. See you tomorrow!",
       });
     }
     return NextResponse.json({ error: insertError.message }, { status: 500 });

@@ -10,7 +10,7 @@ import { useOrder, rm, normalizeMyPhone, localPhone } from "../order-provider";
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, subtotal, cartCount, orderType, table, contact, setContact, setLastOrder, clearCart } = useOrder();
+  const { cart, subtotal, cartCount, orderType, table, contact, setContact, setLastOrder, clearCart, referral } = useOrder();
   const [name, setName] = useState(contact.name);
   const [phone, setPhone] = useState(localPhone(contact.phone));
   const [payment, setPayment] = useState<"online" | "counter">("counter");
@@ -81,6 +81,7 @@ export default function CheckoutPage() {
           order_type: orderType === "dine" ? "dine_in" : "take_away",
           table_number: orderType === "dine" ? table || undefined : undefined,
           coupon_code: couponCode || undefined,
+          referral_code: referral || undefined,
           items: cart.map(l => ({
             product_id: l.productId,
             variant_id: l.variantId || undefined,

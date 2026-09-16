@@ -52,7 +52,7 @@ Next.js 15 App Router + Supabase. Coffee shop POS system with customer-facing PW
 - Payment methods stored in `store_settings` table (JSONB), fetched via `/api/public/store-status`
 
 ## Key Files
-- Customer app: `app/customer/page.tsx` (single-file SPA)
+- Customer app: `app/(order)/*` — QR ordering + members (`/t/[table]`, `/menu`, `/cart`, `/checkout`, `/order/[id]`, `/rewards`, `/orders`, `/signin`). `/customer` (legacy PWA) now only redirects here.
 - Admin nav: `app/dashboard/admin-nav.tsx` — update BOTH `NAV_ITEMS` and `MOBILE_MORE` arrays
 - Store settings: `app/api/admin/settings/route.ts`
 - Middleware: lightweight cookie-check only, Node.js runtime (`experimental.nodeMiddleware: true`)

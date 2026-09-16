@@ -15,8 +15,8 @@ export function getChipConfig() {
     secretKey,
     siteUrl,
     callbackUrl: `${siteUrl}/api/payments/chip/callback`,
-    successUrl: `${siteUrl}/customer?tab=orders`,
-    failureUrl: `${siteUrl}/customer?tab=cart`,
+    successUrl: `${siteUrl}/orders`,
+    failureUrl: `${siteUrl}/cart`,
     configured: Boolean(brandId && secretKey),
   };
 }
@@ -37,7 +37,7 @@ type CreatePurchaseParams = {
   customerName: string;
   customerEmail: string | null;
   customerPhone: string | null;
-  /** Where CHIP sends the customer after paying (default: /customer?tab=orders). */
+  /** Where CHIP sends the customer after paying (default: /orders). */
   successRedirect?: string;
   failureRedirect?: string;
 };
@@ -67,7 +67,7 @@ export async function createChipPurchase(params: CreatePurchaseParams): Promise<
         price: amountInCents,
       },
     ],
-    success_redirect: params.successRedirect || `${config.successUrl}&order_id=${params.orderId}`,
+    success_redirect: params.successRedirect || `${config.successUrl}?order_id=${params.orderId}`,
     failure_redirect: params.failureRedirect || config.failureUrl,
     send_receipt: true,
     reference: params.orderId,
