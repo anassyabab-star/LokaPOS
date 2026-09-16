@@ -140,12 +140,15 @@ async function fetchCustomerById(id: string) {
 
 async function fetchCustomerByEmail(email: string) {
   const supabase = createSupabaseAdminClient();
+  // Case-insensitive exact match: the unique index is on lower(email), but rows
+  // written by the POS/admin may carry mixed case.
   const { data, error } = await supabase
     .from("customers")
     .select(
       "id,name,phone,email,birth_date,consent_whatsapp,consent_email,consent_whatsapp_at,consent_email_at,consent_source,total_orders,total_spend,last_order_at,created_at,updated_at"
     )
-    .eq("email", email)
+    .ilike("email", email.replace(/[%_]/g, ""))
+    .limit(1)
     .maybeSingle();
 
   if (error) {

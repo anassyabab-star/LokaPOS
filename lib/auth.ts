@@ -7,6 +7,17 @@ type RequireRoleOptions = {
   loginPath?: string;
 };
 
+/**
+ * Role hint from the auth user's metadata. ONLY `app_metadata` is trusted:
+ * `user_metadata` can be written by the user themselves (signUp options,
+ * auth.updateUser), so it must never grant staff access.
+ */
+export function metadataRole(user: { app_metadata?: Record<string, unknown> | null } | null | undefined): string | null {
+  const raw = user?.app_metadata?.role;
+  const role = String(raw || "").trim().toLowerCase();
+  return role === "admin" || role === "cashier" || role === "customer" ? role : null;
+}
+
 export async function getCurrentSessionUser() {
   try {
     const supabase = await createSupabaseServerClient();
@@ -35,8 +46,12 @@ export async function resolveCurrentUserRole(userId: string, fallbackRole?: stri
     // Fallback to metadata role when profiles table is unavailable.
   }
 
-  if (fallbackRole) return fallbackRole as AppRole;
-  return "cashier" as AppRole;
+  const fallback = String(fallbackRole || "").trim().toLowerCase();
+  if (fallback === "admin" || fallback === "cashier" || fallback === "customer") return fallback;
+  // No profile row and no trusted metadata role → the least-privileged role.
+  // (Used to default to "cashier", which handed POS/KDS access to any new
+  // OAuth signup.)
+  return "customer" as AppRole;
 }
 
 export async function requireRole(allowedRoles: AppRole[], options?: RequireRoleOptions) {
@@ -47,12 +62,7 @@ export async function requireRole(allowedRoles: AppRole[], options?: RequireRole
     redirect(loginPath);
   }
 
-  const fallback =
-    (user.app_metadata?.role as string | undefined) ||
-    (user.user_metadata?.role as string | undefined) ||
-    null;
-
-  const role = await resolveCurrentUserRole(user.id, fallback);
+  const role = await resolveCurrentUserRole(user.id, metadataRole(user));
 
   if (!allowedRoles.includes(role)) {
     if (role === "cashier") redirect("/pos");

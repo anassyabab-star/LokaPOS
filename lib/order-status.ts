@@ -17,7 +17,7 @@
 // ============================================================================
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { normalizeWhatsappNumber, sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { normalizeWhatsAppTo, sendOrderReadyMessage } from "@/lib/whatsapp";
 import { reverseOrderLoyalty } from "@/lib/customer-order-payment";
 import {
   FORWARD_ORDER,
@@ -367,12 +367,29 @@ export async function notifyOrderReady(order: OrderStatusRow): Promise<OrderNoti
   if (!data) return { attempted: false, reason: "customer_not_found" };
 
   const customer = data as CustomerRow;
-  const to = normalizeWhatsappNumber(String(customer.phone || ""));
+  const to = normalizeWhatsAppTo(String(customer.phone || ""));
   if (!customer.consent_whatsapp) return { attempted: false, reason: "no_consent" };
   if (!to) return { attempted: false, reason: "no_phone" };
 
   try {
-    const result = await sendMurpatiText({ to, message: buildReadyMessage(order, customer) });
+    const storeName = String(process.env.STORE_NAME || "Loka").trim() || "Loka";
+    const target = orderTarget(order);
+    const targetLine =
+      target.kind === "table"
+        ? `Kami hantar ke ${target.text}.`
+        : target.kind === "buzzer"
+          ? `${target.text} akan berbunyi — sila ambil di kaunter.`
+          : "Sila ambil di kaunter.";
+    const result = await sendOrderReadyMessage({
+      to,
+      name: String(customer.name || order.customer_name || "Customer").trim() || "Customer",
+      shortNo: shortOrderNumber(order.receipt_number, order.id),
+      receipt: String(order.receipt_number || order.id.slice(0, 8)),
+      storeName,
+      targetLine,
+      total: Number(order.total || 0).toFixed(2),
+      text: buildReadyMessage(order, customer),
+    });
     return { attempted: true, sent: Boolean(result?.ok), error: result?.error || null, to };
   } catch (err) {
     return { attempted: true, sent: false, error: err instanceof Error ? err.message : "send_failed", to };

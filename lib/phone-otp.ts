@@ -7,7 +7,8 @@ import { NextResponse } from "next/server";
 // HMAC-signed cookie bound to the customer's phone number.
 // ============================================================================
 
-const SESSION_COOKIE = "loka_phone_otp";
+export const PHONE_SESSION_COOKIE = "loka_phone_otp";
+const SESSION_COOKIE = PHONE_SESSION_COOKIE;
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 function secret() {
@@ -93,6 +94,12 @@ export function setPhoneOtpSession(res: NextResponse, phone: string) {
   return res;
 }
 
+/** Remove the verified-phone session cookie (sign-out). */
+export function clearPhoneOtpSession(res: NextResponse) {
+  res.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+  return res;
+}
+
 function readCookie(req: Request, name: string): string | null {
   const header = req.headers.get("cookie");
   if (!header) return null;
@@ -101,6 +108,12 @@ function readCookie(req: Request, name: string): string | null {
     if (k === name) return decodeURIComponent(v.join("="));
   }
   return null;
+}
+
+/** The phone a valid session cookie on this request is bound to, else null. */
+export function getPhoneOtpSession(req: Request): string | null {
+  const session = verifySession(readCookie(req, SESSION_COOKIE));
+  return session ? session.phone : null;
 }
 
 export type PhoneOtpGuard =

@@ -264,6 +264,27 @@ function MiniStat({ label, value }: { label: string; value: number | string }) {
 }
 
 /* ── Main component ───────────────────────────────────── */
+type WhatsAppCloudStatus = {
+  provider: "cloud" | "murpati" | "none";
+  preference: string;
+  cloud: {
+    configured: boolean;
+    has_access_token: boolean;
+    has_phone_number_id: boolean;
+    api_version: string;
+    language: string;
+    token_valid: boolean;
+    display_phone_number: string | null;
+    verified_name: string | null;
+    quality_rating: string | null;
+    webhook_verify_token_set: boolean;
+    app_secret_set: boolean;
+    error: string | null;
+  };
+  murpati: { configured: boolean };
+  templates: Record<string, string>;
+};
+
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -325,6 +346,44 @@ export default function CampaignsPage() {
     }
   }, []);
 
+  const [cloudStatus, setCloudStatus] = useState<WhatsAppCloudStatus | null>(null);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cloudTestLoading, setCloudTestLoading] = useState<string | null>(null);
+
+  const loadCloudStatus = useCallback(async () => {
+    setCloudLoading(true);
+    try {
+      const res = await fetch("/api/admin/whatsapp/status", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed");
+      setCloudStatus(data as WhatsAppCloudStatus);
+    } catch (e) {
+      setCloudStatus(null);
+      setError(e instanceof Error ? e.message : "Failed to load WhatsApp Cloud status");
+    } finally {
+      setCloudLoading(false);
+    }
+  }, []);
+
+  async function handleCloudTest(kind: "hello_world" | "otp" | "text") {
+    setCloudTestLoading(kind);
+    setError(null); setInfo(null);
+    try {
+      const res = await fetch("/api/admin/whatsapp/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: testTo, kind, message: testMessage }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Test send failed");
+      setInfo(`Dihantar melalui ${data.provider}. ID: ${data.message_id || "-"}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Test send failed");
+    } finally {
+      setCloudTestLoading(null);
+    }
+  }
+
   const loadMurpatiStatus = useCallback(async () => {
     setMurpatiLoading(true);
     try {
@@ -366,8 +425,9 @@ export default function CampaignsPage() {
   useEffect(() => {
     void loadCampaigns();
     void loadMurpatiStatus();
+    void loadCloudStatus();
     void loadIntegrationsStatus();
-  }, [loadCampaigns, loadIntegrationsStatus, loadMurpatiStatus]);
+  }, [loadCampaigns, loadIntegrationsStatus, loadMurpatiStatus, loadCloudStatus]);
 
   async function handlePreview() {
     setPreviewLoading(true);
@@ -903,6 +963,60 @@ export default function CampaignsPage() {
           <PrimaryBtn onClick={() => void handleTestSend()} disabled={testLoading}>
             {testLoading ? "Sending..." : "Test Send"}
           </PrimaryBtn>
+        </div>
+      </Card>
+
+      {/* WhatsApp Cloud API (official) */}
+      <Card style={{ padding: 20 }}>
+        <SectionHeader
+          title="WhatsApp Cloud API (rasmi)"
+          desc="Gateway Meta rasmi untuk OTP dan notifikasi order. Guna template yang diluluskan — lihat docs/whatsapp-cloud-api.md."
+          action={
+            <GhostBtn onClick={() => void loadCloudStatus()} disabled={cloudLoading}>
+              {cloudLoading ? "Checking..." : "Refresh"}
+            </GhostBtn>
+          }
+        />
+
+        {cloudLoading && !cloudStatus ? (
+          <p style={{ fontSize: 13, color: "var(--d-text-3)" }}>Checking Cloud API status...</p>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
+              <MiniStat label="Gateway aktif" value={cloudStatus?.provider === "cloud" ? "Cloud API" : cloudStatus?.provider === "murpati" ? "Murpati" : "Tiada"} />
+              <MiniStat label="Configured" value={cloudStatus?.cloud.configured ? "Yes" : "No"} />
+              <MiniStat label="Nombor" value={cloudStatus?.cloud.display_phone_number || (cloudStatus?.cloud.configured ? (cloudStatus.cloud.token_valid ? "—" : "Token invalid") : "—")} />
+              <MiniStat label="Quality" value={cloudStatus?.cloud.quality_rating || "—"} />
+            </div>
+            {cloudStatus?.cloud.verified_name && (
+              <p style={{ fontSize: 12, color: "var(--d-text-3)", marginBottom: 8 }}>
+                Nama disahkan: <strong>{cloudStatus.cloud.verified_name}</strong> · API {cloudStatus.cloud.api_version} · template bahasa <code>{cloudStatus.cloud.language}</code>
+              </p>
+            )}
+            {cloudStatus?.templates && (
+              <p style={{ fontSize: 12, color: "var(--d-text-3)", marginBottom: 12 }}>
+                Template: {Object.values(cloudStatus.templates).join(" · ")}
+              </p>
+            )}
+            {cloudStatus?.cloud.error && (
+              <div style={{ marginBottom: 12 }}>
+                <Alert type={cloudStatus.cloud.configured ? "error" : "info"}>{cloudStatus.cloud.error}</Alert>
+              </div>
+            )}
+          </>
+        )}
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "var(--d-text-3)" }}>Hantar ke nombor di atas:</span>
+          <GhostBtn onClick={() => void handleCloudTest("hello_world")} disabled={cloudTestLoading !== null || !cloudStatus?.cloud.configured}>
+            {cloudTestLoading === "hello_world" ? "Sending..." : "Ujian hello_world"}
+          </GhostBtn>
+          <GhostBtn onClick={() => void handleCloudTest("otp")} disabled={cloudTestLoading !== null}>
+            {cloudTestLoading === "otp" ? "Sending..." : "Ujian OTP contoh"}
+          </GhostBtn>
+          <GhostBtn onClick={() => void handleCloudTest("text")} disabled={cloudTestLoading !== null}>
+            {cloudTestLoading === "text" ? "Sending..." : "Ujian teks bebas"}
+          </GhostBtn>
         </div>
       </Card>
     </div>

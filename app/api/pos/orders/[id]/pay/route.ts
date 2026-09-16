@@ -10,7 +10,7 @@ import {
   sanitizeTargetLabel,
   shortOrderNumber,
 } from "@/lib/order-flow";
-import { normalizeWhatsappNumber, sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { normalizeWhatsAppTo, sendOrderPaidMessage } from "@/lib/whatsapp";
 
 // ============================================================================
 // POST /api/pos/orders/[id]/pay — cashier collects payment for an order the
@@ -215,7 +215,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
             .select("name, phone, consent_whatsapp")
             .eq("id", order.customer_id as string)
             .maybeSingle();
-          const waPhone = customer?.phone ? normalizeWhatsappNumber(String(customer.phone)) : null;
+          const waPhone = customer?.phone ? normalizeWhatsAppTo(String(customer.phone)) : null;
           if (!customer?.consent_whatsapp || !waPhone) return;
           const short = shortOrderNumber(order.receipt_number, order.id);
           const target = orderTarget({ order_type: orderType, table_number: tableNumber, buzzer_number: buzzerNumber });
@@ -226,12 +226,21 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
                 ? `${target.text} akan berbunyi bila pesanan siap.`
                 : "Kami maklumkan bila pesanan siap.";
           const storeName = String(process.env.STORE_NAME || "Loka").trim() || "Loka";
+          const receipt = order.receipt_number || order.id.slice(0, 8);
           const message =
-            `✅ Bayaran diterima untuk order #${short} (${order.receipt_number || order.id.slice(0, 8)}).\n` +
+            `✅ Bayaran diterima untuk order #${short} (${receipt}).\n` +
             `Jumlah: RM${total.toFixed(2)}\n` +
             `${targetLine}\n` +
             `Terima kasih — ${storeName} ☕`;
-          await sendMurpatiText({ to: waPhone, message });
+          await sendOrderPaidMessage({
+            to: waPhone,
+            shortNo: short,
+            receipt,
+            total: total.toFixed(2),
+            targetLine,
+            storeName,
+            text: message,
+          });
         } catch {
           /* best-effort */
         }

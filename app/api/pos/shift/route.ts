@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
-import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import { sendWhatsAppText } from "@/lib/whatsapp";
 import { getCashSalesSince } from "@/lib/shift-cash";
 
 type ShiftRow = {
@@ -263,7 +263,7 @@ _Auto-generated on shift close_`;
         // Send to admin phone (from env or profiles)
         const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || "";
         if (adminPhone) {
-          await sendMurpatiText({ to: adminPhone, message: summary });
+          await sendWhatsAppText({ to: adminPhone, message: summary });
         }
       } catch (summaryErr) {
         console.error("Daily summary WhatsApp failed:", summaryErr);

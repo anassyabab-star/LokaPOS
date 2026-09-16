@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getLoyaltyConfig } from "@/lib/loyalty";
 import { generateOtpCode, hashOtpCode, normalizeOtpPhone } from "@/lib/phone-otp";
-import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import { sendOtpMessage } from "@/lib/whatsapp";
 
 // Throttle windows.
 const MIN_INTERVAL_SECONDS = 45; // between consecutive sends to one phone
@@ -66,14 +66,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  const storeName = String(process.env.STORE_NAME || "Loka");
-  const message =
-    `Kod pengesahan ${storeName} anda: *${code}*\n` +
-    `Sah selama ${config.otpExpiryMinutes} minit. Jangan kongsi kod ini dengan sesiapa.`;
+  const storeName = String(process.env.STORE_NAME || "Loka").trim() || "Loka";
 
-  const sent = await sendMurpatiText({ to: normalizeWhatsappNumber(phone), message });
+  // WhatsApp Cloud API authentication template when configured, Murpati otherwise.
+  const sent = await sendOtpMessage({ to: phone, code, expiryMinutes: config.otpExpiryMinutes, storeName });
   if (!sent.ok) {
     // Code is stored; surface a soft error so the user can retry.
+    console.error("[otp/request] send failed:", sent.provider, sent.error);
     return NextResponse.json(
       { error: "Gagal hantar kod melalui WhatsApp. Cuba lagi.", detail: sent.error },
       { status: 502 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
-import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { sendPointsReceiptMessage } from "@/lib/whatsapp";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 import { calculateRedeem, getAvailablePoints, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
 import { statusOnPaid } from "@/lib/kds";
@@ -735,8 +735,22 @@ export async function POST(req: Request) {
             msg += `⏳ _Luput: ${expiryDate}_\n\n`;
             msg += `— ${storeName}`;
 
-            console.log("[orders] Sending loyalty WA to", customerPhone, "| msg:", msg);
-            await sendMurpatiText({ to: customerPhone, message: msg });
+            const pointsLine = [
+              earnPoints > 0 ? `Points diterima: +${earnPoints} pts` : "",
+              appliedRedeemPoints > 0 ? `Points ditukar: -${appliedRedeemPoints} pts` : "",
+            ].filter(Boolean).join(" · ");
+            await sendPointsReceiptMessage({
+              to: customerPhone,
+              name: custName || "Customer",
+              purchaseDate,
+              amount: Number(total).toFixed(2),
+              pointsLine: pointsLine || "-",
+              balancePoints: String(balanceNum),
+              balanceRm: redeemRm,
+              expiryDate,
+              storeName,
+              text: msg,
+            });
           }
         } catch (waErr) {
           // Never fail the order if WhatsApp fails

@@ -113,6 +113,23 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch {}
   }, [cart, loaded]);
 
+  // Returning Google customer on a fresh device / cleared storage: recover the
+  // contact from the server session (this also re-mints the loyalty phone
+  // cookie), so rewards + redeem work without asking for a code.
+  useEffect(() => {
+    if (!loaded || contact.phone) return;
+    let live = true;
+    fetch("/api/public/me", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => {
+        if (!live || !d?.signed_in || !d.phone) return;
+        setContact({ name: contact.name || String(d.name || ""), phone: String(d.phone) });
+      })
+      .catch(() => {});
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
   function setTable(t: string | null) {
     setTableState(t);
     try { t ? localStorage.setItem(TABLE_KEY, t) : localStorage.removeItem(TABLE_KEY); } catch {}

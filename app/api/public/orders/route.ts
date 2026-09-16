@@ -7,7 +7,7 @@ import {
   insertOrderItemAddonsWithFallback,
 } from "@/lib/customer-orders";
 import { createChipPurchase, getChipConfigStatus } from "@/lib/chip";
-import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import { normalizeWhatsAppTo, sendOrderReceivedMessage } from "@/lib/whatsapp";
 import {
   applyReferralOnSignup,
   calculateRedeem,
@@ -541,7 +541,7 @@ export async function POST(req: Request) {
     }
 
     // WhatsApp receipt — fire-and-forget, never block the order response
-    const waPhone = normalizeWhatsappNumber(normalizedPhone);
+    const waPhone = normalizeWhatsAppTo(normalizedPhone);
     if (waPhone) {
       const storeName = String(process.env.STORE_NAME || "Loka").trim();
       const itemLines = calculated.items
@@ -574,7 +574,22 @@ export async function POST(req: Request) {
         (redeemLine || couponLine ? `Subjumlah: RM${calculated.subtotal.toFixed(2)}\n${redeemLine}${couponLine}` : "") +
         `Jumlah: RM${finalTotal.toFixed(2)}\n\n` +
         nextStep;
-      sendMurpatiText({ to: waPhone, message: waMsg }).catch(() => {});
+      const itemsSummary = calculated.items
+        .map(i => `${i.qty}× ${i.product_name_snapshot}${i.variant_name ? ` (${i.variant_name})` : ""}`)
+        .join(", ");
+      sendOrderReceivedMessage({
+        to: waPhone,
+        name: customerName,
+        shortNo,
+        receipt: numbering.orderNumber,
+        where: orderType === "dine_in" && tableNumber ? `Dine In · Meja ${tableNumber}` : orderType === "take_away" ? "Take Away" : "-",
+        itemsSummary,
+        total: finalTotal.toFixed(2),
+        nextStep: paysAtCounter
+          ? `Sila ke kaunter dan sebut Order ID #${shortNo} untuk bayar.`
+          : "Selesaikan bayaran online untuk hantar pesanan ke dapur.",
+        text: waMsg,
+      }).catch(() => {});
     }
 
     return NextResponse.json({

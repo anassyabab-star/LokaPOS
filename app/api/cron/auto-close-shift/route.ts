@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { sendWhatsAppText } from "@/lib/whatsapp";
 import { getCashSalesSince } from "@/lib/shift-cash";
 
 type ShiftRow = {
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
 
           const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || "";
           if (adminPhone) {
-            await sendMurpatiText({ to: adminPhone, message: summary });
+            await sendWhatsAppText({ to: adminPhone, message: summary });
           }
         } catch (waErr) {
           console.error("[auto-close] WhatsApp failed:", waErr);
