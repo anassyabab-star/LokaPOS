@@ -60,12 +60,65 @@ export function getWhatsAppCloudConfig() {
     hasPhoneNumberId: Boolean(phoneNumberId),
     accessToken,
     phoneNumberId,
+    /** WhatsApp Business Account id — optional, enables template listing in admin. */
+    wabaId: String(process.env.WHATSAPP_CLOUD_WABA_ID || "").trim(),
     apiVersion,
     lang,
     templates,
     webhookVerifyToken: String(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "").trim(),
     appSecret: String(process.env.WHATSAPP_APP_SECRET || "").trim(),
   };
+}
+
+export type WhatsAppTemplateInfo = {
+  name: string;
+  status: string;
+  category: string;
+  language: string;
+  /** "positional" ({{1}}), "named" ({{code}}) or "none" */
+  params: "positional" | "named" | "none";
+  paramNames: string[];
+};
+
+/** Templates on the WABA (needs WHATSAPP_CLOUD_WABA_ID). Admin diagnostics only. */
+export async function listWhatsAppTemplates(): Promise<{ ok: boolean; templates: WhatsAppTemplateInfo[]; error: string | null }> {
+  const cfg = getWhatsAppCloudConfig();
+  if (!cfg.configured || !cfg.wabaId) {
+    return { ok: false, templates: [], error: cfg.wabaId ? "Not configured" : "WHATSAPP_CLOUD_WABA_ID not set" };
+  }
+  try {
+    const res = await fetch(
+      `${GRAPH_BASE}/${cfg.apiVersion}/${cfg.wabaId}/message_templates?fields=name,status,category,language,components&limit=200`,
+      { headers: { Authorization: `Bearer ${cfg.accessToken}` }, cache: "no-store" }
+    );
+    const json = (await res.json().catch(() => ({}))) as {
+      data?: Array<{
+        name: string;
+        status: string;
+        category: string;
+        language: string;
+        components?: Array<{ type?: string; text?: string; example?: { body_text_named_params?: Array<{ param_name?: string }> } }>;
+      }>;
+      error?: GraphError;
+    };
+    if (!res.ok || json.error) return { ok: false, templates: [], error: json.error?.message || `Graph API ${res.status}` };
+    const templates = (json.data || []).map(t => {
+      const body = (t.components || []).find(c => c.type === "BODY");
+      const named = body?.example?.body_text_named_params?.map(p => String(p.param_name || "")).filter(Boolean) || [];
+      const positional = /\{\{\d+\}\}/.test(String(body?.text || ""));
+      return {
+        name: t.name,
+        status: t.status,
+        category: t.category,
+        language: t.language,
+        params: named.length ? ("named" as const) : positional ? ("positional" as const) : ("none" as const),
+        paramNames: named,
+      };
+    });
+    return { ok: true, templates, error: null };
+  } catch (err) {
+    return { ok: false, templates: [], error: err instanceof Error ? err.message : "Request failed" };
+  }
 }
 
 /** Which gateway sends right now (env preference + what is configured). */
@@ -134,11 +187,33 @@ async function cloudPost(payload: Record<string, unknown>): Promise<WhatsAppSend
   }
 }
 
+/**
+ * Template parameter format. Meta lets each template be created with numbered
+ * ({{1}}) or named ({{nama}}) placeholders. Default positional; set
+ * WHATSAPP_TEMPLATE_PARAMS=named if you created the loka_* templates with the
+ * names listed in NAMED_PARAM_KEYS / docs. (Authentication templates are
+ * always positional.)
+ */
+export function templateParamFormat(): "positional" | "named" {
+  return String(process.env.WHATSAPP_TEMPLATE_PARAMS || "positional").trim().toLowerCase() === "named" ? "named" : "positional";
+}
+
+/** Parameter names, in order, when the utility templates are created as "named". */
+export const NAMED_PARAM_KEYS: Record<keyof WhatsAppTemplateNames, string[]> = {
+  otp: ["1"],
+  orderReceived: ["nama", "order_id", "resit", "lokasi", "item", "jumlah", "langkah"],
+  orderPaid: ["order_id", "resit", "jumlah", "sasaran", "kedai"],
+  orderReady: ["nama", "order_id", "resit", "kedai", "sasaran", "jumlah"],
+  pointsReceipt: ["nama", "tarikh", "jumlah", "points", "baki_points", "baki_rm", "luput", "kedai"],
+};
+
 export async function sendCloudTemplate(opts: {
   to: string;
   name: string;
   lang?: string;
   bodyParams?: string[];
+  /** When set, body params are sent as named parameters in this order. */
+  bodyParamNames?: string[];
   /** One entry per URL button (index order) — used for the OTP "copy code" button. */
   buttonUrlParams?: string[];
 }): Promise<WhatsAppSendResult> {
@@ -147,7 +222,13 @@ export async function sendCloudTemplate(opts: {
   const cfg = getWhatsAppCloudConfig();
   const components: Array<Record<string, unknown>> = [];
   if (opts.bodyParams && opts.bodyParams.length > 0) {
-    components.push({ type: "body", parameters: opts.bodyParams.map(p => ({ type: "text", text: templateParam(p) })) });
+    const names = opts.bodyParamNames;
+    components.push({
+      type: "body",
+      parameters: opts.bodyParams.map((p, i) =>
+        names && names[i] ? { type: "text", parameter_name: names[i], text: templateParam(p) } : { type: "text", text: templateParam(p) }
+      ),
+    });
   }
   (opts.buttonUrlParams || []).forEach((p, index) => {
     components.push({ type: "button", sub_type: "url", index: String(index), parameters: [{ type: "text", text: templateParam(p, 128) }] });
@@ -185,7 +266,14 @@ async function viaMurpati(opts: { to: string; message: string }): Promise<WhatsA
  */
 export async function sendTransactional(opts: {
   to: string;
-  template: { name: string; bodyParams: string[]; buttonUrlParams?: string[]; lang?: string };
+  template: {
+    name: string;
+    bodyParams: string[];
+    buttonUrlParams?: string[];
+    lang?: string;
+    /** Which loka_* template this is — picks the named-parameter keys when WHATSAPP_TEMPLATE_PARAMS=named. */
+    kind?: keyof WhatsAppTemplateNames;
+  };
   /** Free-text equivalent (Murpati / fallback). */
   text: string;
 }): Promise<WhatsAppSendResult> {
@@ -195,7 +283,15 @@ export async function sendTransactional(opts: {
   }
   if (provider === "murpati") return viaMurpati({ to: opts.to, message: opts.text });
 
-  const cloud = await sendCloudTemplate({ to: opts.to, ...opts.template });
+  const useNamed = templateParamFormat() === "named" && opts.template.kind && opts.template.kind !== "otp";
+  const cloud = await sendCloudTemplate({
+    to: opts.to,
+    name: opts.template.name,
+    lang: opts.template.lang,
+    bodyParams: opts.template.bodyParams,
+    buttonUrlParams: opts.template.buttonUrlParams,
+    bodyParamNames: useNamed ? NAMED_PARAM_KEYS[opts.template.kind as keyof WhatsAppTemplateNames] : undefined,
+  });
   if (cloud.ok) return cloud;
   console.warn(`[whatsapp] cloud template "${opts.template.name}" failed: ${cloud.error}`);
   if (getMurpatiConfigStatus().configured) {
@@ -239,7 +335,7 @@ export async function sendOtpMessage(opts: { to: string; code: string; expiryMin
   // Authentication template: body {{1}} = code, URL button 0 = copy-code param.
   return sendTransactional({
     to: opts.to,
-    template: { name: cfg.templates.otp, bodyParams: [opts.code], buttonUrlParams: [opts.code] },
+    template: { kind: "otp", name: cfg.templates.otp, bodyParams: [opts.code], buttonUrlParams: [opts.code] },
     text,
   });
 }
@@ -259,6 +355,7 @@ export async function sendOrderReceivedMessage(opts: {
   return sendTransactional({
     to: opts.to,
     template: {
+      kind: "orderReceived",
       name: cfg.templates.orderReceived,
       bodyParams: [opts.name, opts.shortNo, opts.receipt, opts.where, opts.itemsSummary, opts.total, opts.nextStep],
     },
@@ -278,7 +375,7 @@ export async function sendOrderPaidMessage(opts: {
   const cfg = getWhatsAppCloudConfig();
   return sendTransactional({
     to: opts.to,
-    template: { name: cfg.templates.orderPaid, bodyParams: [opts.shortNo, opts.receipt, opts.total, opts.targetLine, opts.storeName] },
+    template: { kind: "orderPaid", name: cfg.templates.orderPaid, bodyParams: [opts.shortNo, opts.receipt, opts.total, opts.targetLine, opts.storeName] },
     text: opts.text,
   });
 }
@@ -297,6 +394,7 @@ export async function sendOrderReadyMessage(opts: {
   return sendTransactional({
     to: opts.to,
     template: {
+      kind: "orderReady",
       name: cfg.templates.orderReady,
       bodyParams: [opts.name, opts.shortNo, opts.receipt, opts.storeName, opts.targetLine, opts.total],
     },
@@ -320,6 +418,7 @@ export async function sendPointsReceiptMessage(opts: {
   return sendTransactional({
     to: opts.to,
     template: {
+      kind: "pointsReceipt",
       name: cfg.templates.pointsReceipt,
       bodyParams: [
         opts.name,

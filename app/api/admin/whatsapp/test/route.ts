@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-api-auth";
-import { sendCloudTemplate, sendOtpMessage, sendWhatsAppText } from "@/lib/whatsapp";
+import { listWhatsAppTemplates, sendCloudTemplate, sendOtpMessage, sendWhatsAppText } from "@/lib/whatsapp";
 
 // POST /api/admin/whatsapp/test { to, kind: "hello_world" | "otp" | "text", message? }
 //   hello_world → Meta's built-in sample template (proves token + number work)
@@ -17,6 +17,19 @@ export async function POST(req: Request) {
 
   try {
     const storeName = String(process.env.STORE_NAME || "Loka").trim() || "Loka";
+
+    // hello_world only exists on fresh test accounts; a production WABA usually
+    // doesn't have it. Say so instead of a cryptic Graph error.
+    if (kind === "hello_world") {
+      const list = await listWhatsAppTemplates();
+      if (list.ok && !list.templates.some(t => t.name === "hello_world")) {
+        return NextResponse.json(
+          { error: "Template hello_world tiada dalam WABA ini. Buat template loka_otp dahulu dan guna 'Ujian OTP contoh'." },
+          { status: 400 }
+        );
+      }
+    }
+
     const result =
       kind === "otp"
         ? await sendOtpMessage({ to, code: "123456", expiryMinutes: 5, storeName })

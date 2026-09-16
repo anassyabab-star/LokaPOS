@@ -283,6 +283,9 @@ type WhatsAppCloudStatus = {
   };
   murpati: { configured: boolean };
   templates: Record<string, string>;
+  waba_id_set?: boolean;
+  template_list_error?: string | null;
+  template_status?: Record<string, { name: string; found: boolean; status: string | null; category: string | null; language: string | null; params: string | null }>;
 };
 
 export default function CampaignsPage() {
@@ -993,11 +996,25 @@ export default function CampaignsPage() {
                 Nama disahkan: <strong>{cloudStatus.cloud.verified_name}</strong> · API {cloudStatus.cloud.api_version} · template bahasa <code>{cloudStatus.cloud.language}</code>
               </p>
             )}
-            {cloudStatus?.templates && (
+            {cloudStatus?.template_status ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                {Object.values(cloudStatus.template_status).map(t => {
+                  const ok = t.found && t.status === "APPROVED";
+                  const pending = t.found && t.status !== "APPROVED";
+                  const color = ok ? "var(--d-success)" : pending ? "var(--d-warning)" : "var(--d-error)";
+                  return (
+                    <span key={t.name} title={t.found ? `${t.category} · ${t.language} · ${t.params}` : "Belum dibuat di WhatsApp Manager"} style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 20, color, border: `1px solid ${color}` }}>
+                      {t.name} · {t.found ? t.status : "TIADA"}
+                    </span>
+                  );
+                })}
+                {cloudStatus.template_list_error && <span style={{ fontSize: 11, color: "var(--d-text-3)" }}>({cloudStatus.template_list_error})</span>}
+              </div>
+            ) : cloudStatus?.templates ? (
               <p style={{ fontSize: 12, color: "var(--d-text-3)", marginBottom: 12 }}>
                 Template: {Object.values(cloudStatus.templates).join(" · ")}
               </p>
-            )}
+            ) : null}
             {cloudStatus?.cloud.error && (
               <div style={{ marginBottom: 12 }}>
                 <Alert type={cloudStatus.cloud.configured ? "error" : "info"}>{cloudStatus.cloud.error}</Alert>

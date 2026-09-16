@@ -21,6 +21,7 @@ di Murpati (mesej bebas).
 WHATSAPP_PROVIDER=auto                 # auto | cloud | murpati
 WHATSAPP_CLOUD_ACCESS_TOKEN=...
 WHATSAPP_CLOUD_PHONE_NUMBER_ID=...
+WHATSAPP_CLOUD_WABA_ID=...             # pilihan: papar status kelulusan template di kad admin
 WHATSAPP_CLOUD_API_VERSION=v22.0
 WHATSAPP_TEMPLATE_LANG=ms
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=<rentetan rawak>
@@ -39,7 +40,7 @@ subscribe field `messages`. Route hanya log status; ia tidak wajib untuk menghan
 
 ## 4. Template yang perlu dibuat (WhatsApp Manager → Message templates)
 
-Bahasa: **Bahasa Melayu (ms)**. Parameter mesti mengikut **urutan** di bawah —
+Bahasa: **Bahasa Melayu (ms)**. Guna parameter **bernombor** (`{{1}}`, `{{2}}`…), bukan bernama. Parameter mesti mengikut **urutan** di bawah —
 `lib/whatsapp.ts` menghantar dalam urutan ini. Nilai parameter tidak boleh ada
 baris baru; kod dah bersihkan.
 
@@ -104,3 +105,23 @@ nombor; butang *OTP contoh* menguji template `loka_otp`.
 Selepas kelima-lima template diluluskan dan ujian OTP + order berjaya: buang
 `MURPATI_*` dari Vercel (atau set `WHATSAPP_PROVIDER=cloud`). Kempen marketing
 perlu template kategori *Marketing* — buat kemudian jika perlu.
+
+## 6. Format parameter: bernombor atau bernama
+
+Masa cipta template, Meta minta pilih format parameter. Kod menyokong kedua-dua:
+
+- **Bernombor** (`{{1}}`, `{{2}}`…) — lalai. Ikut urutan dalam Bahagian 4.
+- **Bernama** — set `WHATSAPP_TEMPLATE_PARAMS=named` dan guna nama ini (ikut urutan):
+  - `loka_order_received`: `{{nama}} {{order_id}} {{resit}} {{lokasi}} {{item}} {{jumlah}} {{langkah}}`
+  - `loka_order_paid`: `{{order_id}} {{resit}} {{jumlah}} {{sasaran}} {{kedai}}`
+  - `loka_order_ready`: `{{nama}} {{order_id}} {{resit}} {{kedai}} {{sasaran}} {{jumlah}}`
+  - `loka_points_receipt`: `{{nama}} {{tarikh}} {{jumlah}} {{points}} {{baki_points}} {{baki_rm}} {{luput}} {{kedai}}`
+  - `loka_otp` (Authentication) sentiasa bernombor — Meta yang tetapkan.
+
+## 7. Nota pinjam WABA Syabab Fresh (2026-09-16)
+
+Buat sementara LokaPOS guna nombor +60 11-5681 6392 (nama paparan **Syabab Fresh**).
+Customer akan nampak mesej datang dari "Syabab Fresh", bukan Loka. Template
+`loka_*` perlu dibuat dalam WABA yang sama (WhatsApp Manager → Syabab Fresh →
+Message templates). Bila Loka ada nombor sendiri, cukup tukar
+`WHATSAPP_CLOUD_PHONE_NUMBER_ID` (dan buat semula template dalam WABA baru).

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-api-auth";
 import { getMurpatiConfigStatus } from "@/app/api/admin/campaigns/murpati";
-import { getWhatsAppCloudConfig, getWhatsAppCloudPhoneInfo, resolveWhatsAppProvider } from "@/lib/whatsapp";
+import { getWhatsAppCloudConfig, getWhatsAppCloudPhoneInfo, listWhatsAppTemplates, resolveWhatsAppProvider } from "@/lib/whatsapp";
 
 export const revalidate = 0;
 
@@ -12,9 +12,23 @@ export async function GET() {
   if (!auth.ok) return auth.response;
 
   const cfg = getWhatsAppCloudConfig();
-  const phone = cfg.configured ? await getWhatsAppCloudPhoneInfo() : null;
+  const [phone, list] = cfg.configured
+    ? await Promise.all([getWhatsAppCloudPhoneInfo(), listWhatsAppTemplates()])
+    : [null, null];
+
+  // Approval status of each template name the app will send with.
+  const byName = new Map((list?.templates || []).map(t => [t.name, t]));
+  const template_status = Object.fromEntries(
+    Object.entries(cfg.templates).map(([key, name]) => {
+      const t = byName.get(name);
+      return [key, { name, found: Boolean(t), status: t?.status ?? null, category: t?.category ?? null, language: t?.language ?? null, params: t?.params ?? null }];
+    })
+  );
 
   return NextResponse.json({
+    waba_id_set: Boolean(cfg.wabaId),
+    template_list_error: list?.error ?? null,
+    template_status,
     provider: resolveWhatsAppProvider(),
     preference: String(process.env.WHATSAPP_PROVIDER || "auto").toLowerCase(),
     cloud: {
