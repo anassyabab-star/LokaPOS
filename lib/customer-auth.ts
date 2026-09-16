@@ -169,12 +169,15 @@ export async function bindPhoneToAuthCustomer(user: User, phoneRaw: string): Pro
 // Role safety for OAuth signups
 // ---------------------------------------------------------------------------
 
-function isFreshOAuthSignup(user: User) {
+/**
+ * An account that only ever signed in through an OAuth provider (no email /
+ * password identity). Legacy staff always have an email identity, so a
+ * `cashier` profile on an OAuth-only account can only be the old trigger
+ * default — never an admin-granted role.
+ */
+function isOAuthOnlyAccount(user: User) {
   const identities = Array.isArray(user.identities) ? user.identities : [];
-  const onlyOAuth = identities.length > 0 && identities.every(i => i.provider !== "email" && i.provider !== "phone");
-  const createdMs = new Date(user.created_at || 0).getTime();
-  const fresh = Number.isFinite(createdMs) && Date.now() - createdMs < 15 * 60 * 1000;
-  return onlyOAuth && fresh;
+  return identities.length > 0 && identities.every(i => i.provider !== "email" && i.provider !== "phone");
 }
 
 /**
@@ -192,9 +195,9 @@ export async function ensureCustomerRoleForOAuthUser(user: User): Promise<AppRol
 
   if (appRole === "admin" || appRole === "cashier") return appRole;
   if (profileRole === "admin") return "admin";
-  if (profileRole === "cashier" && !isFreshOAuthSignup(user)) return "cashier";
+  if (profileRole === "cashier" && !isOAuthOnlyAccount(user)) return "cashier";
 
-  // Customer (or a fresh OAuth signup that the legacy trigger mis-graded).
+  // Customer (or an OAuth-only account that the legacy trigger mis-graded).
   const meta = (user.user_metadata || {}) as Record<string, unknown>;
   const fullName = String(meta.full_name || meta.name || "").trim() || null;
 
