@@ -168,6 +168,8 @@ export function usePosState() {
   const [collectOrderId, setCollectOrderId] = useState<string | null>(null);
   // Table labels the store offers (store_settings.dine_in_tables).
   const [dineInTables, setDineInTables] = useState<string[]>([]);
+  // Whether WhatsApp order notifications are on (hides "Notify Sedia" when off).
+  const [waNotifyEnabled, setWaNotifyEnabled] = useState(true);
 
   // ───── Reports tab ─────
   const [reportRange, setReportRange] = useState<ReportRange>("today");
@@ -474,6 +476,7 @@ export function usePosState() {
         if (Array.isArray(data?.dine_in_tables)) {
           setDineInTables(data.dine_in_tables.map((t: unknown) => String(t)).filter(Boolean));
         }
+        if (typeof data?.whatsapp_order_notifications === "boolean") setWaNotifyEnabled(data.whatsapp_order_notifications);
         const lc = data?.loyalty_config;
         if (!lc) return;
         setLoyaltyConfig({
@@ -544,7 +547,7 @@ export function usePosState() {
     orders, setOrders, ordersLoading, loadOrders,
     orderDetailOpen, setOrderDetailOpen, orderDetailItems, orderDetailLoading, orderDetailError, loadOrderDetail,
     showQrScanner, setShowQrScanner,
-    collectOrderId, setCollectOrderId, openCollectPayment, openScannedOrder, dineInTables,
+    collectOrderId, setCollectOrderId, openCollectPayment, openScannedOrder, dineInTables, waNotifyEnabled,
     // Reports
     reportRange, setReportRange, reportData, reportLoading, loadReport,
     // Product management

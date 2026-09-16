@@ -17,7 +17,7 @@
 // ============================================================================
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { normalizeWhatsAppTo, sendOrderReadyMessage } from "@/lib/whatsapp";
+import { normalizeWhatsAppTo, orderNotificationsEnabled, sendOrderReadyMessage } from "@/lib/whatsapp";
 import { reverseOrderLoyalty } from "@/lib/customer-order-payment";
 import {
   FORWARD_ORDER,
@@ -352,8 +352,9 @@ export function buildReadyMessage(order: OrderStatusRow, customer: { name: strin
     .replaceAll("{{target}}", target.text);
 }
 
-/** Reason codes: no_customer | customer_not_found | no_consent | no_phone */
+/** Reason codes: disabled | no_customer | customer_not_found | no_consent | no_phone */
 export async function notifyOrderReady(order: OrderStatusRow): Promise<OrderNotification> {
+  if (!orderNotificationsEnabled()) return { attempted: false, reason: "disabled" };
   if (!order.customer_id) return { attempted: false, reason: "no_customer" };
 
   const supabase = createSupabaseAdminClient();

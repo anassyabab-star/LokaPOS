@@ -234,7 +234,7 @@ export default function OrdersTab() {
           {st === "pending" && <button onClick={() => void updateOrderStatus(order.id, "preparing")} className="rounded-md bg-amber-500 px-3 py-1.5 text-[11px] font-medium text-white active:bg-amber-600">Mula Buat</button>}
           {st === "preparing" && <button onClick={() => void updateOrderStatus(order.id, "ready")} className="rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-medium text-white active:bg-blue-600">Siap</button>}
           {isReady && <button onClick={() => void updateOrderStatus(order.id, "completed")} className="rounded-md bg-green-600 px-3.5 py-1.5 text-[11px] font-semibold text-white active:bg-green-700">✓ Selesai (Serah)</button>}
-          {(st === "pending" || st === "preparing" || st === "completed") && (
+          {s.waNotifyEnabled && (st === "pending" || st === "preparing" || st === "completed") && (
             <button onClick={() => void notifyReady(order.id)} className={`rounded-md px-3 py-1.5 text-[11px] font-medium text-white ${notifiedId === order.id ? "bg-green-600" : "bg-blue-500 active:bg-blue-600"}`}>
               {notifiedId === order.id ? "✓ Dinotify" : "🔔 Notify Sedia"}
             </button>

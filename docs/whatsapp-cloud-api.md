@@ -125,3 +125,11 @@ Customer akan nampak mesej datang dari "Syabab Fresh", bukan Loka. Template
 `loka_*` perlu dibuat dalam WABA yang sama (WhatsApp Manager → Syabab Fresh →
 Message templates). Bila Loka ada nombor sendiri, cukup tukar
 `WHATSAPP_CLOUD_PHONE_NUMBER_ID` (dan buat semula template dalam WABA baru).
+
+## 8. Matikan notifikasi order (jimat kos)
+
+Set `WHATSAPP_ORDER_NOTIFICATIONS=off` — mesej order diterima / bayaran / siap /
+resit mata tidak dihantar langsung (tiada percubaan Cloud atau Murpati), butang
+"Notify Sedia" di POS disembunyikan, dan customer ikut status di web app
+(`/order/<id>`, bergetar bila Sedia). OTP `loka_otp` kekal berfungsi. Untuk
+hidupkan semula, buat 4 template Utility (Bahagian 4) dan set semula ke `on`.

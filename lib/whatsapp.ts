@@ -373,6 +373,24 @@ export async function sendWhatsAppText(opts: { to: string; message: string }): P
 // docs/whatsapp-cloud-api.md — keep the two in sync)
 // ---------------------------------------------------------------------------
 
+/**
+ * Order lifecycle notifications (received / paid / ready / points receipt)
+ * cost a utility conversation each on the Cloud API. The customer web tracker
+ * already shows live status, so they can be switched off with
+ * WHATSAPP_ORDER_NOTIFICATIONS=off. OTP is unaffected.
+ */
+export function orderNotificationsEnabled(): boolean {
+  const v = String(process.env.WHATSAPP_ORDER_NOTIFICATIONS || "on").trim().toLowerCase();
+  return !(v === "off" || v === "0" || v === "false" || v === "no");
+}
+
+const NOTIFICATIONS_OFF: WhatsAppSendResult = {
+  ok: false,
+  messageId: null,
+  error: "Notifikasi order WhatsApp dimatikan (WHATSAPP_ORDER_NOTIFICATIONS=off)",
+  provider: "none",
+};
+
 export async function sendOtpMessage(opts: { to: string; code: string; expiryMinutes: number; storeName: string }) {
   const cfg = getWhatsAppCloudConfig();
   const text =
@@ -397,6 +415,7 @@ export async function sendOrderReceivedMessage(opts: {
   nextStep: string;
   text: string;
 }) {
+  if (!orderNotificationsEnabled()) return NOTIFICATIONS_OFF;
   const cfg = getWhatsAppCloudConfig();
   return sendTransactional({
     to: opts.to,
@@ -418,6 +437,7 @@ export async function sendOrderPaidMessage(opts: {
   storeName: string;
   text: string;
 }) {
+  if (!orderNotificationsEnabled()) return NOTIFICATIONS_OFF;
   const cfg = getWhatsAppCloudConfig();
   return sendTransactional({
     to: opts.to,
@@ -436,6 +456,7 @@ export async function sendOrderReadyMessage(opts: {
   total: string;
   text: string;
 }) {
+  if (!orderNotificationsEnabled()) return NOTIFICATIONS_OFF;
   const cfg = getWhatsAppCloudConfig();
   return sendTransactional({
     to: opts.to,
@@ -460,6 +481,7 @@ export async function sendPointsReceiptMessage(opts: {
   storeName: string;
   text: string;
 }) {
+  if (!orderNotificationsEnabled()) return NOTIFICATIONS_OFF;
   const cfg = getWhatsAppCloudConfig();
   return sendTransactional({
     to: opts.to,

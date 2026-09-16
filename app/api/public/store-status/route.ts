@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_LOYALTY_CONFIG, getLoyaltyConfig } from "@/lib/loyalty";
 import { isKdsEnabled } from "@/lib/kds";
 import { DEFAULT_UNPAID_EXPIRY_MINUTES } from "@/lib/order-expiry";
+import { orderNotificationsEnabled } from "@/lib/whatsapp";
 
 export const revalidate = 0;
 
@@ -52,6 +53,7 @@ export async function GET() {
       kds_enabled,
       dine_in_tables,
       unpaid_order_expiry_minutes,
+      whatsapp_order_notifications: orderNotificationsEnabled(),
     });
   } catch {
     return NextResponse.json({
