@@ -165,6 +165,31 @@ export async function bindPhoneToAuthCustomer(user: User, phoneRaw: string): Pro
   return { ...authCustomer, phone };
 }
 
+/**
+ * Does this phone already carry loyalty value (orders or ledger entries)?
+ * Binding such a number to a new Google account must be proven with an OTP;
+ * a number nobody has used yet can be claimed directly.
+ */
+export async function phoneHasLoyaltyHistory(phoneRaw: string): Promise<boolean> {
+  const phone = normalizeCustomerPhone(phoneRaw);
+  if (!phone) return false;
+  const supabase = createSupabaseAdminClient();
+  const { data: row } = await supabase
+    .from("customers")
+    .select("id,total_orders,user_id")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (!row) return false;
+  const customer = row as { id: string; total_orders: number | null; user_id?: string | null };
+  if (customer.user_id) return true; // already owned by another account
+  if (Number(customer.total_orders || 0) > 0) return true;
+  const { count } = await supabase
+    .from("loyalty_ledger")
+    .select("id", { count: "exact", head: true })
+    .eq("customer_id", customer.id);
+  return Number(count || 0) > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Role safety for OAuth signups
 // ---------------------------------------------------------------------------

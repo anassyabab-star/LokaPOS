@@ -101,9 +101,34 @@ export default function SignInPage() {
     }
   }
 
-  async function requestCode() {
+  // Google account → bind the phone. New numbers link straight away; a number
+  // that already carries points asks for a one-time WhatsApp code first.
+  async function linkPhone() {
     if (phone.replace(/\D/g, "").length < 8) { setErr("No telefon tidak sah"); return; }
     setBusy(true); setErr(null); setMsg(null);
+    try {
+      const res = await fetch("/api/customer/link-phone", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: canonical }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 401 && d?.code === "OTP_REQUIRED") {
+        setMsg("Nombor ini dah ada rekod mata. Sahkan dengan kod WhatsApp sekali.");
+        setBusy(false);
+        await requestCode();
+        return;
+      }
+      if (res.status === 401) { setErr("Sesi Google tamat. Sila log masuk semula."); return; }
+      if (!res.ok) throw new Error(d?.error || "Gagal sambungkan nombor");
+      setContact({ name: contact.name || String(d?.customer?.name || ""), phone: canonical });
+      router.replace(next);
+    } catch (e) { setErr(e instanceof Error ? e.message : "Ralat"); }
+    finally { setBusy(false); }
+  }
+
+  async function requestCode() {
+    if (phone.replace(/\D/g, "").length < 8) { setErr("No telefon tidak sah"); return; }
+    setBusy(true); setErr(null);
     try {
       const res = await fetch("/api/public/otp/request", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -149,7 +174,7 @@ export default function SignInPage() {
     ? "Sambungkan nombor telefon anda."
     : "Sign in to collect points.";
   const subtitle = linking
-    ? "Sekali sahaja — selepas ini, Google dah cukup untuk log masuk."
+    ? "Sekali sahaja — selepas ini, Google dah cukup untuk log masuk. Nombor yang dah ada mata akan diminta kod WhatsApp."
     : "Every RM 1 = 1 point. Google, or a one-time WhatsApp code.";
 
   return (
@@ -201,8 +226,8 @@ export default function SignInPage() {
                 className="w-full bg-transparent py-3.5 pr-4 font-sans text-[15px] text-espresso outline-none placeholder:text-muted-2"
               />
             </div>
-            <button onClick={() => void requestCode()} disabled={busy} className="mt-3 w-full rounded-[14px] bg-maroon py-3.5 font-sans text-[15px] font-semibold text-cream active:scale-[.99] disabled:opacity-60">
-              {busy ? "…" : linking ? "Hantar kod WhatsApp" : "Continue"}
+            <button onClick={() => void (linking ? linkPhone() : requestCode())} disabled={busy} className="mt-3 w-full rounded-[14px] bg-maroon py-3.5 font-sans text-[15px] font-semibold text-cream active:scale-[.99] disabled:opacity-60">
+              {busy ? "…" : linking ? "Sambungkan nombor" : "Continue"}
             </button>
           </div>
         ) : (

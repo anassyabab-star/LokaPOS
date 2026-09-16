@@ -28,7 +28,7 @@ sahaja perlu sahkan nombor telefon (OTP WhatsApp) supaya mata loyalti
 
 | Keadaan | Apa jadi |
 |---|---|
-| Google pertama kali | `/auth/callback` → cipta rekod customer → `/signin?stage=link` → masukkan telefon → OTP → nombor diikat pada akaun |
+| Google pertama kali | `/auth/callback` → cipta rekod customer → `/signin?stage=link` → masukkan telefon → nombor **baru** terus diikat; nombor yang dah ada mata/order diminta kod WhatsApp sekali |
 | Google kali seterusnya | `/auth/callback` → sesi telefon dikeluarkan terus dari `customers.phone` → `/rewards` tanpa kod |
 | Peranti baru / storage kosong | app panggil `/api/public/me` → pulihkan nama + telefon dari sesi Google |
 | Staff guna butang Google | dikesan sebagai staff (role dari `app_metadata` / profil) → `/auth/redirect` |
