@@ -34,7 +34,7 @@ Nama template boleh diubah dengan `WHATSAPP_TEMPLATE_OTP`,
 ## 3. Webhook (pilihan, untuk status hantar/terima)
 
 Meta App → WhatsApp → **Configuration** → Callback URL
-`https://<domain>/api/webhooks/whatsapp`, Verify token = `WHATSAPP_WEBHOOK_VERIFY_TOKEN`,
+`https://pos.lokacafe.my/api/webhooks/whatsapp`, Verify token = `WHATSAPP_WEBHOOK_VERIFY_TOKEN`,
 subscribe field `messages`. Route hanya log status; ia tidak wajib untuk menghantar.
 
 ## 4. Template yang perlu dibuat (WhatsApp Manager → Message templates)

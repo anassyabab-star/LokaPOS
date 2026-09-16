@@ -10,7 +10,7 @@ sahaja perlu sahkan nombor telefon (OTP WhatsApp) supaya mata loyalti
 1. [console.cloud.google.com](https://console.cloud.google.com) → projek baru `Loka POS`.
 2. **APIs & Services → OAuth consent screen**: External, nama app `Loka Coffee`, email sokongan, logo (pilihan). Scope default (`email`, `profile`, `openid`) cukup. Publish app (bukan Testing) supaya semua customer boleh log masuk.
 3. **Credentials → Create credentials → OAuth client ID** → *Web application*:
-   - Authorized JavaScript origins: `https://<domain>` dan `http://localhost:3000`
+   - Authorized JavaScript origins: `https://pos.lokacafe.my` dan `http://localhost:3000`
    - Authorized redirect URIs: `https://fgfnebfazthxrukrujyx.supabase.co/auth/v1/callback`
 4. Salin **Client ID** dan **Client secret**.
 
@@ -18,8 +18,8 @@ sahaja perlu sahkan nombor telefon (OTP WhatsApp) supaya mata loyalti
 
 1. **Authentication → Providers → Google**: Enable, tampal Client ID + Secret. Simpan.
 2. **Authentication → URL Configuration**:
-   - Site URL: `https://<domain>`
-   - Redirect URLs: `https://<domain>/auth/callback`, `http://localhost:3000/auth/callback`
+   - Site URL: `https://pos.lokacafe.my`
+   - Redirect URLs: `https://pos.lokacafe.my/auth/callback`, `http://localhost:3000/auth/callback`
 3. Run migration `supabase/migrations/20260916_customer_google_auth.sql` (SQL Editor).
    Ia tambah `customers.user_id`, dan **membetulkan default role** pengguna baru
    kepada `customer` (sebelum ini `cashier` — pengguna Google baru boleh masuk POS).
