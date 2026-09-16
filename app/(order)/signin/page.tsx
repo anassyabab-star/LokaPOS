@@ -67,9 +67,9 @@ export default function SignInPage() {
           return;
         }
         setStage("phone");
-        setErr("Sesi Google tidak dijumpai. Cuba lagi.");
+        setErr("Google session not found. Please try again.");
       } catch {
-        if (live) { setStage("phone"); setErr("Tiada sambungan."); }
+        if (live) { setStage("phone"); setErr("No connection."); }
       }
     })();
     return () => { live = false; };
@@ -96,7 +96,7 @@ export default function SignInPage() {
       if (error) throw error;
       // Browser is navigating to Google now.
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Google sign-in gagal");
+      setErr(e instanceof Error ? e.message : "Google sign-in failed");
       setBusy(false);
     }
   }
@@ -104,7 +104,7 @@ export default function SignInPage() {
   // Google account → bind the phone. New numbers link straight away; a number
   // that already carries points asks for a one-time WhatsApp code first.
   async function linkPhone() {
-    if (phone.replace(/\D/g, "").length < 8) { setErr("No telefon tidak sah"); return; }
+    if (phone.replace(/\D/g, "").length < 8) { setErr("Invalid phone number"); return; }
     setBusy(true); setErr(null); setMsg(null);
     try {
       const res = await fetch("/api/customer/link-phone", {
@@ -113,21 +113,21 @@ export default function SignInPage() {
       });
       const d = await res.json().catch(() => ({}));
       if (res.status === 401 && d?.code === "OTP_REQUIRED") {
-        setMsg("Nombor ini dah ada rekod mata. Sahkan dengan kod WhatsApp sekali.");
+        setMsg("This number already has points. Verify it once with a WhatsApp code.");
         setBusy(false);
         await requestCode();
         return;
       }
-      if (res.status === 401) { setErr("Sesi Google tamat. Sila log masuk semula."); return; }
-      if (!res.ok) throw new Error(d?.error || "Gagal sambungkan nombor");
+      if (res.status === 401) { setErr("Google session expired. Please sign in again."); return; }
+      if (!res.ok) throw new Error(d?.error || "Couldn't link this number");
       setContact({ name: contact.name || String(d?.customer?.name || ""), phone: canonical });
       router.replace(next);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Ralat"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Something went wrong"); }
     finally { setBusy(false); }
   }
 
   async function requestCode() {
-    if (phone.replace(/\D/g, "").length < 8) { setErr("No telefon tidak sah"); return; }
+    if (phone.replace(/\D/g, "").length < 8) { setErr("Invalid phone number"); return; }
     setBusy(true); setErr(null);
     try {
       const res = await fetch("/api/public/otp/request", {
@@ -135,15 +135,15 @@ export default function SignInPage() {
         body: JSON.stringify({ phone: canonical }),
       });
       const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Gagal hantar kod");
+      if (!res.ok) throw new Error(d.error || "Couldn't send the code");
       setStage("code");
-      setMsg("Kod dihantar ke WhatsApp anda.");
-    } catch (e) { setErr(e instanceof Error ? e.message : "Ralat"); }
+      setMsg("Code sent to your WhatsApp.");
+    } catch (e) { setErr(e instanceof Error ? e.message : "Something went wrong"); }
     finally { setBusy(false); }
   }
 
   async function verify() {
-    if (code.trim().length < 4) { setErr("Masukkan kod"); return; }
+    if (code.trim().length < 4) { setErr("Enter the code"); return; }
     setBusy(true); setErr(null);
     try {
       const res = await fetch("/api/public/otp/verify", {
@@ -151,7 +151,7 @@ export default function SignInPage() {
         body: JSON.stringify({ phone: canonical, code: code.trim() }),
       });
       const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Kod salah");
+      if (!res.ok) throw new Error(d.error || "Wrong code");
 
       let name = contact.name;
       if (linking) {
@@ -161,20 +161,20 @@ export default function SignInPage() {
           body: JSON.stringify({ phone: canonical }),
         });
         const ld = await link.json().catch(() => ({}));
-        if (!link.ok) throw new Error(ld.error || "Gagal sambungkan nombor ke akaun Google");
+        if (!link.ok) throw new Error(ld.error || "Couldn't link this number to your Google account");
         name = name || String(ld?.customer?.name || "");
       }
       setContact({ name, phone: canonical });
       router.replace(next);
-    } catch (e) { setErr(e instanceof Error ? e.message : "Ralat"); }
+    } catch (e) { setErr(e instanceof Error ? e.message : "Something went wrong"); }
     finally { setBusy(false); }
   }
 
   const title = linking
-    ? "Sambungkan nombor telefon anda."
+    ? "Link your phone number."
     : "Sign in to collect points.";
   const subtitle = linking
-    ? "Sekali sahaja — selepas ini, Google dah cukup untuk log masuk. Nombor yang dah ada mata akan diminta kod WhatsApp."
+    ? "Just once — after this, Google is all you need. Numbers that already have points will be asked for a WhatsApp code."
     : "Every RM 1 = 1 point. Google, or a one-time WhatsApp code.";
 
   return (
@@ -191,7 +191,7 @@ export default function SignInPage() {
         {stage === "sync" ? (
           <div className="mt-10 flex flex-col items-center gap-3 text-center">
             <div className="h-9 w-9 animate-spin rounded-full border-[3px] border-hairline border-t-maroon" />
-            <p className="font-sans text-[13px] text-muted">Menyambung akaun Google anda…</p>
+            <p className="font-sans text-[13px] text-muted">Connecting your Google account…</p>
           </div>
         ) : stage === "phone" || stage === "link" ? (
           <div className="mt-7">
@@ -208,7 +208,7 @@ export default function SignInPage() {
                     <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                   </svg>
-                  {busy ? "Membuka Google…" : "Continue with Google"}
+                  {busy ? "Opening Google…" : "Continue with Google"}
                 </button>
 
                 <div className="my-5 flex items-center gap-3 text-muted-2">
@@ -227,7 +227,7 @@ export default function SignInPage() {
               />
             </div>
             <button onClick={() => void (linking ? linkPhone() : requestCode())} disabled={busy} className="mt-3 w-full rounded-[14px] bg-maroon py-3.5 font-sans text-[15px] font-semibold text-cream active:scale-[.99] disabled:opacity-60">
-              {busy ? "…" : linking ? "Sambungkan nombor" : "Continue"}
+              {busy ? "…" : linking ? "Link number" : "Continue"}
             </button>
           </div>
         ) : (
@@ -240,7 +240,7 @@ export default function SignInPage() {
               className="mt-2 w-full rounded-[14px] border border-hairline bg-card py-3.5 text-center font-display text-[22px] font-semibold tracking-[0.3em] text-espresso outline-none placeholder:text-muted-2 focus:border-maroon"
             />
             <button onClick={() => void verify()} disabled={busy} className="mt-3 w-full rounded-[14px] bg-maroon py-3.5 font-sans text-[15px] font-semibold text-cream active:scale-[.99] disabled:opacity-60">
-              {busy ? "Mengesahkan…" : linking ? "Sahkan & sambungkan" : "Verify & continue"}
+              {busy ? "Verifying…" : linking ? "Verify & link" : "Verify & continue"}
             </button>
             <button onClick={() => void requestCode()} disabled={busy} className="mt-2 w-full py-2 font-sans text-[13px] font-semibold text-maroon disabled:opacity-40">Resend code</button>
           </div>

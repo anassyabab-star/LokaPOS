@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
   // Validate phone format (8–15 digits)
   if (phone && (phone.replace(/[^\d]/g, "").length < 8 || phone.replace(/[^\d]/g, "").length > 15)) {
-    return NextResponse.json({ error: "No telefon tidak sah" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
   }
 
   const supabase = createSupabaseAdminClient();

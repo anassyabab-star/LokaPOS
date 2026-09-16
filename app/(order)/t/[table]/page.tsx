@@ -58,16 +58,16 @@ export default function WelcomePage() {
         ) : !tableKnown ? (
           <>
             <div className="inline-flex items-center gap-2 self-start rounded-full border border-melon/30 bg-melon/[0.16] px-3 py-1.5 font-sans text-[11px] font-semibold tracking-[.06em] text-melon-soft">
-              <span className="h-[7px] w-[7px] rounded-full bg-melon" /> QR TIDAK DIKENALI
+              <span className="h-[7px] w-[7px] rounded-full bg-melon" /> UNKNOWN QR
             </div>
             <h1 className="mt-[18px] font-display text-[34px] font-semibold leading-[1.08] tracking-[-.02em] text-cream">
-              Meja {table || "—"}<br />tidak dijumpai.
+              Table {table || "—"}<br />not found.
             </h1>
             <p className="mt-3.5 font-sans text-[15px] leading-relaxed text-[#C9A88F]">
-              QR ini mungkin lama. Anda masih boleh order untuk take away, atau minta staff untuk QR meja yang betul.
+              This QR may be outdated. You can still order for take away, or ask our staff for the right table QR.
             </p>
             <Link href="/t/takeaway" className="mt-9 flex items-center justify-center gap-2 rounded-[18px] bg-maroon py-[18px] font-sans text-[16px] font-semibold text-cream active:scale-[.98]">
-              Order Take Away →
+              Order take away →
             </Link>
           </>
         ) : (
@@ -85,7 +85,7 @@ export default function WelcomePage() {
 
             {closed && (
               <div className="mt-5 rounded-[14px] border border-melon/30 bg-melon/10 px-4 py-3 font-sans text-[13px] text-melon-soft">
-                ⏰ Kedai sedang tutup. Anda boleh lihat menu, tapi order hanya boleh dibuat waktu operasi.
+                ⏰ We're closed right now. You can browse the menu, but orders are only accepted during opening hours.
               </div>
             )}
 

@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const phone = normalizeOtpPhone(String(body?.phone || ""));
 
   if (!phone || phone.replace(/[^\d]/g, "").length < 8) {
-    return NextResponse.json({ error: "No telefon diperlukan" }, { status: 400 });
+    return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
   }
 
   // OTP gate.
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
   if (!customer) {
     return NextResponse.json(
-      { error: "Pelanggan tidak dijumpai. Buat order dulu untuk daftar." },
+      { error: "Customer not found. Place an order first to register." },
       { status: 404 }
     );
   }

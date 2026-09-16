@@ -123,7 +123,7 @@ export async function resolveCustomerForAuthUser(
  */
 export async function bindPhoneToAuthCustomer(user: User, phoneRaw: string): Promise<LinkedCustomer> {
   const phone = normalizeCustomerPhone(phoneRaw);
-  if (!phone || phone.replace(/\D/g, "").length < 8) throw new Error("No telefon tidak sah");
+  if (!phone || phone.replace(/\D/g, "").length < 8) throw new Error("Invalid phone number");
 
   const supabase = createSupabaseAdminClient();
   const authCustomer = await resolveCustomerForAuthUser(user, { allowCreate: true });
@@ -155,7 +155,7 @@ export async function bindPhoneToAuthCustomer(user: User, phoneRaw: string): Pro
     return { ...phoneRow, ...(extra.email ? { email: String(extra.email) } : {}) };
   }
 
-  if (!authCustomer) throw new Error("Rekod pelanggan tidak dapat dibuat");
+  if (!authCustomer) throw new Error("Couldn't create your customer record");
 
   if (authCustomer.phone !== phone) {
     const { error } = await supabase.from("customers").update({ phone }).eq("id", authCustomer.id);

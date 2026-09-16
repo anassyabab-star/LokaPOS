@@ -131,7 +131,7 @@ export function requirePhoneOtp(req: Request, phone: string): PhoneOtpGuard {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Pengesahan OTP diperlukan", code: "OTP_REQUIRED" },
+        { error: "OTP verification required", code: "OTP_REQUIRED" },
         { status: 401 }
       ),
     };
@@ -140,7 +140,7 @@ export function requirePhoneOtp(req: Request, phone: string): PhoneOtpGuard {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Sesi OTP tidak sepadan dengan nombor ini", code: "OTP_PHONE_MISMATCH" },
+        { error: "OTP session doesn't match this number", code: "OTP_PHONE_MISMATCH" },
         { status: 403 }
       ),
     };

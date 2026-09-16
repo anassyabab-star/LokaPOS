@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const points = Number(body?.points);
 
   if (!phone || phone.replace(/[^\d]/g, "").length < 8) {
-    return NextResponse.json({ error: "No telefon tidak sah" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
   }
 
   // OTP gate — caller must have a verified phone session.
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   const config = await getLoyaltyConfig();
   const tier = config.voucherTiers.find(t => t.points === points);
   if (!tier) {
-    return NextResponse.json({ error: "Tier tidak sah" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid tier" }, { status: 400 });
   }
 
   const supabase = createSupabaseAdminClient();
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
 
   if (!customer) {
     return NextResponse.json(
-      { error: "Akaun tidak dijumpai. Buat order dahulu untuk daftar." },
+      { error: "Account not found. Place an order first to register." },
       { status: 404 }
     );
   }
@@ -47,11 +47,11 @@ export async function POST(req: Request) {
   if (!result.ok) {
     if (result.error === "INSUFFICIENT_POINTS") {
       return NextResponse.json(
-        { error: `Mata tidak mencukupi (perlu ${tier.points} pts)` },
+        { error: `Not enough points (needs ${tier.points} pts)` },
         { status: 400 }
       );
     }
-    return NextResponse.json({ error: "Gagal jana voucher. Cuba lagi." }, { status: 500 });
+    return NextResponse.json({ error: "Couldn't create the voucher. Please try again." }, { status: 500 });
   }
 
   return NextResponse.json({

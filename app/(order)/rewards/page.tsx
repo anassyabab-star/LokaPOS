@@ -65,11 +65,11 @@ export default function RewardsPage() {
         router.push("/signin?next=/rewards");
         return;
       }
-      if (!res.ok) { setMsg(d.error || "Gagal tebus"); return; }
-      setMsg(`Voucher dijana: ${d.code} (${tier.label}) 🎉`);
+      if (!res.ok) { setMsg(d.error || "Couldn't redeem"); return; }
+      setMsg(`Voucher created: ${d.code} (${tier.label}) 🎉`);
       setPoints(p => (p == null ? p : Math.max(0, p - tier.points)));
     } catch {
-      setMsg("Tiada sambungan.");
+      setMsg("No connection.");
     }
   }
 
@@ -122,7 +122,7 @@ export default function RewardsPage() {
                 </div>
               );
             })}
-            {tiers.length === 0 && <p className="px-1 font-sans text-[13px] text-muted">Tiada ganjaran tersedia.</p>}
+            {tiers.length === 0 && <p className="px-1 font-sans text-[13px] text-muted">No rewards available yet.</p>}
           </div>
         </div>
 

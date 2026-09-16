@@ -42,12 +42,12 @@ function couponErrorMessage(
   reason: "disabled" | "not_found" | "wrong_customer" | "expired" | "used"
 ): string {
   switch (reason) {
-    case "disabled": return "Coupon tidak aktif buat masa ini.";
-    case "not_found": return "Kod coupon tidak sah.";
-    case "wrong_customer": return "Coupon ini bukan milik nombor telefon ini.";
-    case "expired": return "Coupon telah tamat tempoh.";
-    case "used": return "Coupon telah digunakan.";
-    default: return "Coupon tidak sah.";
+    case "disabled": return "Coupons aren't active right now.";
+    case "not_found": return "Invalid coupon code.";
+    case "wrong_customer": return "This coupon belongs to a different phone number.";
+    case "expired": return "This coupon has expired.";
+    case "used": return "This coupon has already been used.";
+    default: return "Invalid coupon.";
   }
 }
 
@@ -210,13 +210,13 @@ export async function POST(req: Request) {
   const tableNumber = orderType === "take_away" ? null : requestedTable;
   const paysAtCounter = paymentMethod === "cash";
 
-  if (!customerName) return NextResponse.json({ error: "Nama diperlukan" }, { status: 400 });
+  if (!customerName) return NextResponse.json({ error: "Name is required" }, { status: 400 });
   if (!customerPhone || customerPhone.replace(/[^\d]/g, "").length < 8) {
-    return NextResponse.json({ error: "No telefon tidak sah" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
   }
   const requestItems = Array.isArray(body.items) ? body.items : null;
   if (!requestItems || requestItems.length === 0) {
-    return NextResponse.json({ error: "Sekurang-kurangnya satu item diperlukan" }, { status: 400 });
+    return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
   }
 
   try {
@@ -233,7 +233,7 @@ export async function POST(req: Request) {
 
     if (!openShift) {
       return NextResponse.json(
-        { error: "Kedai sedang tutup. Sila cuba semula semasa waktu operasi.", store_closed: true },
+        { error: "We're closed right now. Please try again during opening hours.", store_closed: true },
         { status: 503 }
       );
     }
@@ -310,7 +310,7 @@ export async function POST(req: Request) {
     const couponCode = String(body.coupon_code || "").trim().toUpperCase();
     if (couponCode && requestedRedeemPoints > 0) {
       return NextResponse.json(
-        { error: "Hanya satu diskaun setiap order — mata ATAU coupon." },
+        { error: "Only one discount per order — points OR a coupon." },
         { status: 400 }
       );
     }
@@ -349,7 +349,7 @@ export async function POST(req: Request) {
       );
       if (discount <= 0) {
         return NextResponse.json(
-          { error: "Coupon tidak layak untuk order ini." },
+          { error: "This coupon can't be used for this order." },
           { status: 400 }
         );
       }
@@ -399,7 +399,7 @@ export async function POST(req: Request) {
 
     const { data: order, error: orderError } = orderInsert;
     if (orderError || !order) {
-      return NextResponse.json({ error: orderError?.message || "Gagal buat order" }, { status: 500 });
+      return NextResponse.json({ error: orderError?.message || "Couldn't place the order" }, { status: 500 });
     }
 
     // RESERVE the loyalty points now (atomic, advisory-locked) and only apply the
@@ -609,7 +609,7 @@ export async function POST(req: Request) {
       payment_url: paymentUrl,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Gagal buat order";
+    const message = error instanceof Error ? error.message : "Couldn't place the order";
     const status = message.toLowerCase().includes("stock")
       ? 400
       : message.toLowerCase().includes("not found") || message.toLowerCase().includes("not available")

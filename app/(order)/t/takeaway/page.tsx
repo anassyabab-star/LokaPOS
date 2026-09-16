@@ -48,7 +48,7 @@ export default function TakeawayWelcomePage() {
 
         {closed && (
           <div className="mt-5 rounded-[14px] border border-melon/30 bg-melon/10 px-4 py-3 font-sans text-[13px] text-melon-soft">
-            ⏰ Kedai sedang tutup. Anda boleh lihat menu, tapi order hanya boleh dibuat waktu operasi.
+            ⏰ We're closed right now. You can browse the menu, but orders are only accepted during opening hours.
           </div>
         )}
 

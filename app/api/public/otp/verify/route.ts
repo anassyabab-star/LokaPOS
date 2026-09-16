@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const code = String(body?.code || "").trim();
 
   if (!phone || !code) {
-    return NextResponse.json({ error: "No telefon dan kod diperlukan" }, { status: 400 });
+    return NextResponse.json({ error: "Phone number and code are required" }, { status: 400 });
   }
 
   const supabase = createSupabaseAdminClient();
@@ -30,12 +30,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!row) {
-    return NextResponse.json({ error: "Kod tidak sah atau telah luput" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid or expired code" }, { status: 400 });
   }
 
   if (Number(row.attempts || 0) >= MAX_ATTEMPTS) {
     return NextResponse.json(
-      { error: "Terlalu banyak cubaan. Minta kod baru." },
+      { error: "Too many attempts. Please request a new code." },
       { status: 429 }
     );
   }
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       .from("otp_codes")
       .update({ attempts: Number(row.attempts || 0) + 1 })
       .eq("id", row.id);
-    return NextResponse.json({ error: "Kod salah" }, { status: 400 });
+    return NextResponse.json({ error: "Wrong code" }, { status: 400 });
   }
 
   // Consume the code so it can't be reused.

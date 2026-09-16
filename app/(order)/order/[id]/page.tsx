@@ -35,11 +35,11 @@ type Track = {
 };
 
 const STEPS = [
-  { key: "pay", label: "Bayar" },
-  { key: "queue", label: "Barisan" },
-  { key: "making", label: "Dibuat" },
-  { key: "ready", label: "Sedia" },
-  { key: "done", label: "Selesai" },
+  { key: "pay", label: "Pay" },
+  { key: "queue", label: "Queue" },
+  { key: "making", label: "Making" },
+  { key: "ready", label: "Ready" },
+  { key: "done", label: "Done" },
 ];
 
 function stepIndex(status: string): number {
@@ -92,7 +92,7 @@ export default function OrderPage() {
         const data = await res.json().catch(() => ({}));
         if (!live) return;
         if (!res.ok || !data?.order) {
-          setTrackError(res.status === 404 ? "Order tidak dijumpai untuk nombor ini." : "Gagal semak status.");
+          setTrackError(res.status === 404 ? "Order not found for this number." : "Couldn't check the status.");
           return;
         }
         const t = data.order as Track;
@@ -102,7 +102,7 @@ export default function OrderPage() {
         if (prevStatus.current && prevStatus.current !== "ready" && st === "ready") readyAlert();
         prevStatus.current = st;
       } catch {
-        if (live) setTrackError("Tiada sambungan.");
+        if (live) setTrackError("No connection.");
       } finally {
         if (!live) return;
         const st = String(prevStatus.current || "");
@@ -125,7 +125,7 @@ export default function OrderPage() {
   const orderType = track?.order_type || (order?.type === "dine" ? "dine_in" : order?.type === "takeaway" ? "take_away" : null);
   const tableNo = track?.table_number || (orderType === "dine_in" ? order?.table || null : null);
   const buzzerNo = track?.buzzer_number || null;
-  const target = tableNo ? `Meja ${tableNo}` : buzzerNo ? `Buzzer ${buzzerNo}` : orderType === "take_away" ? "Take Away" : orderType === "dine_in" ? "Dine In" : "";
+  const target = tableNo ? `Table ${tableNo}` : buzzerNo ? `Buzzer ${buzzerNo}` : orderType === "take_away" ? "Take Away" : orderType === "dine_in" ? "Dine In" : "";
   const total = Number(track?.total ?? order?.total ?? 0);
   const paysAtCounter = track ? track.payment_method === "cash" : order?.payment === "counter";
 
@@ -165,13 +165,13 @@ export default function OrderPage() {
   if (!order && !phone) {
     return (
       <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-espresso px-6 text-center">
-        <div className="font-display text-[22px] font-semibold text-cream">Semak status order</div>
-        <p className="mt-2 font-sans text-[13px] text-[#C9A88F]">Masukkan nombor telefon yang digunakan semasa order.</p>
+        <div className="font-display text-[22px] font-semibold text-cream">Check order status</div>
+        <p className="mt-2 font-sans text-[13px] text-[#C9A88F]">Enter the phone number used for this order.</p>
         <div className="mt-5 flex w-full max-w-[320px] items-center rounded-[12px] border border-cream/20 bg-cream/5 focus-within:border-melon">
           <span className="pl-3.5 pr-2 font-sans text-[14px] text-[#C9A88F]">🇲🇾 +60</span>
           <input value={phoneInput} onChange={e => setPhoneInput(e.target.value.replace(/[^\d]/g, ""))} inputMode="numeric" placeholder="12 345 6789" className="w-full bg-transparent py-3 pr-3.5 font-sans text-[15px] text-cream outline-none placeholder:text-muted-3" />
         </div>
-        <button onClick={submitPhone} className="mt-3 w-full max-w-[320px] rounded-[14px] bg-maroon py-3.5 font-sans text-[14px] font-semibold text-cream active:scale-[.99]">Semak</button>
+        <button onClick={submitPhone} className="mt-3 w-full max-w-[320px] rounded-[14px] bg-maroon py-3.5 font-sans text-[14px] font-semibold text-cream active:scale-[.99]">Check</button>
         <Link href="/menu" className="mt-6 font-sans text-[13px] font-semibold text-[#C9A88F]">← Back to menu</Link>
       </div>
     );
@@ -187,20 +187,20 @@ export default function OrderPage() {
   const canReview = pickedUp && !reviewed;
 
   const hero = isCancelled
-    ? { icon: "✕", tone: "bg-melon", title: "Order dibatalkan", sub: "Order ini tamat tempoh atau dibatalkan. Sila buat order semula." }
+    ? { icon: "✕", tone: "bg-melon", title: "Order cancelled", sub: "This order expired or was cancelled. Please order again." }
     : isAwaiting
       ? paymentFailed
-        ? { icon: "🧾", tone: "bg-maroon", title: "Pembayaran online gagal", sub: "Tak mengapa — tunjuk Order ID ini di kaunter untuk bayar." }
+        ? { icon: "🧾", tone: "bg-maroon", title: "Online payment failed", sub: "No worries — show this Order ID at the counter to pay." }
         : paysAtCounter
-          ? { icon: "🧾", tone: "bg-maroon", title: "Bayar di kaunter", sub: "Tunjuk Order ID ini kepada cashier untuk bayar." }
-          : { icon: "⏳", tone: "bg-maroon", title: "Menunggu pembayaran", sub: "Selesaikan bayaran online, atau bayar di kaunter dengan Order ID ini." }
+          ? { icon: "🧾", tone: "bg-maroon", title: "Pay at the counter", sub: "Show this Order ID to the cashier to pay." }
+          : { icon: "⏳", tone: "bg-maroon", title: "Awaiting payment", sub: "Complete your online payment, or pay at the counter with this Order ID." }
       : isReady
-        ? { icon: "🔔", tone: "bg-leaf", title: "Pesanan anda dah siap!", sub: tableNo ? `Kami hantar ke ${target}.` : buzzerNo ? `${target} akan berbunyi — sila ambil di kaunter.` : "Sila ambil di kaunter." }
+        ? { icon: "🔔", tone: "bg-leaf", title: "Your order is ready!", sub: tableNo ? `We'll bring it to ${target}.` : buzzerNo ? `${target} will buzz — collect it at the counter.` : "Collect it at the counter." }
         : isDone
-          ? { icon: "✓", tone: "bg-leaf", title: "Selesai", sub: "Selamat menjamu selera ☕" }
+          ? { icon: "✓", tone: "bg-leaf", title: "Done", sub: "Enjoy your order ☕" }
           : status === "preparing"
-            ? { icon: "☕", tone: "bg-leaf", title: "Sedang dibuat", sub: "Barista sedang sediakan pesanan anda." }
-            : { icon: "✓", tone: "bg-leaf", title: "Bayaran diterima", sub: "Pesanan anda dalam barisan dapur." };
+            ? { icon: "☕", tone: "bg-leaf", title: "Being prepared", sub: "The barista is making your order now." }
+            : { icon: "✓", tone: "bg-leaf", title: "Payment received", sub: "Your order is in the kitchen queue." };
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-cream">
@@ -221,7 +221,7 @@ export default function OrderPage() {
               <div className="mt-1 font-sans text-[11px] text-muted-2">{receipt}</div>
             </div>
             <div className="text-right">
-              <div className="font-sans text-[11px] font-semibold uppercase tracking-label text-muted-2">{tableNo ? "Meja" : buzzerNo ? "Buzzer" : "Jenis"}</div>
+              <div className="font-sans text-[11px] font-semibold uppercase tracking-label text-muted-2">{tableNo ? "Table" : buzzerNo ? "Buzzer" : "Type"}</div>
               <div className="font-display text-[22px] font-semibold leading-tight text-espresso">
                 {tableNo ? tableNo : buzzerNo ? buzzerNo : orderType === "take_away" ? "Take Away" : orderType === "dine_in" ? "Dine In" : "—"}
               </div>
@@ -236,7 +236,7 @@ export default function OrderPage() {
             <div className="mt-4 flex flex-col items-center rounded-[14px] bg-cream-2 p-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={qrSrc} alt={`QR order ${shortNo}`} width={180} height={180} className="h-[180px] w-[180px] rounded-[10px] bg-white p-2" />
-              <div className="mt-2 font-sans text-[12px] font-semibold text-espresso">Cashier scan QR ini, atau sebut #{shortNo}</div>
+              <div className="mt-2 font-sans text-[12px] font-semibold text-espresso">Show this QR to the cashier, or just say #{shortNo}</div>
             </div>
           )}
 
@@ -271,23 +271,23 @@ export default function OrderPage() {
       <div className="flex-1 px-5 pt-5">
         {isCancelled ? (
           <Link href="/menu" className="block w-full rounded-[16px] bg-maroon py-3.5 text-center font-sans text-[14px] font-semibold text-cream active:scale-[.99]">
-            Order semula →
+            Order again →
           </Link>
         ) : (
           <>
             {canPickup && (
               <button onClick={() => void confirmPickup()} disabled={pickupBusy} className="w-full rounded-[16px] bg-maroon py-3.5 text-center font-sans text-[14px] font-semibold text-cream active:scale-[.99] disabled:opacity-60">
-                {pickupBusy ? "…" : "Sahkan dah ambil"}
+                {pickupBusy ? "…" : "Confirm picked up"}
               </button>
             )}
             {canReview && (
               <Link href={`/order/${id}/review`} className="block w-full rounded-[16px] bg-maroon py-3.5 text-center font-sans text-[14px] font-semibold text-cream active:scale-[.99]">
-                Beri review &amp; buka voucher →
+                Leave a review &amp; unlock your voucher →
               </Link>
             )}
             {reviewed && (
               <div className="rounded-[16px] border border-leaf/40 bg-leaf/5 py-3.5 text-center font-sans text-[13px] font-semibold text-leaf">
-                ✓ Review diterima — voucher dibuka
+                ✓ Review received — voucher unlocked
               </div>
             )}
             {!canPickup && !canReview && !reviewed && (
@@ -297,16 +297,16 @@ export default function OrderPage() {
                 </div>
                 <div>
                   <div className="font-sans text-[14px] font-semibold text-espresso">
-                    {isAwaiting ? "Bayaran belum diterima" : status === "preparing" ? "Sedang dibuat" : "Kami akan maklumkan bila siap"}
+                    {isAwaiting ? "Payment not received yet" : status === "preparing" ? "Being prepared" : "We'll let you know when it's ready"}
                   </div>
                   <div className="mt-0.5 font-sans text-[12px] text-muted">
                     {isAwaiting
-                      ? "Order masuk ke dapur sebaik sahaja anda bayar di kaunter."
+                      ? "Your order goes to the kitchen as soon as you pay at the counter."
                       : tableNo
-                        ? `Pesanan akan dihantar ke ${target}.`
+                        ? `We'll bring it to ${target}.`
                         : buzzerNo
-                          ? `${target} akan berbunyi bila siap.`
-                          : "Skrin ini akan berbunyi bila pesanan siap."}
+                          ? `${target} will buzz when it's ready.`
+                          : "This screen will buzz when your order is ready."}
                   </div>
                 </div>
               </div>
@@ -324,7 +324,7 @@ export default function OrderPage() {
           ))}
           <div className={`flex justify-between ${order?.items.length ? "mt-2 border-t border-hairline pt-2" : ""}`}>
             <span className="font-sans text-[13px] text-muted">
-              {isAwaiting ? (paysAtCounter ? "Bayar di kaunter" : "Belum dibayar") : track?.payment_status === "paid" ? "Dibayar" : order?.payment === "online" ? "Online" : "—"}
+              {isAwaiting ? (paysAtCounter ? "Pay at counter" : "Unpaid") : track?.payment_status === "paid" ? "Paid" : order?.payment === "online" ? "Online" : "—"}
             </span>
             <span className="font-display text-[15px] font-semibold text-espresso">{rm(total)}</span>
           </div>

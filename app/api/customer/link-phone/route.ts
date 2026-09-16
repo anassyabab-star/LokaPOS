@@ -18,13 +18,13 @@ import { bindPhoneToAuthCustomer, phoneHasLoyaltyHistory } from "@/lib/customer-
 export async function POST(req: Request) {
   const user = await getCurrentSessionUser();
   if (!user) {
-    return NextResponse.json({ error: "Sila log masuk dengan Google dahulu", code: "UNAUTHORIZED" }, { status: 401 });
+    return NextResponse.json({ error: "Please sign in with Google first", code: "UNAUTHORIZED" }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({}));
   const phone = normalizeOtpPhone(String(body?.phone || ""));
   if (!phone || phone.replace(/\D/g, "").length < 8) {
-    return NextResponse.json({ error: "No telefon tidak sah" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
   }
 
   try {
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     });
     return setPhoneOtpSession(res, phone);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Gagal sambungkan nombor";
+    const message = error instanceof Error ? error.message : "Couldn't link this number";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
