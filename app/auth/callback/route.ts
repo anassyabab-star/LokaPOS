@@ -23,10 +23,15 @@ function safeNext(raw: string | null, fallback: string) {
   return value;
 }
 
+const NEXT_COOKIE = "loka_oauth_next";
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = safeNext(searchParams.get("next"), "/rewards");
+  // `next` arrives via a short-lived cookie set by /signin (a query param would
+  // break Supabase's exact redirect-URL matching); ?next= still works as a fallback.
+  const cookieNext = request.cookies.get(NEXT_COOKIE)?.value;
+  const next = safeNext(cookieNext ? decodeURIComponent(cookieNext) : searchParams.get("next"), "/rewards");
   const oauthError = searchParams.get("error_description") || searchParams.get("error");
 
   const signin = (params: Record<string, string>) => {
@@ -84,5 +89,6 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(target);
   for (const c of pending) response.cookies.set(c.name, c.value, c.options);
   if (phoneToMint) setPhoneOtpSession(response, phoneToMint);
+  response.cookies.set(NEXT_COOKIE, "", { path: "/", maxAge: 0 });
   return response;
 }

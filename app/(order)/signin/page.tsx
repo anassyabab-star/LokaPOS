@@ -81,11 +81,15 @@ export default function SignInPage() {
   async function google() {
     setBusy(true); setErr(null); setMsg(null);
     try {
+      // Where to go after the callback. Kept in a short-lived cookie instead of
+      // a ?next= query param so `redirectTo` matches the Supabase allow-list
+      // exactly (query strings break exact matching).
+      document.cookie = `loka_oauth_next=${encodeURIComponent(next)}; path=/; max-age=600; samesite=lax`;
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+          redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: { prompt: "select_account" },
         },
       });
