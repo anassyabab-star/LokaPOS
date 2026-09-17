@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useOrder, rm, swatchFor } from "../order-provider";
 import type { Product, Category } from "../types";
 import { ItemSheet } from "@/components/order/ItemSheet";
+import { MissionStrip } from "@/components/order/MissionCards";
 
 export default function MenuPage() {
   const { cartCount, subtotal, lastOrder, setLastOrder, member } = useOrder();
@@ -134,6 +135,8 @@ export default function MenuPage() {
               <span className="font-sans text-[13px] font-semibold text-melon-soft">→</span>
             </Link>
           )}
+
+          <MissionStrip phone={member?.phone} />
         </div>
 
         {/* cream sheet */}

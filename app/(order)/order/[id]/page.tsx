@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useOrder, rm, normalizeMyPhone, localPhone } from "../../order-provider";
+import { MissionDone } from "@/components/order/MissionCards";
 import { readyAlert } from "@/lib/client-beep";
 
 type Track = {
@@ -328,6 +329,10 @@ export default function OrderPage() {
 
       {/* journey actions */}
       <div className="flex-1 px-5 pt-5">
+        {/* Celebrate a challenge this order just finished, while it still
+            feels connected to the purchase. */}
+        {!isCancelled && <MissionDone phone={phone} sinceIso={track?.created_at || order?.createdAt || null} />}
+
         {isCancelled ? (
           <Link href="/menu" className="block w-full rounded-[16px] bg-maroon py-3.5 text-center font-sans text-[14px] font-semibold text-cream active:scale-[.99]">
             Order again →

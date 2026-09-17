@@ -85,6 +85,7 @@ export async function evaluateMissionsOnPaid(
     .eq("active", true);
   if (mErr) {
     if (isMissingRelationError(mErr.message)) return; // schema not ready
+    console.error("[missions] could not load definitions:", mErr.message);
     return;
   }
 
@@ -107,7 +108,14 @@ export async function evaluateMissionsOnPaid(
         p_threshold: m.threshold,
         p_repeatable: m.repeatable,
       });
-      if (rpcErr) continue;
+      if (rpcErr) {
+        // This silently ate a 42702 ("cycle_index is ambiguous") on every call
+        // for two months, so the engine looked healthy while recording
+        // nothing. Missions still must not break settlement — but a failure
+        // has to be visible in the logs.
+        console.error(`[missions] ${m.code} record failed:`, rpcErr.message);
+        continue;
+      }
 
       const result = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as
         | { progress_id: string | null; cycle_index: number | null; completed: boolean; already_counted: boolean }

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrder, rm, localPhone } from "../order-provider";
+import { MissionList } from "@/components/order/MissionCards";
 
 type Tier = { points: number; amount: number; label: string };
 type Activity = { id: string; receipt_number: string | null; short_number?: string; status: string | null; total: number | null; created_at: string };
@@ -44,7 +45,11 @@ function shortNo(o: Activity) {
 export default function RewardsPage() {
   const router = useRouter();
   const { contact, clearSession, member } = useOrder();
-  const phone = contact.phone;
+  // Prefer the phone the server confirmed for this session. contact.phone is
+  // a localStorage leftover that can be a number the customer typed as a guest
+  // long ago — with that stale value the whole page (balance, vouchers,
+  // challenges) silently reports on the wrong account, or on none.
+  const phone = member?.phone || contact.phone;
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -231,6 +236,8 @@ export default function RewardsPage() {
             </div>
           </div>
         )}
+
+        <MissionList phone={phone} />
 
         {/* redeem */}
         <div>
