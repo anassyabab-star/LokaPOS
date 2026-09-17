@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { normalizeOtpPhone, setPhoneOtpSession, verifyOtpHash } from "@/lib/phone-otp";
 import { issueCouponsOnSignup } from "@/lib/coupons";
+import { phoneVariants } from "@/lib/phone";
 
 const MAX_ATTEMPTS = 5;
 
@@ -55,18 +56,39 @@ export async function POST(req: Request) {
     .update({ consumed_at: new Date().toISOString() })
     .eq("id", row.id);
 
-  // Welcome coupon for a brand-new member. This path only knows the phone, so
-  // look the customer up; a number with no customer row yet gets the coupon on
-  // its first order instead (the row is created there).
+  // Verifying a phone with a WhatsApp code IS registration on this path — the
+  // customer may have no Google account and no row yet. Without creating one
+  // they end up "signed in" with no account at all: no balance, no history,
+  // no welcome coupon. Match every legacy phone shape first so an existing
+  // member is never duplicated.
   try {
-    const { data: customer } = await supabase
+    const { data: found } = await supabase
       .from("customers")
-      .select("id")
-      .eq("phone", phone)
+      .select("id,phone")
+      .in("phone", phoneVariants(phone))
+      .order("total_orders", { ascending: false })
+      .limit(1)
       .maybeSingle();
-    await issueCouponsOnSignup(customer?.id);
+
+    let customerId = found?.id || null;
+    if (found && found.phone !== phone) {
+      await supabase.from("customers").update({ phone }).eq("id", found.id);
+    }
+
+    if (!customerId) {
+      const { data: created } = await supabase
+        .from("customers")
+        // customers.name is NOT NULL and this path has no name yet — the
+        // empty string is filled in on their first order.
+        .insert([{ name: "", phone, consent_whatsapp: true, consent_source: "customer_app", total_orders: 0, total_spend: 0 }])
+        .select("id")
+        .maybeSingle();
+      customerId = created?.id || null;
+    }
+
+    await issueCouponsOnSignup(customerId);
   } catch {
-    // Never block sign-in on the coupon.
+    // Never block sign-in on account creation or the coupon.
   }
 
   const res = NextResponse.json({ success: true });

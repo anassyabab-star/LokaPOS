@@ -277,7 +277,7 @@ export async function POST(req: Request) {
     const normalizedPhone = canonicalPhone(customerPhone);
     const { data: phoneMatches } = await supabase
       .from("customers")
-      .select("id, phone, consent_whatsapp, total_orders")
+      .select("id, name, phone, consent_whatsapp, total_orders")
       .in("phone", phoneVariants(customerPhone))
       .order("total_orders", { ascending: false })
       .limit(5);
@@ -298,8 +298,15 @@ export async function POST(req: Request) {
         .select("id")
         .maybeSingle();
       customerId = newCustomer?.id || null;
-    } else if (!existingCustomer?.consent_whatsapp) {
-      await supabase.from("customers").update({ consent_whatsapp: true }).eq("id", customerId);
+    } else {
+      // Fill in details we did not have when the row was created. A phone-only
+      // sign-up has no name until the customer types one at checkout.
+      const patch: Record<string, unknown> = {};
+      if (!existingCustomer?.consent_whatsapp) patch.consent_whatsapp = true;
+      if (!String(existingCustomer?.name || "").trim() && customerName) patch.name = customerName;
+      if (Object.keys(patch).length > 0) {
+        await supabase.from("customers").update(patch).eq("id", customerId);
+      }
     }
 
     if (customerId) {
