@@ -1,0 +1,16 @@
+# Vercel uses this file INSTEAD of .gitignore, so it must repeat everything
+# there. Keeping the env files out matters most: `vercel deploy` uploads the
+# working directory, and Next.js loads a stray .env.local during the build —
+# which would bake localhost URLs and dev switches into production.
+.next
+node_modules
+.env
+.env.local
+.env.*.local
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tsconfig.tsbuildinfo
+.vercel
