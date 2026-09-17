@@ -18,6 +18,7 @@ import {
 } from "@/lib/loyalty";
 import { normalizeOtpPhone, requirePhoneOtp } from "@/lib/phone-otp";
 import { loadRedeemableCoupon } from "@/lib/coupons";
+import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import { computeVoucherDiscount, type CartItemLite } from "@/lib/rewards-vouchers";
 import { normalizeOrderType, sanitizeTargetLabel, shortOrderNumber } from "@/lib/order-flow";
 import { isMissingColumnError } from "@/lib/order-status";
@@ -251,13 +252,21 @@ export async function POST(req: Request) {
     const calculated = await calculateCustomerOrderItems(parsedItems);
     const numbering = await generateOrderNumber();
 
-    // Find or create customer by phone
-    const normalizedPhone = customerPhone.replace(/[^\d+]/g, "");
-    const { data: existingCustomer } = await supabase
+    // Find or create customer by phone. Match every legacy shape of the same
+    // number ("60…", "+60…", bare digits) so an existing customer is never
+    // duplicated, but always store the canonical "0…" form.
+    const normalizedPhone = canonicalPhone(customerPhone);
+    const { data: phoneMatches } = await supabase
       .from("customers")
-      .select("id, consent_whatsapp")
-      .eq("phone", normalizedPhone)
-      .maybeSingle();
+      .select("id, phone, consent_whatsapp, total_orders")
+      .in("phone", phoneVariants(customerPhone))
+      .order("total_orders", { ascending: false })
+      .limit(5);
+    // Prefer the row with the most history if legacy duplicates still exist.
+    const existingCustomer = (phoneMatches || [])[0] || null;
+    if (existingCustomer && existingCustomer.phone !== normalizedPhone) {
+      await supabase.from("customers").update({ phone: normalizedPhone }).eq("id", existingCustomer.id);
+    }
 
     let customerId: string | null = existingCustomer?.id || null;
     const isNewCustomer = !customerId;

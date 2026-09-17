@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { sendPointsReceiptMessage } from "@/lib/whatsapp";
@@ -97,7 +98,7 @@ type CustomerPayload = {
 };
 
 function normalizePhone(value: string) {
-  return value.replace(/[^\d+]/g, "").trim();
+  return canonicalPhone(value);
 }
 
 function normalizeEmail(value: string) {
@@ -577,7 +578,7 @@ export async function POST(req: Request) {
     }
 
     // B1F1 promo — atomic insert-first to prevent race condition double-redeem
-    b1f1Phone = String(body?.b1f1_phone || "").trim().replace(/\s+/g, "").replace(/^(\+?60|0)/, "60").toLowerCase();
+    b1f1Phone = canonicalPhone(body?.b1f1_phone);
     let b1f1DiscountApplied = 0;
 
     if (b1f1Phone) {

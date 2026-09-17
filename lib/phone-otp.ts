@@ -1,5 +1,6 @@
 import { createHmac, randomInt, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 
 // ============================================================================
 // Phone OTP — WhatsApp one-time-code auth for public loyalty actions
@@ -43,7 +44,7 @@ function safeEqualHex(a: string, b: string) {
 
 /** Normalize to the same shape customers.phone is stored in. */
 export function normalizeOtpPhone(value: string) {
-  return String(value || "").replace(/[^\d+]/g, "").trim();
+  return canonicalPhone(value);
 }
 
 /** Generate a 6-digit numeric OTP. */

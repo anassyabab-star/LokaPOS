@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const PROMO_CODE = "B1F1_KOPI";
 
+// Was producing "60XXXXXXXXX" while customers.phone stores "0XXXXXXXXX",
+// so B1F1 lookups missed the customer entirely.
 function normalizePhone(phone: string) {
-  return phone.replace(/\s+/g, "").replace(/^(\+?60|0)/, "60").toLowerCase();
+  return canonicalPhone(phone);
 }
 
 export async function GET(req: NextRequest) {

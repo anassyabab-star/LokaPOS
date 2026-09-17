@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { loadRedeemableCoupon } from "@/lib/coupons";
 
@@ -7,7 +8,7 @@ import { loadRedeemableCoupon } from "@/lib/coupons";
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const code = String(searchParams.get("code") || "").trim().toUpperCase();
-  const phone = String(searchParams.get("phone") || "").replace(/[^\d+]/g, "");
+  const phone = canonicalPhone(searchParams.get("phone"));
   if (!code) return NextResponse.json({ valid: false, reason: "not_found" });
   if (!phone) return NextResponse.json({ valid: false, reason: "wrong_customer" });
 

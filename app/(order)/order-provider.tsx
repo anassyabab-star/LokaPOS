@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { canonicalPhone, localPhoneDigits } from "@/lib/phone";
 
 export type CartLine = {
   /** Unique per configured line (same product with different options = new line). */
@@ -262,16 +263,20 @@ export function OrderToast() {
 
 /** Canonical Malaysian phone ("0123…"/"123…"/"+60…" → "60123…") so the customer
  *  record, OTP and redeem all key on the same value. */
+/**
+ * Canonical phone for everything this app stores.
+ *
+ * This used to return "60XXXXXXXXX" while the POS, OTP and import paths wrote
+ * "0XXXXXXXXX", so the same customer ended up with two `customers` rows and a
+ * split points balance. Both now go through lib/phone.
+ */
 export function normalizeMyPhone(input: string) {
-  let d = String(input || "").replace(/\D/g, "");
-  if (d.startsWith("0")) d = "60" + d.slice(1);
-  else if (!d.startsWith("60")) d = "60" + d;
-  return d;
+  return canonicalPhone(input);
 }
 
-/** Local part for display in a "+60" input (strips the 60 country code). */
+/** Local part for display in a "+60" input (strips the country code). */
 export function localPhone(canonical: string) {
-  return String(canonical || "").replace(/^60/, "");
+  return localPhoneDigits(canonical);
 }
 
 /** RM formatter — whole numbers without decimals (design: "RM 12"), else 2dp. */

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { calculateLoyaltySnapshot, getLoyaltyConfig } from "@/lib/loyalty";
@@ -83,8 +84,9 @@ export function customerApiError(
   return NextResponse.json({ error: message, code, details }, { status });
 }
 
+/** Canonical "0XXXXXXXXX" — see lib/phone for why this is the stored shape. */
 export function normalizeCustomerPhone(value: string) {
-  return value.replace(/[^\d+]/g, "").trim();
+  return canonicalPhone(value);
 }
 
 export function normalizeCustomerEmail(value: string) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getLoyaltyConfig, loyaltyExpiresAt } from "@/lib/loyalty";
 import { insertLedgerEvent } from "@/lib/customer-order-payment";
@@ -10,7 +11,7 @@ import { issueRewardVoucher } from "@/lib/rewards-vouchers";
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const orderId = String(body?.order_id || "").trim();
-  const phone = String(body?.phone || "").replace(/[^\d+]/g, "");
+  const phone = canonicalPhone(body?.phone);
   const rating = Math.max(1, Math.min(5, Math.round(Number(body?.rating || 0))));
   const comment = String(body?.comment || "").trim().slice(0, 1000) || null;
 

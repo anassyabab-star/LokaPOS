@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 // POST { order_id, phone } — customer confirms they've collected the order.
@@ -6,7 +7,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const orderId = String(body?.order_id || "").trim();
-  const phone = String(body?.phone || "").replace(/[^\d+]/g, "");
+  const phone = canonicalPhone(body?.phone);
   if (!orderId || !phone) {
     return NextResponse.json({ error: "order_id & phone diperlukan" }, { status: 400 });
   }

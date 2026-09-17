@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   calculateLoyaltySnapshot,
@@ -13,7 +14,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const orderId = searchParams.get("order_id");
   const rawPhone = searchParams.get("phone");
-  const phone = rawPhone ? rawPhone.replace(/[^\d+]/g, "").trim() : null;
+  const phone = rawPhone ? canonicalPhone(rawPhone) || null : null;
 
   if (!orderId && !phone) {
     return NextResponse.json({ error: "order_id or phone required" }, { status: 400 });
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "phone required to track order" }, { status: 400 });
     }
 
-    const normalized = phone.replace(/[^\d+]/g, "").trim();
+    const normalized = phone;
     const { data: customer } = await supabase
       .from("customers")
       .select("id")

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { canonicalPhone } from "@/lib/phone";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { calculateLoyaltySnapshot, computeMembershipTier, getLoyaltyConfig } from "@/lib/loyalty";
 
 function normalizePhone(value: string) {
-  return value.replace(/[^\d+]/g, "").trim();
+  return canonicalPhone(value);
 }
 
 function isMissingRelationError(message: string | null | undefined) {
