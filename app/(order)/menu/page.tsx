@@ -96,7 +96,7 @@ export default function MenuPage() {
             <div>
               <div className="font-sans text-[13px] font-medium text-[#C9A88F]">Welcome to Loka</div>
               <h1 className="mt-1 font-display text-[26px] font-semibold leading-[1.1] tracking-[-.01em] text-cream">
-                What are we<br />spinning today?
+                What can we<br />get you?
               </h1>
             </div>
             {/* `member` is null until /api/public/me answers, so the signed-out

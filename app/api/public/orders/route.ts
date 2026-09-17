@@ -211,6 +211,25 @@ export async function POST(req: Request) {
   const tableNumber = orderType === "take_away" ? null : requestedTable;
   const paysAtCounter = paymentMethod === "cash";
 
+  // An online rail that the owner has switched off must not produce an order
+  // the customer cannot pay for. Checkout no longer offers it, but a cached
+  // page or a direct POST still can.
+  if (!paysAtCounter) {
+    const { data: settingsRow } = await createSupabaseAdminClient()
+      .from("store_settings")
+      .select("payment_methods")
+      .eq("id", "main")
+      .maybeSingle();
+    const enabled = (settingsRow?.payment_methods || {}) as Record<string, boolean>;
+    const anyOnline = ["fpx", "card", "ewallet"].some(k => enabled[k]);
+    if (!anyOnline || enabled[paymentMethod] === false) {
+      return NextResponse.json(
+        { error: "Online payment isn't available right now. Please choose Pay at counter." },
+        { status: 400 }
+      );
+    }
+  }
+
   if (!customerName) return NextResponse.json({ error: "Name is required" }, { status: 400 });
   if (!customerPhone || customerPhone.replace(/[^\d]/g, "").length < 8) {
     return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });

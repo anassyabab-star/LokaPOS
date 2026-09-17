@@ -4,7 +4,7 @@
 // + payment, then places a real order via POST /api/public/orders and snapshots
 // it as `lastOrder` for the confirmation/track screen.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOrder, rm, normalizeMyPhone, localPhone } from "../order-provider";
 
@@ -55,6 +55,29 @@ export default function CheckoutPage() {
   const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
   const [couponChecking, setCouponChecking] = useState(false);
+  // Which rails the owner has switched on. Checkout used to hard-code both
+  // options, so "Pay online now" kept showing after online was turned off in
+  // Settings — the customer picked a way to pay that does not exist.
+  const [methods, setMethods] = useState<Record<string, boolean> | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetch("/api/public/store-status", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { if (live && d?.payment_methods) setMethods(d.payment_methods as Record<string, boolean>); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  // Unknown (still loading, or the call failed) falls back to counter-only:
+  // never offer an online payment we cannot be sure is switched on.
+  const onlineRails = methods ? ["fpx", "card", "ewallet"].filter(k => methods[k]) : [];
+  const onlineEnabled = onlineRails.length > 0;
+
+  // If the customer had online selected and it turns out to be off, move them.
+  useEffect(() => {
+    if (methods && !onlineEnabled && payment === "online") setPayment("counter");
+  }, [methods, onlineEnabled, payment]);
 
   // The cart is restored from localStorage in an effect, so on the first render
   // after any reload it still looks empty. Redirecting here without waiting
@@ -220,9 +243,16 @@ export default function CheckoutPage() {
         <div className="rounded-[18px] border border-hairline bg-card p-4 shadow-card">
           <div className="mb-2.5 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Payment</div>
           {([
-            { key: "online", title: "Pay online now", sub: "Card, FPX, e-wallet" },
-            { key: "counter", title: "Pay at counter", sub: "Show your Order ID to the cashier · cash, QR or card" },
-          ] as const).map(opt => {
+            ...(onlineEnabled
+              ? [{
+                  key: "online" as const,
+                  title: "Pay online now",
+                  // Name only the rails that are actually switched on.
+                  sub: onlineRails.map(r => (r === "fpx" ? "FPX" : r === "card" ? "Card" : "E-wallet")).join(", "),
+                }]
+              : []),
+            { key: "counter" as const, title: "Pay at counter", sub: "Show your Order ID to the cashier · cash, QR or card" },
+          ]).map(opt => {
             const on = payment === opt.key;
             return (
               <button key={opt.key} onClick={() => setPayment(opt.key)} className={`mt-2 flex w-full items-center gap-3 rounded-[14px] border px-3.5 py-3 text-left transition first:mt-0 active:scale-[.99] ${on ? "border-maroon bg-maroon/5" : "border-hairline"}`}>
