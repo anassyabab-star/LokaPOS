@@ -85,7 +85,7 @@ export default function WelcomePage() {
 
             {closed && (
               <div className="mt-5 rounded-[14px] border border-melon/30 bg-melon/10 px-4 py-3 font-sans text-[13px] text-melon-soft">
-                ⏰ We're closed right now. You can browse the menu, but orders are only accepted during opening hours.
+                ⏰ We&rsquo;re closed right now. You can browse the menu, but orders are only accepted during opening hours.
               </div>
             )}
 

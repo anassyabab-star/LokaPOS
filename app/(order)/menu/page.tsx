@@ -115,7 +115,7 @@ export default function MenuPage() {
           {storeOpen === false && (
             <div className="mb-5 px-[22px]">
               <div className="rounded-[18px] border border-melon/30 bg-melon/10 px-4 py-3 font-sans text-[13px] text-espresso">
-                ⏰ <span className="font-semibold">We're closed right now.</span> You can browse the menu, but orders are only accepted during opening hours.
+                ⏰ <span className="font-semibold">We&rsquo;re closed right now.</span> You can browse the menu, but orders are only accepted during opening hours.
               </div>
             </div>
           )}
@@ -144,7 +144,7 @@ export default function MenuPage() {
           ) : error ? (
             <div className="px-6 py-16 text-center">
               <div className="text-3xl">⚠️</div>
-              <p className="mt-3 font-sans text-[14px] text-muted">Couldn't load the menu.</p>
+              <p className="mt-3 font-sans text-[14px] text-muted">Couldn&rsquo;t load the menu.</p>
               <button onClick={() => location.reload()} className="mt-4 rounded-[12px] bg-maroon px-5 py-2.5 font-sans text-[13px] font-semibold text-cream">Try again</button>
             </div>
           ) : (
