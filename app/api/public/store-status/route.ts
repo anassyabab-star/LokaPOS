@@ -46,15 +46,26 @@ export async function GET() {
       ? Number(settings?.unpaid_order_expiry_minutes)
       : DEFAULT_UNPAID_EXPIRY_MINUTES;
 
-    return NextResponse.json({
-      is_open: Boolean(shift),
-      payment_methods,
-      loyalty_config,
-      kds_enabled,
-      dine_in_tables,
-      unpaid_order_expiry_minutes,
-      whatsapp_order_notifications: orderNotificationsEnabled(),
-    });
+    return NextResponse.json(
+      {
+        is_open: Boolean(shift),
+        payment_methods,
+        loyalty_config,
+        kds_enabled,
+        dine_in_tables,
+        unpaid_order_expiry_minutes,
+        whatsapp_order_notifications: orderNotificationsEnabled(),
+      },
+      {
+        headers: {
+          // Same answer for everyone, and every QR scan asks for it — a short
+          // window collapses a rush of scans into one origin hit. Deliberately
+          // brief: `is_open` flips when staff open the register, and nobody
+          // should see "closed" for long after that.
+          "Cache-Control": "public, s-maxage=10, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch {
     return NextResponse.json({
       is_open: false,
