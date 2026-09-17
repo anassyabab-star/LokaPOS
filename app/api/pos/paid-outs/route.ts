@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
+import { getCashSalesSince } from "@/lib/shift-cash";
 
 type ShiftRow = {
   id: string;
@@ -8,10 +9,6 @@ type ShiftRow = {
   opened_at: string;
   opening_cash: number;
   status: "open" | "closed";
-};
-
-type CashOrderRow = {
-  total: number | null;
 };
 
 type PaidOutRow = {
@@ -58,21 +55,8 @@ async function getOpenShift(
   return (data as ShiftRow | null) || null;
 }
 
-async function getCashSalesSince(
-  supabase: ReturnType<typeof createSupabaseAdminClient>,
-  openedAt: string
-) {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("total")
-    .eq("status", "completed")
-    .eq("payment_method", "cash")
-    .eq("payment_status", "paid")
-    .gte("created_at", openedAt);
-
-  if (error) throw error;
-  return ((data || []) as CashOrderRow[]).reduce((sum, row) => sum + Number(row.total || 0), 0);
-}
+// Cash drawer maths live in lib/shift-cash.ts (counts every PAID cash order,
+// including ones still queued on the Kitchen Display).
 
 async function getPaidOutTotal(
   supabase: ReturnType<typeof createSupabaseAdminClient>,

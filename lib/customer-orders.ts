@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isMissingRelationError } from "@/lib/customer-api";
+import { myDateKey, nextReceiptNumber } from "@/lib/order-numbering";
 
 // Economy constants and calculateRedeem now live in lib/loyalty.ts (single
 // source of truth). Re-exported here so existing importers keep working.
@@ -87,25 +88,15 @@ export function formatSugarLevel(value: string | null | undefined) {
   return key;
 }
 
+/**
+ * Daily receipt number for a customer-web order. Same atomic sequence as the
+ * POS (`get_next_receipt_number` RPC) and the same Malaysia-time business day,
+ * so web and counter orders never collide or drift after 16:00 UTC.
+ */
 export async function generateOrderNumber() {
-  const supabase = createSupabaseAdminClient();
-  const today = new Date();
-  const dateKey = today.toISOString().slice(0, 10);
-  const datePart = today.toLocaleDateString("en-GB").split("/").join("");
-
-  const { count, error } = await supabase
-    .from("orders")
-    .select("id", { count: "exact", head: true })
-    .eq("date_key", dateKey);
-
-  if (error) throw new Error(error.message);
-
-  const orderNumber = (count || 0) + 1;
-  const formattedNumber = String(orderNumber).padStart(3, "0");
-  return {
-    dateKey,
-    orderNumber: `${datePart}-${formattedNumber}`,
-  };
+  const dateKey = myDateKey();
+  const orderNumber = await nextReceiptNumber(dateKey);
+  return { dateKey, orderNumber };
 }
 
 export async function calculateCustomerOrderItems(items: CustomerOrderRequestItem[]) {

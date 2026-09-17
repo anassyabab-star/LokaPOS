@@ -131,16 +131,30 @@ export async function POST(req: Request) {
 
     const total = Number(order.total || 0);
     if (total <= 0) {
-      const { data: paidOrder, error: paidError } = await supabase
+      const zeroPayload: Record<string, unknown> = {
+        payment_status: "paid",
+        status: await statusOnPaid(order.status),
+        paid_at: new Date().toISOString(),
+      };
+      let { data: paidOrder, error: paidError } = await supabase
         .from("orders")
-        .update({
-          payment_status: "paid",
-          status: await statusOnPaid(order.status),
-        })
+        .update(zeroPayload)
         .eq("id", order.id)
         .neq("payment_status", "paid")
+        .neq("status", "cancelled")
         .select("id,customer_id,receipt_number,total,discount_value")
         .maybeSingle();
+      if (paidError && String(paidError.message).toLowerCase().includes("paid_at")) {
+        delete zeroPayload.paid_at;
+        ({ data: paidOrder, error: paidError } = await supabase
+          .from("orders")
+          .update(zeroPayload)
+          .eq("id", order.id)
+          .neq("payment_status", "paid")
+          .neq("status", "cancelled")
+          .select("id,customer_id,receipt_number,total,discount_value")
+          .maybeSingle());
+      }
       if (paidError) {
         return NextResponse.json({ error: paidError.message }, { status: 500 });
       }

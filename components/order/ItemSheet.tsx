@@ -64,21 +64,27 @@ export function ItemSheet({ product, onClose }: { product: Product | null; onClo
 
   return (
     <div
-      className="absolute inset-0 z-50 flex flex-col justify-end"
+      className="fixed inset-0 z-50 flex items-end justify-center"
       onClick={onClose}
     >
       <div className="absolute inset-0 animate-fadeIn" style={{ background: "rgba(28,19,14,.5)" }} />
+      {/* Sheet: header + scrollable body + always-visible footer. Capped well
+          below the viewport so the CTA never hides behind the browser bar. */}
       <div
-        className="relative animate-sheetUp max-h-[90%] overflow-auto rounded-t-[28px] bg-cream"
+        className="relative flex w-full max-w-[440px] animate-sheetUp flex-col rounded-t-[28px] bg-cream"
+        style={{ maxHeight: "min(88dvh, 720px)" }}
         onClick={e => e.stopPropagation()}
       >
-        {/* drag handle */}
-        <div className="flex justify-center pt-3 pb-1">
+        {/* drag handle + close */}
+        <div className="relative flex flex-none justify-center pt-3 pb-1">
           <div className="h-[5px] w-[38px] rounded-full bg-hairline" />
+          <button onClick={onClose} aria-label="Close" className="absolute right-4 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-cream-2 text-[16px] leading-none text-muted active:scale-95">✕</button>
         </div>
 
-        {/* image header */}
-        <div className="relative mx-5 mt-1 flex h-[150px] items-start justify-between overflow-hidden rounded-[18px] p-3" style={{ background: swatch }}>
+        {/* scrollable body */}
+        <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pb-3">
+        {/* image header — shorter on small phones so options stay visible */}
+        <div className="relative mx-5 mt-1 flex items-start justify-between overflow-hidden rounded-[18px] p-3" style={{ background: swatch, height: "clamp(96px, 18dvh, 150px)" }}>
           {product.image_url && (
             <img src={product.image_url} alt={product.name} className="absolute inset-0 h-full w-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
           )}
@@ -90,9 +96,9 @@ export function ItemSheet({ product, onClose }: { product: Product | null; onClo
         </div>
 
         {/* title + base price */}
-        <div className="px-5 pt-4">
-          <h2 className="font-display text-[22px] font-semibold leading-tight tracking-[-.01em] text-espresso">{product.name}</h2>
-          <div className="mt-1.5 font-sans text-[13px] text-muted">Base {rm(Number(product.price))}</div>
+        <div className="px-5 pt-3.5">
+          <h2 className="font-display text-[20px] font-semibold leading-tight tracking-[-.01em] text-espresso">{product.name}</h2>
+          <div className="mt-1 font-sans text-[13px] text-muted">Base {rm(Number(product.price))}</div>
         </div>
 
         {/* variants — segmented single-select */}
@@ -147,17 +153,22 @@ export function ItemSheet({ product, onClose }: { product: Product | null; onClo
           </div>
         )}
 
-        {/* sticky footer: qty + add */}
-        <div className="safe-bottom sticky bottom-0 mt-5 border-t border-hairline bg-cream px-5 pb-4 pt-3">
+        </div>
+
+        {/* footer: qty + add — outside the scroll area, padded for the home indicator */}
+        <div
+          className="flex-none border-t border-hairline bg-cream px-5 pt-3"
+          style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}
+        >
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3 rounded-[14px] border border-hairline bg-card px-3 py-2">
-              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="h-7 w-7 text-[18px] leading-none text-muted active:scale-95" aria-label="Decrease">−</button>
+            <div className="flex items-center gap-2 rounded-[14px] border border-hairline bg-card px-2 py-1.5">
+              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="h-8 w-8 text-[18px] leading-none text-muted active:scale-95" aria-label="Decrease">−</button>
               <span className="min-w-5 text-center font-display text-[15px] font-semibold text-espresso">{qty}</span>
-              <button onClick={() => setQty(q => q + 1)} className="h-7 w-7 text-[18px] leading-none text-espresso active:scale-95" aria-label="Increase">+</button>
+              <button onClick={() => setQty(q => q + 1)} className="h-8 w-8 text-[18px] leading-none text-espresso active:scale-95" aria-label="Increase">+</button>
             </div>
             <button
               onClick={add}
-              className="flex flex-1 items-center justify-center gap-2 rounded-[16px] bg-maroon py-3.5 font-sans text-[15px] font-semibold text-cream transition active:scale-[.99]"
+              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-[16px] bg-maroon font-sans text-[15px] font-semibold text-cream transition active:scale-[.99]"
             >
               Add to order · {rm(unit * qty)}
             </button>

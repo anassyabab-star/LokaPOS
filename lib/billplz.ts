@@ -93,7 +93,7 @@ export function getBillplzConfig() {
   const enforceXSignature =
     String(process.env.BILLPLZ_ENFORCE_X_SIGNATURE || "false").trim().toLowerCase() === "true";
   const callbackToken = String(process.env.BILLPLZ_CALLBACK_TOKEN || "").trim();
-  const returnUrlDefault = String(process.env.BILLPLZ_RETURN_URL || `${siteUrl}/customer?tab=orders`).trim();
+  const returnUrlDefault = String(process.env.BILLPLZ_RETURN_URL || `${siteUrl}/orders`).trim();
   const callbackUrlDefault = String(
     process.env.BILLPLZ_CALLBACK_URL || `${siteUrl}/api/payments/billplz/callback`
   ).trim();

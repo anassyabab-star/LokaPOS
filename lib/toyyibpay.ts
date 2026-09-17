@@ -95,7 +95,7 @@ export function getToyyibpayConfig() {
     .trim()
     .replace(/\/+$/, "");
   const returnUrlDefault = String(
-    process.env.TOYYIBPAY_RETURN_URL || `${siteUrl}/customer?tab=orders`
+    process.env.TOYYIBPAY_RETURN_URL || `${siteUrl}/orders`
   ).trim();
   const callbackUrlDefault = String(
     process.env.TOYYIBPAY_CALLBACK_URL || `${siteUrl}/api/payments/toyyibpay/callback`

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { sendWhatsAppText } from "@/lib/whatsapp";
+import { getCashSalesSince } from "@/lib/shift-cash";
 
 type ShiftRow = {
   id: string;
@@ -12,7 +13,6 @@ type ShiftRow = {
   status: "open" | "closed";
 };
 
-type OrderCashRow = { total: number | null };
 type PaidOutRow = { amount: number | null };
 
 function toNum(v: number | string | null | undefined) {
@@ -46,19 +46,8 @@ export async function GET(req: NextRequest) {
 
     for (const shift of openShifts as ShiftRow[]) {
       try {
-        // Calculate expected cash
-        const { data: cashOrders } = await supabase
-          .from("orders")
-          .select("total")
-          .eq("status", "completed")
-          .eq("payment_method", "cash")
-          .eq("payment_status", "paid")
-          .gte("created_at", shift.opened_at);
-
-        const cashSales = ((cashOrders || []) as OrderCashRow[]).reduce(
-          (sum, o) => sum + toNum(o.total),
-          0
-        );
+        // Calculate expected cash (every PAID cash order since open — see lib/shift-cash.ts)
+        const cashSales = await getCashSalesSince(supabase, shift.opened_at);
 
         const { data: paidOutRows } = await supabase
           .from("paid_outs")
@@ -99,7 +88,7 @@ export async function GET(req: NextRequest) {
             .from("orders")
             .select("total, payment_method, status")
             .eq("date_key", shiftDate)
-            .in("status", ["completed", "preparing", "ready"]);
+            .in("status", ["pending", "preparing", "ready", "completed"]).eq("payment_status", "paid");
 
           const orders = todayOrders || [];
           const totalSales = orders.reduce((s, o) => s + toNum(o.total), 0);
@@ -139,7 +128,7 @@ export async function GET(req: NextRequest) {
 
           const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || "";
           if (adminPhone) {
-            await sendMurpatiText({ to: adminPhone, message: summary });
+            await sendWhatsAppText({ to: adminPhone, message: summary });
           }
         } catch (waErr) {
           console.error("[auto-close] WhatsApp failed:", waErr);

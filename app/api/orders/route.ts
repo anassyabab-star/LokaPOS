@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
-import { sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
+import { sendPointsReceiptMessage } from "@/lib/whatsapp";
 import { applyCustomerOrderPaidSettlement } from "@/lib/customer-order-payment";
 import { calculateRedeem, getAvailablePoints, getLoyaltyConfig, redeemPointsAtomic } from "@/lib/loyalty";
-import { isKdsEnabled } from "@/lib/kds";
+import { statusOnPaid } from "@/lib/kds";
+import { expireStaleUnpaidOrders } from "@/lib/order-expiry";
+import { isMissingColumnError as isAnyMissingColumnError } from "@/lib/order-status";
+import { myDateKey, nextReceiptNumber } from "@/lib/order-numbering";
+import { normalizeOrderType, sanitizeTargetLabel, shortOrderNumber } from "@/lib/order-flow";
 
 const supabase = createSupabaseAdminClient();
+
+const ORDER_LIST_COLS =
+  "id, receipt_number, customer_name, total, payment_method, payment_status, status, created_at, order_source";
+const ORDER_LIST_FLOW_COLS = ORDER_LIST_COLS + ", order_type, table_number, buzzer_number, paid_at";
 
 // ================= GET ORDERS (lightweight, for POS Orders tab) =================
 export async function GET(req: Request) {
@@ -18,32 +26,47 @@ export async function GET(req: Request) {
   const status = searchParams.get("status");
   const today = searchParams.get("today");
 
-  let query = supabase
-    .from("orders")
-    .select("id, receipt_number, customer_name, total, payment_method, payment_status, status, created_at, order_source")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (status && status !== "all") {
-    query = query.eq("status", status);
+  // Best-effort sweep of expired "awaiting_payment" orders (throttled inside).
+  try {
+    await expireStaleUnpaidOrders();
+  } catch {
+    /* never block the list */
   }
 
-  // Filter today's orders only (for POS frontend) using actual current date.
-  if (today === "1") {
-    const now = new Date();
-    const year = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
-    const month = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
-    const day = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
-    const dateKey = `${year}-${month}-${day}`;
-    query = query.eq("date_key", dateKey);
-  }
+  // `status` may be a single value or a comma list ("awaiting_payment,ready").
+  const statuses =
+    status && status !== "all"
+      ? status.split(",").map(s => s.trim().toLowerCase()).filter(Boolean)
+      : [];
 
-  const { data, error } = await query;
+  const buildQuery = (cols: string) => {
+    let q = supabase.from("orders").select(cols).order("created_at", { ascending: false }).limit(limit);
+    if (statuses.length === 1) q = q.eq("status", statuses[0]);
+    else if (statuses.length > 1) q = q.in("status", statuses);
+    // Today's orders only (POS frontend), keyed on the Malaysia business day.
+    if (today === "1") q = q.eq("date_key", myDateKey());
+    return q;
+  };
+
+  let { data, error } = await buildQuery(ORDER_LIST_FLOW_COLS);
+  if (error && isAnyMissingColumnError(error.message)) {
+    ({ data, error } = await buildQuery(ORDER_LIST_COLS));
+  }
   if (error) {
     return NextResponse.json({ orders: [], error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ orders: data || [] });
+  type ListRow = { id: string; receipt_number: string | null; [key: string]: unknown };
+  const orders = ((data || []) as unknown as ListRow[]).map(row => ({
+    order_type: null,
+    table_number: null,
+    buzzer_number: null,
+    paid_at: null,
+    ...row,
+    short_number: shortOrderNumber(row.receipt_number, row.id),
+  }));
+
+  return NextResponse.json({ orders });
 }
 
 type CustomerRow = {
@@ -319,26 +342,10 @@ export async function POST(req: Request) {
 
     // Use actual order date (not shift opening date) so receipt numbers and
     // reports reflect the real business day each order was placed.
-    const now = new Date();
-    const _y = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", year: "numeric" });
-    const _m = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", month: "2-digit" });
-    const _d = now.toLocaleString("en-GB", { timeZone: "Asia/Kuala_Lumpur", day: "2-digit" });
-    const dateKey = `${_y}-${_m}-${_d}`;
+    const dateKey = myDateKey();
 
-    // Atomic receipt number — no race condition
-    let receiptNumber: string;
-    const { data: rpcReceipt, error: rpcReceiptErr } = await supabase
-      .rpc("get_next_receipt_number", { p_date_key: dateKey });
-    if (!rpcReceiptErr && rpcReceipt) {
-      receiptNumber = String(rpcReceipt);
-    } else {
-      // Fallback if RPC unavailable
-      const { count } = await supabase
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .eq("date_key", dateKey);
-      receiptNumber = `${_d}${_m}${_y}-${String((count || 0) + 1).padStart(3, "0")}`;
-    }
+    // Atomic receipt number — same daily sequence as customer-web orders.
+    const receiptNumber = await nextReceiptNumber(dateKey);
 
     let subtotal = 0;
 
@@ -372,9 +379,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // POS orders are paid at the counter. With the kitchen flow on they enter the
-    // KDS queue as "pending"; with it off they land straight in as "completed".
-    const kdsEnabled = await isKdsEnabled();
+    // POS orders are paid at the counter, at creation. statusOnPaid() puts them
+    // in the KDS BARU lane ("pending") or straight at "completed" when KDS is off.
+    const paidStatus = await statusOnPaid();
+    const posTable = sanitizeTargetLabel(body.table_number);
+    const posBuzzer = sanitizeTargetLabel(body.buzzer_number);
+    const posOrderType = normalizeOrderType(body.order_type) ?? (posTable ? "dine_in" : null);
 
     const orderInsertBasePayload = {
       receipt_number: receiptNumber,
@@ -387,27 +397,36 @@ export async function POST(req: Request) {
       payment_method: body.payment_method || "cash",
       cash_received: Number(body.cash_received || 0),
       balance: 0,
-      status: kdsEnabled ? "pending" : "completed",
+      status: paidStatus,
       payment_status: "paid",
+    };
+    const orderFlowPayload = {
+      paid_at: new Date().toISOString(),
+      order_type: posOrderType,
+      table_number: posOrderType === "take_away" ? null : posTable,
+      buzzer_number: posBuzzer,
     };
 
     let orderInsert = await supabase
       .from("orders")
-      .insert([
-        {
-          ...orderInsertBasePayload,
-          order_source: "pos",
-        },
-      ])
+      .insert([{ ...orderInsertBasePayload, ...orderFlowPayload, order_source: "pos" }])
       .select()
       .single();
 
-    if (orderInsert.error && isMissingColumnError(orderInsert.error.message, "order_source")) {
+    // Pre-migration DBs: retry without the pay-at-counter columns, then without order_source.
+    if (orderInsert.error && isAnyMissingColumnError(orderInsert.error.message)) {
       orderInsert = await supabase
         .from("orders")
-        .insert([orderInsertBasePayload])
+        .insert([{ ...orderInsertBasePayload, order_source: "pos" }])
         .select()
         .single();
+      if (orderInsert.error && isMissingColumnError(orderInsert.error.message, "order_source")) {
+        orderInsert = await supabase
+          .from("orders")
+          .insert([orderInsertBasePayload])
+          .select()
+          .single();
+      }
     }
 
     const { data: order, error } = orderInsert;
@@ -716,8 +735,22 @@ export async function POST(req: Request) {
             msg += `⏳ _Luput: ${expiryDate}_\n\n`;
             msg += `— ${storeName}`;
 
-            console.log("[orders] Sending loyalty WA to", customerPhone, "| msg:", msg);
-            await sendMurpatiText({ to: customerPhone, message: msg });
+            const pointsLine = [
+              earnPoints > 0 ? `Points diterima: +${earnPoints} pts` : "",
+              appliedRedeemPoints > 0 ? `Points ditukar: -${appliedRedeemPoints} pts` : "",
+            ].filter(Boolean).join(" · ");
+            await sendPointsReceiptMessage({
+              to: customerPhone,
+              name: custName || "Customer",
+              purchaseDate,
+              amount: Number(total).toFixed(2),
+              pointsLine: pointsLine || "-",
+              balancePoints: String(balanceNum),
+              balanceRm: redeemRm,
+              expiryDate,
+              storeName,
+              text: msg,
+            });
           }
         } catch (waErr) {
           // Never fail the order if WhatsApp fails

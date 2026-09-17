@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import type { CookieOptions } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
+import { clearPhoneOtpSession } from "@/lib/phone-otp";
 
 function clearSupabaseCookies(request: NextRequest, response: NextResponse) {
   const cookies = request.cookies.getAll();
@@ -12,6 +13,8 @@ function clearSupabaseCookies(request: NextRequest, response: NextResponse) {
       });
     }
   });
+  // The loyalty phone session must not outlive the account session.
+  clearPhoneOtpSession(response);
 }
 
 async function signOutWithServerClient(request: NextRequest, response: NextResponse) {

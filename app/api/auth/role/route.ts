@@ -10,7 +10,6 @@ export async function GET() {
 
   const fallback =
     (user.app_metadata?.role as string | undefined) ||
-    (user.user_metadata?.role as string | undefined) ||
     null;
 
   const role = await resolveCurrentUserRole(user.id, fallback);

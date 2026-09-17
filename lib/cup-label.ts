@@ -14,6 +14,10 @@ export type CupLabelItem = {
 
 export type CupLabelPayload = {
   receiptNumber: string;
+  /** Short daily Order ID ("042") shown instead of the long receipt number. */
+  shortNumber?: string | null;
+  /** "Meja 7" / "Buzzer 12" / "Take Away" — printed as a red tag. */
+  target?: string | null;
   customerName?: string | null;
   createdAt: string;
   orderId: string;
@@ -42,8 +46,9 @@ const LABEL_STYLES = `
   .label { width: 50mm; height: 30mm; padding: 1.5mm 2mm; display: flex; gap: 1.5mm; overflow: hidden; page-break-inside: avoid; }
   .info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; }
   .order-line { display: flex; align-items: center; gap: 1.5mm; }
-  .order-num { font-size: 8pt; font-weight: 800; letter-spacing: -0.3px; }
+  .order-num { font-size: 9pt; font-weight: 800; letter-spacing: -0.3px; }
   .item-badge { font-size: 5.5pt; font-weight: 600; background: #111; color: #fff; border-radius: 2px; padding: 0.3mm 1mm; }
+  .target { font-size: 5.5pt; font-weight: 700; background: #7F1D1D; color: #fff; border-radius: 2px; padding: 0.3mm 1mm; white-space: nowrap; }
   .drink { font-size: 7.5pt; font-weight: 700; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .addons { font-size: 5.5pt; color: #7F1D1D; font-weight: 600; line-height: 1.2; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .sugar { font-size: 6pt; font-weight: 700; background: #f5f5f5; border: 0.5px solid #ddd; border-radius: 2px; padding: 0.3mm 1.2mm; display: inline-block; }
@@ -57,6 +62,8 @@ const LABEL_STYLES = `
 
 function buildLabelBlock(opts: {
   receiptNumber: string;
+  shortNumber?: string | null;
+  target?: string | null;
   drinkName: string;
   addons: string;
   sugar: string;
@@ -69,8 +76,9 @@ function buildLabelBlock(opts: {
   <div class="info">
     <div>
       <div class="order-line">
-        <span class="order-num">#${escapeHtml(opts.receiptNumber)}</span>
+        <span class="order-num">#${escapeHtml(opts.shortNumber || opts.receiptNumber)}</span>
         ${opts.itemLabel ? `<span class="item-badge">${escapeHtml(opts.itemLabel)}</span>` : ""}
+        ${opts.target ? `<span class="target">${escapeHtml(opts.target)}</span>` : ""}
       </div>
       <div class="drink">${escapeHtml(opts.drinkName)}</div>
       ${opts.addons ? `<div class="addons">${escapeHtml(opts.addons)}</div>` : ""}
@@ -112,7 +120,8 @@ export function buildCupLabelHtml(payload: CupLabelPayload) {
     : "";
 
   const labelHtml = buildLabelBlock({
-    receiptNumber, drinkName, addons, sugar, customer, timeLabel, itemLabel,
+    receiptNumber, shortNumber: payload.shortNumber, target: payload.target,
+    drinkName, addons, sugar, customer, timeLabel, itemLabel,
     qrUrl: qrImageUrl(qrData),
   });
 
@@ -130,6 +139,8 @@ ${autoPrintScript}
 // e.g. Teh Tarik x2 = 2 separate sticker labels
 export function buildAllCupLabelsHtml(payload: {
   receiptNumber: string;
+  shortNumber?: string | null;
+  target?: string | null;
   customerName?: string | null;
   createdAt: string;
   orderId: string;
@@ -185,6 +196,8 @@ export function buildAllCupLabelsHtml(payload: {
 
       return buildLabelBlock({
         receiptNumber: payload.receiptNumber,
+        shortNumber: payload.shortNumber,
+        target: payload.target,
         drinkName, addons, sugar, customer, timeLabel, itemLabel, qrUrl,
       });
     })

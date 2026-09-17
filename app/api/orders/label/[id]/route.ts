@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { buildAllCupLabelsHtml } from "@/lib/cup-label";
+import { isMissingColumnError } from "@/lib/order-status";
+import { orderTarget, shortOrderNumber } from "@/lib/order-flow";
+
+type LabelOrderRow = {
+  id: string;
+  receipt_number: string | null;
+  created_at: string;
+  customer_name: string | null;
+  order_type?: string | null;
+  table_number?: string | null;
+  buzzer_number?: string | null;
+};
 
 function formatSugarLevel(value: string | null | undefined) {
   const key = String(value || "").toLowerCase();
@@ -29,15 +41,24 @@ export async function GET(
   try {
     const supabase = createSupabaseAdminClient();
 
-    // Fetch order
-    const { data: order, error: orderError } = await supabase
+    // Fetch order (tolerant of a DB without the pay-at-counter columns yet)
+    let { data: orderData, error: orderError } = await supabase
       .from("orders")
-      .select("id, receipt_number, created_at, customer_name")
+      .select("id, receipt_number, created_at, customer_name, order_type, table_number, buzzer_number")
       .eq("id", orderId)
       .maybeSingle();
+    if (orderError && isMissingColumnError(orderError.message)) {
+      ({ data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .select("id, receipt_number, created_at, customer_name")
+        .eq("id", orderId)
+        .maybeSingle());
+    }
 
     if (orderError) return NextResponse.json({ error: orderError.message }, { status: 500 });
-    if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    if (!orderData) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    const order = orderData as unknown as LabelOrderRow;
+    const target = orderTarget(order);
 
     // Fetch items (try with sugar_level, fallback without)
     let items: Array<{
@@ -131,6 +152,8 @@ export async function GET(
 
     const html = buildAllCupLabelsHtml({
       receiptNumber: order.receipt_number || orderId.slice(0, 8),
+      shortNumber: shortOrderNumber(order.receipt_number, orderId),
+      target: target.kind === "counter" ? null : target.text,
       customerName: order.customer_name,
       createdAt: order.created_at,
       orderId: orderId,

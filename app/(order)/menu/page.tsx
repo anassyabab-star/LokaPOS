@@ -19,6 +19,16 @@ export default function MenuPage() {
   const [error, setError] = useState(false);
   const [cat, setCat] = useState("All");
   const [sheet, setSheet] = useState<Product | null>(null);
+  const [storeOpen, setStoreOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetch("/api/public/store-status", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { if (live) setStoreOpen(d?.is_open !== false); })
+      .catch(() => { if (live) setStoreOpen(true); });
+    return () => { live = false; };
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -101,20 +111,28 @@ export default function MenuPage() {
 
         {/* cream sheet */}
         <div className={`min-h-[480px] rounded-t-[28px] bg-cream pt-6 ${cartCount > 0 ? "pb-28" : "pb-4"}`}>
+          {/* store closed banner */}
+          {storeOpen === false && (
+            <div className="mb-5 px-[22px]">
+              <div className="rounded-[18px] border border-melon/30 bg-melon/10 px-4 py-3 font-sans text-[13px] text-espresso">
+                ⏰ <span className="font-semibold">We&rsquo;re closed right now.</span> You can browse the menu, but orders are only accepted during opening hours.
+              </div>
+            </div>
+          )}
           {/* active-order banner — persists while an order is live */}
           {lastOrder && (
             <div className="mb-5 px-[22px]">
               <div className="flex items-center gap-3 rounded-[18px] bg-espresso p-3.5">
                 <Link href={`/order/${lastOrder.orderId}`} className="flex min-w-0 flex-1 items-center gap-3">
-                  <span className="flex h-11 w-11 flex-none items-center justify-center rounded-[13px] bg-melon/[0.16] font-display text-[14px] font-semibold text-melon">
-                    {(lastOrder.type === "dine" ? "T" : "A") + (lastOrder.receipt.replace(/\D/g, "").slice(-2) || "42")}
+                  <span className="flex h-11 min-w-[44px] flex-none items-center justify-center rounded-[13px] bg-melon/[0.16] px-1.5 font-display text-[14px] font-semibold text-melon">
+                    #{lastOrder.shortNumber || (lastOrder.receipt.match(/-(\d+)$/)?.[1] ?? lastOrder.receipt.slice(-3))}
                   </span>
                   <span className="min-w-0">
                     <span className="flex items-center gap-2">
                       <span className="h-[7px] w-[7px] flex-none rounded-full bg-melon" />
                       <span className="font-sans text-[14px] font-semibold text-cream">Your latest order</span>
                     </span>
-                    <span className="mt-0.5 block font-sans text-[12px] text-muted-3">Tap to view receipt →</span>
+                    <span className="mt-0.5 block font-sans text-[12px] text-muted-3">{lastOrder.payment === "counter" ? "Pay at the counter with this Order ID →" : "Tap to track your order →"}</span>
                   </span>
                 </Link>
                 <button onClick={() => setLastOrder(null)} className="px-1.5 pb-1 text-[18px] leading-none text-muted-3 active:opacity-60" aria-label="Dismiss">×</button>
@@ -126,8 +144,8 @@ export default function MenuPage() {
           ) : error ? (
             <div className="px-6 py-16 text-center">
               <div className="text-3xl">⚠️</div>
-              <p className="mt-3 font-sans text-[14px] text-muted">Gagal muat menu.</p>
-              <button onClick={() => location.reload()} className="mt-4 rounded-[12px] bg-maroon px-5 py-2.5 font-sans text-[13px] font-semibold text-cream">Cuba lagi</button>
+              <p className="mt-3 font-sans text-[14px] text-muted">Couldn&rsquo;t load the menu.</p>
+              <button onClick={() => location.reload()} className="mt-4 rounded-[12px] bg-maroon px-5 py-2.5 font-sans text-[13px] font-semibold text-cream">Try again</button>
             </div>
           ) : (
             <>
@@ -208,7 +226,7 @@ export default function MenuPage() {
                   </div>
                 ))}
                 {sections.length === 0 && (
-                  <p className="py-12 text-center font-sans text-[14px] text-muted">Tiada item dalam kategori ini.</p>
+                  <p className="py-12 text-center font-sans text-[14px] text-muted">No items in this category.</p>
                 )}
               </div>
             </>
@@ -225,7 +243,7 @@ export default function MenuPage() {
           >
             <span className="flex items-center gap-2.5">
               <span className="flex h-[22px] min-w-[22px] items-center justify-center rounded-[11px] bg-cream px-1.5 font-sans text-[12px] font-bold text-maroon">{cartCount}</span>
-              <span className="font-sans text-[15px] font-semibold text-cream">View order</span>
+              <span className="font-sans text-[15px] font-semibold text-cream">{storeOpen === false ? "View order · closed now" : "View order"}</span>
             </span>
             <span className="font-display text-[15px] font-semibold text-cream">{rm(subtotal)}</span>
           </Link>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getLoyaltyConfig } from "@/lib/loyalty";
 import { generateOtpCode, hashOtpCode, normalizeOtpPhone } from "@/lib/phone-otp";
-import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import { sendOtpMessage } from "@/lib/whatsapp";
 
 // Throttle windows.
 const MIN_INTERVAL_SECONDS = 45; // between consecutive sends to one phone
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const phone = normalizeOtpPhone(String(body?.phone || ""));
 
   if (!phone || phone.replace(/[^\d]/g, "").length < 8) {
-    return NextResponse.json({ error: "No telefon tidak sah" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
   }
 
   const supabase = createSupabaseAdminClient();
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   const recentRows = recent || [];
   if (recentRows.length >= MAX_PER_HOUR) {
     return NextResponse.json(
-      { error: "Terlalu banyak permintaan. Cuba lagi sebentar nanti." },
+      { error: "Too many requests. Please try again shortly." },
       { status: 429 }
     );
   }
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     if (Number.isFinite(lastMs) && nowMs - lastMs < MIN_INTERVAL_SECONDS * 1000) {
       const wait = Math.ceil((MIN_INTERVAL_SECONDS * 1000 - (nowMs - lastMs)) / 1000);
       return NextResponse.json(
-        { error: `Sila tunggu ${wait}s sebelum minta kod baru.` },
+        { error: `Please wait ${wait}s before requesting a new code.` },
         { status: 429 }
       );
     }
@@ -66,16 +66,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
-  const storeName = String(process.env.STORE_NAME || "Loka");
-  const message =
-    `Kod pengesahan ${storeName} anda: *${code}*\n` +
-    `Sah selama ${config.otpExpiryMinutes} minit. Jangan kongsi kod ini dengan sesiapa.`;
+  const storeName = String(process.env.STORE_NAME || "Loka").trim() || "Loka";
 
-  const sent = await sendMurpatiText({ to: normalizeWhatsappNumber(phone), message });
+  // WhatsApp Cloud API authentication template when configured, Murpati otherwise.
+  const sent = await sendOtpMessage({ to: phone, code, expiryMinutes: config.otpExpiryMinutes, storeName });
   if (!sent.ok) {
     // Code is stored; surface a soft error so the user can retry.
+    console.error("[otp/request] send failed:", sent.provider, sent.error);
     return NextResponse.json(
-      { error: "Gagal hantar kod melalui WhatsApp. Cuba lagi.", detail: sent.error },
+      { error: "Couldn't send the code via WhatsApp. Please try again.", detail: sent.error },
       { status: 502 }
     );
   }

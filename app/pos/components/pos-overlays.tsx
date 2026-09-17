@@ -159,18 +159,87 @@ async function lookupMember(s: ReturnType<typeof usePos>, phoneOverride?: string
   } finally { s.setMemberLookupLoading(false); }
 }
 
-// ━━━━━━━━━━━━━━━ PAYMENT OVERLAY (with Cash Calculator) ━━━━━━━━━━━━━━━
-export function PaymentOverlay({ onCompletePayment }: { onCompletePayment: (method?: "cash" | "qr" | "card", cash?: number) => void }) {
-  const s = usePos();
-  const [showCashCalc, setShowCashCalc] = useState(false);
+// ━━━━━━━━━━━━━━━ PAYMENT METHOD LIST (shared) ━━━━━━━━━━━━━━━
+// Full-screen "pick a method" panel. Used by the cart checkout and by the
+// Collect Payment sheet (customer orders placed on their phone).
+export function PaymentMethodList({
+  total,
+  disabled,
+  subtitle,
+  onClose,
+  onCash,
+  onQr,
+  onCard,
+}: {
+  total: number;
+  disabled?: boolean;
+  subtitle?: string | null;
+  onClose: () => void;
+  onCash: () => void;
+  onQr: () => void;
+  onCard: () => void;
+}) {
+  return (
+    <div className="screen-enter fixed inset-0 z-50 flex flex-col bg-white">
+      <div className="flex items-center justify-between px-4 py-3">
+        <button onClick={onClose} className="text-2xl text-gray-400">✕</button>
+        <span />
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center">
+        <div className="text-4xl font-bold tabular-nums text-gray-900">RM{total.toFixed(2)}</div>
+        {subtitle && <div className="mt-2 text-sm font-medium text-gray-600">{subtitle}</div>}
+        <div className="mt-2 text-sm text-gray-400">Pilih kaedah pembayaran</div>
+      </div>
+      <div className="border-t border-gray-200">
+        <button disabled={disabled} onClick={onCash} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-lg">💵</span>
+            <span className="text-base font-medium text-gray-900">Cash</span>
+          </div>
+          <span className="text-gray-400">›</span>
+        </button>
+        <button disabled={disabled} onClick={onQr} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-lg">📱</span>
+            <span className="text-base font-medium text-gray-900">QR Payment</span>
+          </div>
+          <span className="text-gray-400">›</span>
+        </button>
+        <button disabled={disabled} onClick={onCard} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-lg">💳</span>
+            <span className="text-base font-medium text-gray-900">Card</span>
+          </div>
+          <span className="text-gray-400">›</span>
+        </button>
+      </div>
+      <div className="h-[env(safe-area-inset-bottom,12px)]" />
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━ CASH CALCULATOR (shared) ━━━━━━━━━━━━━━━
+export function CashCalculator({
+  total,
+  submitting,
+  title = "Bayaran Tunai",
+  onBack,
+  onConfirm,
+}: {
+  total: number;
+  submitting?: boolean;
+  title?: string;
+  onBack: () => void;
+  onConfirm: (cash: number) => void;
+}) {
   const [cashInput, setCashInput] = useState("");
 
   const cashVal = Number(cashInput) || 0;
-  const change = cashVal - s.total;
-  const canPay = cashVal >= s.total;
+  const change = cashVal - total;
+  const canPay = cashVal >= total;
 
   // Quick amount buttons — smart suggestions based on total
-  const quickAmounts = getQuickAmounts(s.total);
+  const quickAmounts = getQuickAmounts(total);
 
   function handleQuickAmount(amount: number) {
     setCashInput(amount.toFixed(2));
@@ -188,53 +257,12 @@ export function PaymentOverlay({ onCompletePayment }: { onCompletePayment: (meth
     }
   }
 
-  // Payment method selection screen
-  if (!showCashCalc) {
-    return (
-      <div className="screen-enter fixed inset-0 z-50 flex flex-col bg-white">
-        <div className="flex items-center justify-between px-4 py-3">
-          <button onClick={() => s.setOverlay("cart")} className="text-2xl text-gray-400">✕</button>
-          <span />
-        </div>
-        <div className="flex flex-1 flex-col items-center justify-center">
-          <div className="text-4xl font-bold tabular-nums text-gray-900">RM{s.total.toFixed(2)}</div>
-          <div className="mt-2 text-sm text-gray-400">Pilih kaedah pembayaran</div>
-        </div>
-        <div className="border-t border-gray-200">
-          <button disabled={s.submittingOrder} onClick={() => { setCashInput(""); setShowCashCalc(true); }} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-lg">💵</span>
-              <span className="text-base font-medium text-gray-900">Cash</span>
-            </div>
-            <span className="text-gray-400">›</span>
-          </button>
-          <button disabled={s.submittingOrder} onClick={() => onCompletePayment("qr")} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-lg">📱</span>
-              <span className="text-base font-medium text-gray-900">QR Payment</span>
-            </div>
-            <span className="text-gray-400">›</span>
-          </button>
-          <button disabled={s.submittingOrder} onClick={() => onCompletePayment("card")} className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-4 text-left disabled:opacity-50">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-lg">💳</span>
-              <span className="text-base font-medium text-gray-900">Card</span>
-            </div>
-            <span className="text-gray-400">›</span>
-          </button>
-        </div>
-        <div className="h-[env(safe-area-inset-bottom,12px)]" />
-      </div>
-    );
-  }
-
-  // ━━━ Cash Calculator Screen ━━━
   return (
     <div className="screen-enter fixed inset-0 z-50 flex flex-col bg-white">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-        <button onClick={() => setShowCashCalc(false)} className="text-sm text-gray-500">← Kembali</button>
-        <span className="text-sm font-semibold text-gray-900">Bayaran Tunai</span>
+        <button onClick={onBack} className="text-sm text-gray-500">← Kembali</button>
+        <span className="text-sm font-semibold text-gray-900">{title}</span>
         <span className="w-16" />
       </div>
 
@@ -242,7 +270,7 @@ export function PaymentOverlay({ onCompletePayment }: { onCompletePayment: (meth
       <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-500">Jumlah</span>
-          <span className="text-lg font-bold tabular-nums text-gray-900">RM{s.total.toFixed(2)}</span>
+          <span className="text-lg font-bold tabular-nums text-gray-900">RM{total.toFixed(2)}</span>
         </div>
       </div>
 
@@ -274,10 +302,10 @@ export function PaymentOverlay({ onCompletePayment }: { onCompletePayment: (meth
         <div className="flex gap-2 flex-wrap justify-center">
           {/* Exact amount button */}
           <button
-            onClick={() => setCashInput(s.total.toFixed(2))}
+            onClick={() => setCashInput(total.toFixed(2))}
             className="rounded-lg border-2 border-[#7F1D1D]/20 bg-[#7F1D1D]/5 px-4 py-2.5 text-sm font-semibold text-[#7F1D1D] active:bg-[#7F1D1D]/10 transition-colors"
           >
-            Tepat RM{s.total.toFixed(2)}
+            Tepat RM{total.toFixed(2)}
           </button>
           {quickAmounts.map(amt => (
             <button
@@ -313,14 +341,42 @@ export function PaymentOverlay({ onCompletePayment }: { onCompletePayment: (meth
       {/* Action button */}
       <div className="border-t border-gray-200 px-4 py-4 pb-[env(safe-area-inset-bottom,12px)]">
         <button
-          disabled={!canPay || s.submittingOrder}
-          onClick={() => onCompletePayment("cash", cashVal)}
+          disabled={!canPay || submitting}
+          onClick={() => onConfirm(cashVal)}
           className="w-full rounded-full bg-[#7F1D1D] py-4 text-base font-semibold text-white active:bg-[#6B1818] disabled:opacity-40 disabled:active:bg-[#7F1D1D] transition-opacity"
         >
-          {s.submittingOrder ? "Memproses..." : canPay ? `Terima RM${cashVal.toFixed(2)} · Baki RM${change.toFixed(2)}` : "Masukkan jumlah"}
+          {submitting ? "Memproses..." : canPay ? `Terima RM${cashVal.toFixed(2)} · Baki RM${change.toFixed(2)}` : "Masukkan jumlah"}
         </button>
       </div>
     </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━ PAYMENT OVERLAY (cart checkout) ━━━━━━━━━━━━━━━
+export function PaymentOverlay({ onCompletePayment }: { onCompletePayment: (method?: "cash" | "qr" | "card", cash?: number) => void }) {
+  const s = usePos();
+  const [showCashCalc, setShowCashCalc] = useState(false);
+
+  if (!showCashCalc) {
+    return (
+      <PaymentMethodList
+        total={s.total}
+        disabled={s.submittingOrder}
+        onClose={() => s.setOverlay("cart")}
+        onCash={() => setShowCashCalc(true)}
+        onQr={() => onCompletePayment("qr")}
+        onCard={() => onCompletePayment("card")}
+      />
+    );
+  }
+
+  return (
+    <CashCalculator
+      total={s.total}
+      submitting={s.submittingOrder}
+      onBack={() => setShowCashCalc(false)}
+      onConfirm={cash => onCompletePayment("cash", cash)}
+    />
   );
 }
 
@@ -391,11 +447,17 @@ export function DoneOverlay({ onPrintReceipt, onPrintLabel, lastCashChange }: {
 // ━━━━━━━━━━━━━━━ BOTTOM NAV ━━━━━━━━━━━━━━━
 export function PosBottomNav() {
   const s = usePos();
+  const awaiting = s.orders.filter(o => String(o.status || "").toLowerCase() === "awaiting_payment").length;
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 flex border-t border-gray-200 bg-white pb-[env(safe-area-inset-bottom,0px)]">
       {(["checkout", "orders", "reports", "more"] as const).map(tab => (
-        <button key={tab} onClick={() => s.setMainTab(tab)} className={`flex flex-1 flex-col items-center gap-0.5 py-3 text-xs font-medium ${s.mainTab === tab ? "text-[#7F1D1D]" : "text-gray-400"}`}>
+        <button key={tab} onClick={() => s.setMainTab(tab)} className={`relative flex flex-1 flex-col items-center gap-0.5 py-3 text-xs font-medium ${s.mainTab === tab ? "text-[#7F1D1D]" : "text-gray-400"}`}>
           {tab === "checkout" ? "Checkout" : tab === "orders" ? "Orders" : tab === "reports" ? "Reports" : "More"}
+          {tab === "orders" && awaiting > 0 && (
+            <span className="absolute right-[calc(50%-28px)] top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+              {awaiting}
+            </span>
+          )}
         </button>
       ))}
     </div>

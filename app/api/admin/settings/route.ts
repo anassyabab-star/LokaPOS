@@ -17,7 +17,31 @@ export async function PATCH(req: Request) {
   if (!auth.ok) return auth.response;
 
   const body = await req.json().catch(() => null);
-  if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+  }
+
+  // Pay-at-counter settings: validate before the blind upsert.
+  if (Object.prototype.hasOwnProperty.call(body, "dine_in_tables")) {
+    if (!Array.isArray(body.dine_in_tables)) {
+      return NextResponse.json({ error: "dine_in_tables mesti senarai" }, { status: 400 });
+    }
+    const cleaned = Array.from(
+      new Set(
+        (body.dine_in_tables as unknown[])
+          .map(t => String(t ?? "").trim().replace(/[^\w-]/g, "").slice(0, 10))
+          .filter(Boolean)
+      )
+    ).slice(0, 200);
+    body.dine_in_tables = cleaned;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "unpaid_order_expiry_minutes")) {
+    const n = Math.floor(Number(body.unpaid_order_expiry_minutes));
+    if (!Number.isFinite(n) || n < 0 || n > 1440) {
+      return NextResponse.json({ error: "unpaid_order_expiry_minutes mesti 0–1440" }, { status: 400 });
+    }
+    body.unpaid_order_expiry_minutes = n;
+  }
 
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase

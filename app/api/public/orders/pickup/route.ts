@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     .select("id")
     .eq("phone", phone)
     .maybeSingle();
-  if (!customer?.id) return NextResponse.json({ error: "Order tidak dijumpai" }, { status: 404 });
+  if (!customer?.id) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   const { data: order } = await supabase
     .from("orders")
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     .eq("id", orderId)
     .eq("customer_id", customer.id)
     .maybeSingle();
-  if (!order) return NextResponse.json({ error: "Order tidak dijumpai" }, { status: 404 });
+  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   // Idempotent: only advance if not already picked up / reviewed.
   if (order.fulfillment_stage !== "picked_up" && order.fulfillment_stage !== "reviewed") {

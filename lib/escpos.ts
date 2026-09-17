@@ -11,9 +11,15 @@ const LF = 0x0a;
 export function buildEscPosReceipt(payload: {
   shopName: string;
   receiptNumber: string;
+  /** Short daily Order ID ("042"), printed double-size under the shop name. */
+  shortNumber?: string | null;
   createdAt: string;
   customerName?: string | null;
   paymentMethod?: string | null;
+  /** "dine_in" | "take_away" */
+  orderType?: string | null;
+  tableNumber?: string | null;
+  buzzerNumber?: string | null;
   items: { name: string; qty: number; unitPrice: number; lineTotal: number }[];
   subtotal?: number | null;
   discount?: number | null;
@@ -74,6 +80,15 @@ export function buildEscPosReceipt(payload: {
   doubleSizeOff();
   boldOff();
 
+  // Short Order ID — what the customer quotes / what the crew calls out.
+  if (payload.shortNumber) {
+    doubleSizeOn();
+    boldOn();
+    line(`ORDER #${payload.shortNumber}`);
+    doubleSizeOff();
+    boldOff();
+  }
+
   // Receipt number & date
   line(`Receipt #${payload.receiptNumber}`);
   const dt = new Date(payload.createdAt);
@@ -81,6 +96,18 @@ export function buildEscPosReceipt(payload: {
     ? payload.createdAt
     : dt.toLocaleString("en-MY", { hour12: false });
   line(dtLabel);
+
+  // Dine In · Meja 7 / Take Away · Buzzer 12
+  const type = String(payload.orderType || "").toLowerCase();
+  const typeLabel = type === "dine_in" ? "Dine In" : type === "take_away" ? "Take Away" : "";
+  const where = payload.tableNumber ? `Meja ${payload.tableNumber}` : payload.buzzerNumber ? `Buzzer ${payload.buzzerNumber}` : "";
+  const targetLine = [typeLabel, where].filter(Boolean).join(" - ");
+  if (targetLine) {
+    boldOn();
+    line(targetLine);
+    boldOff();
+  }
+
   if (payload.customerName) line(`Customer: ${payload.customerName}`);
   if (payload.paymentMethod) line(`Payment: ${payload.paymentMethod.toUpperCase()}`);
 

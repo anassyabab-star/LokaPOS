@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type OrderStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
+type OrderStatus = "awaiting_payment" | "pending" | "preparing" | "ready" | "completed" | "cancelled";
 type OrderAction = "void" | "refund";
 
 type Props = {
@@ -15,7 +15,7 @@ type Props = {
 
 function normalizeStatus(value: string | null | undefined): OrderStatus | null {
   const s = String(value || "").trim().toLowerCase();
-  if (["pending","preparing","ready","completed","cancelled"].includes(s)) return s as OrderStatus;
+  if (["awaiting_payment","pending","preparing","ready","completed","cancelled"].includes(s)) return s as OrderStatus;
   return null;
 }
 
@@ -34,8 +34,9 @@ export default function OrderStatusActions({ orderId, currentStatus, paymentStat
 
   const status = normalizeStatus(currentStatus);
   const paid = String(paymentStatus || "").trim().toLowerCase() === "paid";
-  const canVoid = status === "pending" || status === "preparing" || status === "ready";
+  const canVoid = status === "awaiting_payment" || status === "pending" || status === "preparing" || status === "ready";
   const canRefund = status === "completed" && paid;
+  const awaitingPayment = status === "awaiting_payment";
 
   async function updateStatus(nextStatus: OrderStatus) {
     if (loadingStatus || loadingAction) return;
@@ -143,6 +144,11 @@ export default function OrderStatusActions({ orderId, currentStatus, paymentStat
           {loadingAction === "refund" ? "Refunding..." : "Refund"}
         </button>
       </div>
+      {awaitingPayment && (
+        <p style={{ marginTop: 8, fontSize: 12, color: "var(--d-warning)" }}>
+          Belum bayar — kutip bayaran di POS (Orders → Terima Bayaran) supaya order masuk ke dapur.
+        </p>
+      )}
       {message && <p style={{ marginTop: 8, fontSize: 12, color: "var(--d-success)" }}>{message}</p>}
       {error   && <p style={{ marginTop: 8, fontSize: 12, color: "var(--d-error)" }}>{error}</p>}
     </div>

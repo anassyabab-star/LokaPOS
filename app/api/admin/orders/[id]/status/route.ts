@@ -1,12 +1,27 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
-import { normalizeWhatsappNumber, sendMurpatiText } from "@/app/api/admin/campaigns/murpati";
-import { applyCustomerOrderPaidSettlement, reverseOrderLoyalty } from "@/lib/customer-order-payment";
+import {
+  cancelOrder,
+  transitionOrderStatus,
+  type ApprovalLevel,
+  type CancelAction,
+} from "@/lib/order-status";
+import { STAFF_SETTABLE_STATUSES, normalizeOrderStatus } from "@/lib/order-flow";
 
-type AllowedOrderStatus = "pending" | "preparing" | "ready" | "completed" | "cancelled";
-type OrderAction = "void" | "refund";
-type ApprovalLevel = "auto" | "manager_pin" | "admin";
+// ============================================================================
+// POST /api/admin/orders/[id]/status
+//
+//   { status: "pending"|"preparing"|"ready"|"completed" }
+//       → one step forward along the pipeline (admin may step back).
+//         awaiting_payment orders are refused (409): collect payment via
+//         POST /api/pos/orders/[id]/pay instead.
+//   { action: "void"|"refund", reason, manager_pin? }
+//       → cancel with tiered approval, unwinding loyalty / missions / coupons /
+//         stock through lib/order-status.cancelOrder().
+//
+// Transition rules live in lib/order-status.ts (assertTransition).
+// ============================================================================
 
 type OrderRow = {
   id: string;
@@ -18,47 +33,15 @@ type OrderRow = {
   total: number | null;
 };
 
-type OrderItemRow = {
-  product_id: string | null;
-  qty: number | null;
-};
-
-type CustomerRow = {
-  id: string;
-  name: string | null;
-  phone: string | null;
-  consent_whatsapp: boolean | null;
-};
-
-const ALLOWED_STATUSES: AllowedOrderStatus[] = [
-  "pending",
-  "preparing",
-  "ready",
-  "completed",
-  "cancelled",
-];
-const ALLOWED_ACTIONS: OrderAction[] = ["void", "refund"];
+const ALLOWED_ACTIONS: CancelAction[] = ["void", "refund"];
 
 const ORDER_VOID_AUTO_MAX_RM = Number(process.env.ORDER_VOID_AUTO_MAX_RM || 80);
 const ORDER_REFUND_AUTO_MAX_RM = Number(process.env.ORDER_REFUND_AUTO_MAX_RM || 20);
 const ORDER_REFUND_MANAGER_MAX_RM = Number(process.env.ORDER_REFUND_MANAGER_MAX_RM || 150);
 const MANAGER_OVERRIDE_PIN = String(process.env.MANAGER_OVERRIDE_PIN || "").trim();
 
-function isAllowedStatus(value: string): value is AllowedOrderStatus {
-  return ALLOWED_STATUSES.includes(value as AllowedOrderStatus);
-}
-
-function isAllowedAction(value: string): value is OrderAction {
-  return ALLOWED_ACTIONS.includes(value as OrderAction);
-}
-
-function formatMoney(value: number | null | undefined) {
-  return `RM ${Number(value || 0).toFixed(2)}`;
-}
-
-function isMissingRelationError(message: string | null | undefined) {
-  const lower = String(message || "").toLowerCase();
-  return lower.includes("relation") && lower.includes("does not exist");
+function isAllowedAction(value: string): value is CancelAction {
+  return ALLOWED_ACTIONS.includes(value as CancelAction);
 }
 
 function normalizePaymentStatus(value: string | null | undefined) {
@@ -66,7 +49,7 @@ function normalizePaymentStatus(value: string | null | undefined) {
 }
 
 function resolveApprovalLevel(params: {
-  action: OrderAction;
+  action: CancelAction;
   amount: number;
   userRole: "admin" | "cashier";
   managerPin: string;
@@ -122,103 +105,6 @@ function resolveApprovalLevel(params: {
   };
 }
 
-async function writeAdjustmentLog(payload: {
-  orderId: string;
-  action: OrderAction;
-  amount: number;
-  reason: string;
-  approvedBy: string;
-  approvedRole: string;
-  approvalLevel: ApprovalLevel;
-  managerPinUsed: boolean;
-}) {
-  const supabase = createSupabaseAdminClient();
-  const { error } = await supabase.from("order_adjustments").insert([
-    {
-      order_id: payload.orderId,
-      action: payload.action,
-      amount: payload.amount,
-      reason: payload.reason,
-      approved_by: payload.approvedBy,
-      approved_role: payload.approvedRole,
-      approval_level: payload.approvalLevel,
-      metadata: {
-        manager_pin_used: payload.managerPinUsed,
-      },
-    },
-  ]);
-  if (error && !isMissingRelationError(error.message)) {
-    throw error;
-  }
-}
-
-async function restoreOrderStock(orderId: string) {
-  const supabase = createSupabaseAdminClient();
-  const { data: itemRows, error: itemError } = await supabase
-    .from("order_items")
-    .select("product_id,qty")
-    .eq("order_id", orderId);
-
-  if (itemError) {
-    return { ok: false as const, error: itemError.message || "Failed to read order items" };
-  }
-
-  const qtyByProduct = new Map<string, number>();
-  for (const row of (itemRows || []) as OrderItemRow[]) {
-    const productId = String(row.product_id || "").trim();
-    const qty = Number(row.qty || 0);
-    if (!productId || qty <= 0) continue;
-    qtyByProduct.set(productId, (qtyByProduct.get(productId) || 0) + qty);
-  }
-
-  for (const [productId, restoreQty] of qtyByProduct.entries()) {
-    const { data: product, error: productError } = await supabase
-      .from("products")
-      .select("stock")
-      .eq("id", productId)
-      .maybeSingle();
-
-    if (productError || !product) {
-      return {
-        ok: false as const,
-        error: productError?.message || `Product ${productId} not found`,
-      };
-    }
-
-    const currentStock = Number((product as { stock: number | null }).stock || 0);
-    const { error: updateError } = await supabase
-      .from("products")
-      .update({ stock: currentStock + restoreQty })
-      .eq("id", productId);
-    if (updateError) {
-      return { ok: false as const, error: updateError.message || "Failed to restore stock" };
-    }
-  }
-
-  return { ok: true as const };
-}
-
-function buildReadyMessage(order: OrderRow, customer: CustomerRow) {
-  const template = String(process.env.ORDER_READY_TEMPLATE || "").trim();
-  const storeName = String(process.env.STORE_NAME || "Loka POS").trim() || "Loka POS";
-  const orderNumber = String(order.receipt_number || order.id.slice(0, 8));
-  const customerName = String(customer.name || order.customer_name || "Customer").trim() || "Customer";
-  const total = formatMoney(order.total);
-
-  const defaultMessage =
-    `Hi ${customerName}, order #${orderNumber} dari ${storeName} dah siap.\n` +
-    `Total: ${total}\n` +
-    "Terima kasih.";
-
-  if (!template) return defaultMessage;
-
-  return template
-    .replaceAll("{{name}}", customerName)
-    .replaceAll("{{order_number}}", orderNumber)
-    .replaceAll("{{store_name}}", storeName)
-    .replaceAll("{{total}}", total);
-}
-
 export async function POST(
   req: Request,
   context: { params: Promise<{ id: string }> }
@@ -233,20 +119,35 @@ export async function POST(
   }
 
   const body = await req.json().catch(() => ({}));
-  const nextStatus = String(body?.status || "").trim().toLowerCase();
+  const nextStatusRaw = String(body?.status || "").trim().toLowerCase();
   const action = String(body?.action || "").trim().toLowerCase();
   const reason = String(body?.reason || "").trim();
   const managerPin = String(body?.manager_pin || "").trim();
 
-  const wantsStatusChange = Boolean(nextStatus);
+  const wantsStatusChange = Boolean(nextStatusRaw);
   const wantsAction = Boolean(action);
 
   if (!wantsStatusChange && !wantsAction) {
     return NextResponse.json({ error: "Missing status or action" }, { status: 400 });
   }
 
-  if (wantsStatusChange && !isAllowedStatus(nextStatus)) {
-    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  const nextStatus = wantsStatusChange ? normalizeOrderStatus(nextStatusRaw) : null;
+  if (wantsStatusChange) {
+    if (!nextStatus) {
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+    if (nextStatus === "cancelled") {
+      return NextResponse.json(
+        { error: "Guna action void/refund untuk batalkan order." },
+        { status: 400 }
+      );
+    }
+    if (!STAFF_SETTABLE_STATUSES.includes(nextStatus)) {
+      return NextResponse.json(
+        { error: "Status Belum Bayar tidak boleh ditetapkan secara manual." },
+        { status: 400 }
+      );
+    }
   }
   if (wantsAction && !isAllowedAction(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
@@ -259,30 +160,25 @@ export async function POST(
   }
 
   try {
-    const supabase = createSupabaseAdminClient();
-    const { data: orderData, error: orderError } = await supabase
-      .from("orders")
-      .select("id,receipt_number,status,payment_status,customer_id,customer_name,total")
-      .eq("id", orderId)
-      .maybeSingle();
-
-    if (orderError) {
-      return NextResponse.json({ error: orderError.message }, { status: 500 });
-    }
-    if (!orderData) {
-      return NextResponse.json({ error: "Order not found" }, { status: 404 });
-    }
-
-    const order = orderData as OrderRow;
-    const currentStatus = String(order.status || "").toLowerCase();
-    const currentPaymentStatus = normalizePaymentStatus(order.payment_status);
-
-    let notification:
-      | { attempted: false; reason: string }
-      | { attempted: true; sent: boolean; error: string | null; to: string | null }
-      | null = null;
-
     if (wantsAction && isAllowedAction(action)) {
+      const supabase = createSupabaseAdminClient();
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .select("id,receipt_number,status,payment_status,customer_id,customer_name,total")
+        .eq("id", orderId)
+        .maybeSingle();
+
+      if (orderError) {
+        return NextResponse.json({ error: orderError.message }, { status: 500 });
+      }
+      if (!orderData) {
+        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      }
+
+      const order = orderData as OrderRow;
+      const currentStatus = String(order.status || "").toLowerCase();
+      const currentPaymentStatus = normalizePaymentStatus(order.payment_status);
+
       if (action === "void") {
         if (currentStatus === "cancelled") {
           return NextResponse.json({
@@ -330,172 +226,44 @@ export async function POST(
         return NextResponse.json({ error: approval.error }, { status: 403 });
       }
 
-      const updatePayload: Record<string, unknown> = {
-        status: "cancelled",
-      };
-      if (action === "refund") {
-        updatePayload.payment_status = "refunded";
-      }
-
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update(updatePayload)
-        .eq("id", orderId);
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 });
-      }
-
-      // Reverse loyalty the order moved: claw back earned points + give back any
-      // redeemed points (idempotent). Never let a loyalty hiccup fail the refund.
-      try {
-        await reverseOrderLoyalty(
-          {
-            id: order.id,
-            customer_id: order.customer_id,
-            receipt_number: order.receipt_number,
-            total: order.total,
-          },
-          auth.user.id
-        );
-      } catch (reverseErr) {
-        console.error("[order-status] loyalty reverse failed:", reverseErr);
-      }
-
-      // Reverse any mission progress / rewards this order triggered.
-      try {
-        const { reverseMissionsOnRefund } = await import("@/lib/missions");
-        await reverseMissionsOnRefund(order.id, auth.user.id);
-      } catch (missionErr) {
-        console.error("[order-status] mission reverse failed:", missionErr);
-      }
-
-      // Reverse coupons this order issued/redeemed.
-      try {
-        const { reverseCouponsOnRefund } = await import("@/lib/coupons");
-        await reverseCouponsOnRefund(order.id);
-      } catch (couponErr) {
-        console.error("[order-status] coupon reverse failed:", couponErr);
-      }
-
-      let stockRestoreWarning: string | null = null;
-      if (action === "void") {
-        const stockRestore = await restoreOrderStock(orderId);
-        if (!stockRestore.ok) {
-          stockRestoreWarning = stockRestore.error;
-        }
-      }
-
-      await writeAdjustmentLog({
+      const result = await cancelOrder({
         orderId,
         action,
-        amount,
         reason,
         approvedBy: auth.user.id,
         approvedRole: auth.role,
         approvalLevel: approval.level,
         managerPinUsed: Boolean(managerPin && MANAGER_OVERRIDE_PIN && managerPin === MANAGER_OVERRIDE_PIN),
       });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.httpStatus });
+      }
 
       return NextResponse.json({
         success: true,
         action,
         status: "cancelled",
-        payment_status: action === "refund" ? "refunded" : currentPaymentStatus || null,
+        payment_status: result.paymentStatus,
         approval_level: approval.level,
-        stock_restore_warning: stockRestoreWarning,
+        stock_restore_warning: result.stockRestoreWarning,
+        already_processed: result.alreadyCancelled,
       });
     }
 
-    if (wantsStatusChange && isAllowedStatus(nextStatus)) {
-      if (currentStatus === nextStatus) {
-        return NextResponse.json({ success: true, status: nextStatus, notification: null });
+    if (wantsStatusChange && nextStatus) {
+      const result = await transitionOrderStatus({
+        orderId,
+        to: nextStatus,
+        via: "status",
+        actor: { userId: auth.user.id, role: auth.role },
+      });
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.httpStatus });
       }
-
-      const updatePayload: Record<string, unknown> = {
-        status: nextStatus,
-      };
-
-      // Guest cash/pickup orders are paid at the counter when collected.
-      // Completing an unpaid order marks it paid and triggers loyalty earn.
-      const completingUnpaid =
-        nextStatus === "completed" &&
-        currentPaymentStatus !== "paid" &&
-        currentPaymentStatus !== "refunded";
-      if (completingUnpaid) {
-        updatePayload.payment_status = "paid";
-      }
-
-      const { error: updateError } = await supabase
-        .from("orders")
-        .update(updatePayload)
-        .eq("id", orderId);
-
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 });
-      }
-
-      if (completingUnpaid && order.customer_id) {
-        try {
-          await applyCustomerOrderPaidSettlement(
-            {
-              id: order.id,
-              customer_id: order.customer_id,
-              receipt_number: order.receipt_number,
-              total: Number(order.total || 0),
-              discount_value: null,
-            },
-            auth.user.id
-          );
-        } catch (settleErr) {
-          console.error("[order-status] settlement failed:", settleErr);
-        }
-      }
-
-      if (nextStatus === "ready") {
-        if (!order.customer_id) {
-          notification = { attempted: false, reason: "No linked customer" };
-        } else {
-          const { data: customerData, error: customerError } = await supabase
-            .from("customers")
-            .select("id,name,phone,consent_whatsapp")
-            .eq("id", order.customer_id)
-            .maybeSingle();
-
-          if (customerError) {
-            notification = { attempted: true, sent: false, error: customerError.message, to: null };
-          } else if (!customerData) {
-            notification = { attempted: false, reason: "Customer not found" };
-          } else {
-            const customer = customerData as CustomerRow;
-            const normalizedPhone = normalizeWhatsappNumber(String(customer.phone || ""));
-            if (!customer.consent_whatsapp || !normalizedPhone) {
-              notification = {
-                attempted: false,
-                reason: !customer.consent_whatsapp
-                  ? "Customer has not consented to WhatsApp"
-                  : "Missing valid phone number",
-              };
-            } else {
-              const message = buildReadyMessage(order, customer);
-              const result = await sendMurpatiText({
-                to: normalizedPhone,
-                message,
-              });
-              notification = {
-                attempted: true,
-                sent: result.ok,
-                error: result.error || null,
-                to: normalizedPhone,
-              };
-            }
-          }
-        }
-      }
-
       return NextResponse.json({
         success: true,
-        status: nextStatus,
-        notification,
+        status: result.status,
+        notification: result.notification,
       });
     }
 

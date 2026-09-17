@@ -230,8 +230,163 @@ export default function SettingsPage() {
 
       <KdsSettingsSection />
 
+      <TablesSettingsSection />
+
       <LoyaltySettingsSection />
     </div>
+  );
+}
+
+// ━━━ Meja & QR — tables the customer QR flow recognises + unpaid-order expiry ━━━
+function parseTableInput(raw: string): string[] {
+  const out: string[] = [];
+  for (const part of raw.split(/[,\s]+/)) {
+    const token = part.trim();
+    if (!token) continue;
+    const range = token.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (range) {
+      const a = Number(range[1]);
+      const b = Number(range[2]);
+      if (Number.isFinite(a) && Number.isFinite(b) && b >= a && b - a <= 200) {
+        for (let i = a; i <= b; i++) out.push(String(i));
+        continue;
+      }
+    }
+    out.push(token.replace(/[^\w-]/g, "").slice(0, 10));
+  }
+  return out.filter(Boolean);
+}
+
+function TablesSettingsSection() {
+  const [tables, setTables] = useState<string[]>([]);
+  const [expiry, setExpiry] = useState<number>(30);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/settings")
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d?.dine_in_tables)) setTables(d.dine_in_tables.map((t: unknown) => String(t)));
+        if (Number.isFinite(Number(d?.unpaid_order_expiry_minutes))) setExpiry(Number(d.unpaid_order_expiry_minutes));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  function addTables() {
+    const next = parseTableInput(input);
+    if (next.length === 0) return;
+    setTables(prev => Array.from(new Set([...prev, ...next])));
+    setInput("");
+    setDirty(true);
+  }
+
+  function removeTable(t: string) {
+    setTables(prev => prev.filter(x => x !== t));
+    setDirty(true);
+  }
+
+  async function save() {
+    setSaving(true); setError(null); setSaved(false);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dine_in_tables: tables, unpaid_order_expiry_minutes: expiry }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        const msg = String(d?.error || "");
+        setError(
+          /column|schema|dine_in_tables|unpaid_order/i.test(msg)
+            ? "Perlu jalankan migration 20260915_order_flow_pay_at_counter.sql dahulu"
+            : msg || "Gagal simpan"
+        );
+        return;
+      }
+      setDirty(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      setError("Tiada sambungan");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">Meja &amp; QR Order</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Senarai meja untuk QR dine-in, dan tempoh order belum bayar sebelum dibatalkan automatik.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-sm font-medium text-green-600">Tersimpan</span>}
+          <a
+            href="/print/table-qr"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-gray-200 dark:border-gray-600 px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          >
+            🖨 Cetak QR Meja
+          </a>
+          <button onClick={save} disabled={saving || loading || !dirty} className="rounded-xl bg-[#7F1D1D] px-5 py-2 text-sm font-bold text-white disabled:opacity-40 hover:bg-[#6B1818] transition-colors">
+            {saving ? "Menyimpan..." : "Simpan"}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-5 space-y-5">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">Nombor meja</label>
+          <p className="text-xs text-gray-400 mb-2">Setiap meja dapat QR sendiri (/t/&lt;meja&gt;). Terima julat seperti <code>1-12</code> atau senarai <code>A1, A2, B1</code>.</p>
+          {loading ? (
+            <div className="h-9 w-64 rounded-xl bg-gray-100 dark:bg-gray-700 animate-pulse" />
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {tables.length === 0 && <span className="text-xs text-gray-400">Tiada meja — QR dine-in akan terima mana-mana nombor.</span>}
+              {tables.map(t => (
+                <span key={t} className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                  🪑 {t}
+                  <button onClick={() => removeTable(t)} className="text-amber-500 hover:text-red-500" aria-label={`Buang meja ${t}`}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 flex gap-2">
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTables(); } }}
+              placeholder="cth. 1-12 atau A1, A2"
+              className="flex-1 rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20 dark:text-white"
+            />
+            <button onClick={addTables} className="rounded-xl bg-gray-900 dark:bg-gray-700 px-4 py-2 text-sm font-bold text-white">Tambah meja</button>
+          </div>
+        </div>
+
+        <div className="max-w-xs">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">Batal automatik order belum bayar (minit)</label>
+          <p className="text-xs text-gray-400 mb-1">Order QR yang tak dibayar di kaunter selepas tempoh ini dibatalkan &amp; stok dipulangkan. 0 = tak batal.</p>
+          <input
+            type="number"
+            min={0}
+            max={1440}
+            value={expiry}
+            onChange={e => { setExpiry(Math.max(0, Math.floor(Number(e.target.value) || 0))); setDirty(true); }}
+            className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-transparent px-3 py-2 text-sm outline-none focus:border-[#7F1D1D] focus:ring-1 focus:ring-[#7F1D1D]/20 dark:text-white"
+          />
+        </div>
+      </div>
+      {error && <p className="text-xs text-amber-600 px-1">{error}</p>}
+      <p className="text-xs text-gray-400 px-1">Aliran: customer scan QR meja → order → bayar di kaunter (Order ID) → cashier key in meja/buzzer → Kitchen Display.</p>
+    </section>
   );
 }
 

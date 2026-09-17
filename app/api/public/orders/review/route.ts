@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "order_id & phone diperlukan" }, { status: 400 });
   }
   if (!Number.isFinite(rating) || rating < 1) {
-    return NextResponse.json({ error: "Sila beri rating 1–5" }, { status: 400 });
+    return NextResponse.json({ error: "Please give a rating from 1 to 5" }, { status: 400 });
   }
 
   const supabase = createSupabaseAdminClient();
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     .select("id")
     .eq("phone", phone)
     .maybeSingle();
-  if (!customer?.id) return NextResponse.json({ error: "Order tidak dijumpai" }, { status: 404 });
+  if (!customer?.id) return NextResponse.json({ error: "Order not found" }, { status: 404 });
   const customerId = String(customer.id);
 
   const { data: order } = await supabase
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     .eq("id", orderId)
     .eq("customer_id", customerId)
     .maybeSingle();
-  if (!order) return NextResponse.json({ error: "Order tidak dijumpai" }, { status: 404 });
+  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
 
   // Record the review (unique per order → idempotent).
   const { error: insertErr } = await supabase

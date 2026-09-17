@@ -51,10 +51,11 @@ function asValidPaymentMethod(value: unknown) {
   return method;
 }
 
-function isPaymentPaid(paymentMethod: string) {
-  // For customer web orders, only cash is auto-paid (pickup at counter)
-  // card/fpx/qr all go through online payment gateway (CHIP)
-  return paymentMethod === "cash";
+function isPaymentPaid(_paymentMethod: string) {
+  // Nothing is auto-paid any more: "cash" means the customer pays at the
+  // counter, where the cashier collects it via POST /api/pos/orders/[id]/pay.
+  // card/fpx/qr are settled by the online payment gateway callback.
+  return false;
 }
 
 export async function GET(req: Request) {
@@ -199,7 +200,7 @@ export async function POST(req: Request) {
       payment_method: paymentMethod,
       cash_received: 0,
       balance: 0,
-      status: "pending",
+      status: "awaiting_payment",
       payment_status: "pending",
     };
 
@@ -335,8 +336,8 @@ export async function POST(req: Request) {
     const total = Math.max(0, calculated.subtotal - appliedRedeemAmount);
 
     // Finalize totals + payment status now that the redeem is settled.
-    // KDS off → a paid order lands "completed" (skip the kitchen queue).
-    const finalStatus = paidNow ? await statusOnPaid("pending") : "pending";
+    // Unpaid orders wait in "awaiting_payment" (counter or gateway callback).
+    const finalStatus = paidNow ? await statusOnPaid("awaiting_payment") : "awaiting_payment";
     const { error: finalizeError } = await supabase
       .from("orders")
       .update({

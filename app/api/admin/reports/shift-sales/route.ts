@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     const { data: ordersRaw, error: ordersError } = await supabase
       .from("orders")
       .select("id, total, payment_method, created_at, status")
-      .in("status", ["completed", "preparing", "ready"])
+      .in("status", ["pending", "preparing", "ready", "completed"]).eq("payment_status", "paid")
       .gte("created_at", openedAt)
       .lte("created_at", closedAt)
       .order("created_at", { ascending: true });

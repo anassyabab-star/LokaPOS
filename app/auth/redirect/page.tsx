@@ -10,12 +10,11 @@ export default async function AuthRedirectPage() {
 
   const fallback =
     (user.app_metadata?.role as string | undefined) ||
-    (user.user_metadata?.role as string | undefined) ||
     null;
   const role = await resolveCurrentUserRole(user.id, fallback);
 
   if (role === "admin") redirect("/dashboard");
   if (role === "cashier") redirect("/pos");
-  if (role === "customer") redirect("/customer");
+  if (role === "customer") redirect("/menu");
   redirect("/login");
 }

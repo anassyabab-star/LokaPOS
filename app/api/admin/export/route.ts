@@ -84,7 +84,7 @@ export async function GET(req: Request) {
         .select("total, payment_method, status, date_key")
         .gte("date_key", from)
         .lte("date_key", to)
-        .in("status", ["completed", "preparing", "ready"]);
+        .in("status", ["pending", "preparing", "ready", "completed"]).eq("payment_status", "paid");
 
       const { data: expenses } = await supabase
         .from("expenses")

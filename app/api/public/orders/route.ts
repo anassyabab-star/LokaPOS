@@ -7,7 +7,7 @@ import {
   insertOrderItemAddonsWithFallback,
 } from "@/lib/customer-orders";
 import { createChipPurchase, getChipConfigStatus } from "@/lib/chip";
-import { sendMurpatiText, normalizeWhatsappNumber } from "@/app/api/admin/campaigns/murpati";
+import { normalizeWhatsAppTo, sendOrderReceivedMessage } from "@/lib/whatsapp";
 import {
   applyReferralOnSignup,
   calculateRedeem,
@@ -19,6 +19,8 @@ import {
 import { normalizeOtpPhone, requirePhoneOtp } from "@/lib/phone-otp";
 import { loadRedeemableCoupon } from "@/lib/coupons";
 import { computeVoucherDiscount, type CartItemLite } from "@/lib/rewards-vouchers";
+import { normalizeOrderType, sanitizeTargetLabel, shortOrderNumber } from "@/lib/order-flow";
+import { isMissingColumnError } from "@/lib/order-status";
 
 type ItemAddonRow = {
   order_item_id?: string | null;
@@ -40,12 +42,12 @@ function couponErrorMessage(
   reason: "disabled" | "not_found" | "wrong_customer" | "expired" | "used"
 ): string {
   switch (reason) {
-    case "disabled": return "Coupon tidak aktif buat masa ini.";
-    case "not_found": return "Kod coupon tidak sah.";
-    case "wrong_customer": return "Coupon ini bukan milik nombor telefon ini.";
-    case "expired": return "Coupon telah tamat tempoh.";
-    case "used": return "Coupon telah digunakan.";
-    default: return "Coupon tidak sah.";
+    case "disabled": return "Coupons aren't active right now.";
+    case "not_found": return "Invalid coupon code.";
+    case "wrong_customer": return "This coupon belongs to a different phone number.";
+    case "expired": return "This coupon has expired.";
+    case "used": return "This coupon has already been used.";
+    default: return "Invalid coupon.";
   }
 }
 
@@ -201,14 +203,20 @@ export async function POST(req: Request) {
   const customerName = String(body.customer_name || "").trim();
   const customerPhone = String(body.customer_phone || "").trim();
   const paymentMethod = String(body.payment_method || "fpx").trim().toLowerCase();
+  // Dine In (table from the scanned QR) or Take Away. The cashier can still
+  // change these when collecting payment.
+  const requestedTable = sanitizeTargetLabel(body.table_number);
+  const orderType = normalizeOrderType(body.order_type) ?? (requestedTable ? "dine_in" : null);
+  const tableNumber = orderType === "take_away" ? null : requestedTable;
+  const paysAtCounter = paymentMethod === "cash";
 
-  if (!customerName) return NextResponse.json({ error: "Nama diperlukan" }, { status: 400 });
+  if (!customerName) return NextResponse.json({ error: "Name is required" }, { status: 400 });
   if (!customerPhone || customerPhone.replace(/[^\d]/g, "").length < 8) {
-    return NextResponse.json({ error: "No telefon tidak sah" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid phone number" }, { status: 400 });
   }
   const requestItems = Array.isArray(body.items) ? body.items : null;
   if (!requestItems || requestItems.length === 0) {
-    return NextResponse.json({ error: "Sekurang-kurangnya satu item diperlukan" }, { status: 400 });
+    return NextResponse.json({ error: "At least one item is required" }, { status: 400 });
   }
 
   try {
@@ -225,7 +233,7 @@ export async function POST(req: Request) {
 
     if (!openShift) {
       return NextResponse.json(
-        { error: "Kedai sedang tutup. Sila cuba semula semasa waktu operasi.", store_closed: true },
+        { error: "We're closed right now. Please try again during opening hours.", store_closed: true },
         { status: 503 }
       );
     }
@@ -302,7 +310,7 @@ export async function POST(req: Request) {
     const couponCode = String(body.coupon_code || "").trim().toUpperCase();
     if (couponCode && requestedRedeemPoints > 0) {
       return NextResponse.json(
-        { error: "Hanya satu diskaun setiap order — mata ATAU coupon." },
+        { error: "Only one discount per order — points OR a coupon." },
         { status: 400 }
       );
     }
@@ -341,7 +349,7 @@ export async function POST(req: Request) {
       );
       if (discount <= 0) {
         return NextResponse.json(
-          { error: "Coupon tidak layak untuk order ini." },
+          { error: "This coupon can't be used for this order." },
           { status: 400 }
         );
       }
@@ -360,23 +368,38 @@ export async function POST(req: Request) {
       payment_method: paymentMethod,
       cash_received: 0,
       balance: 0,
-      status: "pending",
+      // Nothing reaches the kitchen until it is paid: at the counter (cashier
+      // "Terima Bayaran") or via the online-payment callback.
+      status: "awaiting_payment",
       payment_status: "pending",
+    };
+    const orderFlow = {
+      order_type: orderType,
+      table_number: tableNumber,
+      buzzer_number: null,
     };
 
     let orderInsert = await supabase
       .from("orders")
-      .insert([{ ...orderBase, order_source: "customer_web" }])
+      .insert([{ ...orderBase, ...orderFlow, order_source: "customer_web" }])
       .select("id")
       .single();
 
-    if (orderInsert.error?.message?.toLowerCase().includes("order_source")) {
-      orderInsert = await supabase.from("orders").insert([orderBase]).select("id").single();
+    // Pre-migration DBs: retry without the pay-at-counter columns, then without order_source.
+    if (orderInsert.error && isMissingColumnError(orderInsert.error.message)) {
+      orderInsert = await supabase
+        .from("orders")
+        .insert([{ ...orderBase, order_source: "customer_web" }])
+        .select("id")
+        .single();
+      if (orderInsert.error?.message?.toLowerCase().includes("order_source")) {
+        orderInsert = await supabase.from("orders").insert([orderBase]).select("id").single();
+      }
     }
 
     const { data: order, error: orderError } = orderInsert;
     if (orderError || !order) {
-      return NextResponse.json({ error: orderError?.message || "Gagal buat order" }, { status: 500 });
+      return NextResponse.json({ error: orderError?.message || "Couldn't place the order" }, { status: 500 });
     }
 
     // RESERVE the loyalty points now (atomic, advisory-locked) and only apply the
@@ -495,6 +518,9 @@ export async function POST(req: Request) {
       const chipStatus = getChipConfigStatus();
       if (chipStatus.configured) {
         try {
+          const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")
+            .trim()
+            .replace(/\/+$/, "");
           const purchase = await createChipPurchase({
             amount: finalTotal,
             orderId: order.id,
@@ -502,6 +528,9 @@ export async function POST(req: Request) {
             customerName: customerName,
             customerEmail: null,
             customerPhone: normalizedPhone,
+            // Land back on the order tracker (QR ordering app), not the member PWA.
+            successRedirect: `${siteUrl}/order/${order.id}`,
+            failureRedirect: `${siteUrl}/order/${order.id}?payment=failed`,
           });
           paymentUrl = purchase.checkoutUrl;
         } catch (chipErr) {
@@ -512,7 +541,7 @@ export async function POST(req: Request) {
     }
 
     // WhatsApp receipt — fire-and-forget, never block the order response
-    const waPhone = normalizeWhatsappNumber(normalizedPhone);
+    const waPhone = normalizeWhatsAppTo(normalizedPhone);
     if (waPhone) {
       const storeName = String(process.env.STORE_NAME || "Loka").trim();
       const itemLines = calculated.items
@@ -526,19 +555,51 @@ export async function POST(req: Request) {
         appliedCouponDiscount > 0
           ? `Coupon ${appliedCouponCode}: −RM${appliedCouponDiscount.toFixed(2)}\n`
           : "";
+      const shortNo = shortOrderNumber(numbering.orderNumber, order.id);
+      const whereLine =
+        orderType === "dine_in" && tableNumber
+          ? `Dine In · Meja ${tableNumber}\n`
+          : orderType === "take_away"
+            ? "Take Away\n"
+            : "";
+      const nextStep = paysAtCounter
+        ? `🧾 Sila ke kaunter dan sebut Order ID *#${shortNo}* untuk bayar.\n` +
+          `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`
+        : `Selesaikan bayaran online untuk hantar pesanan ke dapur.\n` +
+          `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
       const waMsg =
-        `✅ Order #${numbering.orderNumber} disahkan!\n\n` +
-        `${itemLines}\n\n` +
+        `✅ Order #${shortNo} (${numbering.orderNumber}) diterima!\n` +
+        whereLine +
+        `\n${itemLines}\n\n` +
         (redeemLine || couponLine ? `Subjumlah: RM${calculated.subtotal.toFixed(2)}\n${redeemLine}${couponLine}` : "") +
         `Jumlah: RM${finalTotal.toFixed(2)}\n\n` +
-        `${storeName} akan maklumkan bila pesanan siap. Terima kasih! ☕`;
-      sendMurpatiText({ to: waPhone, message: waMsg }).catch(() => {});
+        nextStep;
+      const itemsSummary = calculated.items
+        .map(i => `${i.qty}× ${i.product_name_snapshot}${i.variant_name ? ` (${i.variant_name})` : ""}`)
+        .join(", ");
+      sendOrderReceivedMessage({
+        to: waPhone,
+        name: customerName,
+        shortNo,
+        receipt: numbering.orderNumber,
+        where: orderType === "dine_in" && tableNumber ? `Dine In · Meja ${tableNumber}` : orderType === "take_away" ? "Take Away" : "-",
+        itemsSummary,
+        total: finalTotal.toFixed(2),
+        nextStep: paysAtCounter
+          ? `Sila ke kaunter dan sebut Order ID #${shortNo} untuk bayar.`
+          : "Selesaikan bayaran online untuk hantar pesanan ke dapur.",
+        text: waMsg,
+      }).catch(() => {});
     }
 
     return NextResponse.json({
       success: true,
       order_id: order.id,
       order_number: numbering.orderNumber,
+      short_number: shortOrderNumber(numbering.orderNumber, order.id),
+      status: "awaiting_payment",
+      order_type: orderType,
+      table_number: tableNumber,
       subtotal: calculated.subtotal,
       total: finalTotal,
       redeemed_points: appliedRedeemPoints,
@@ -548,7 +609,7 @@ export async function POST(req: Request) {
       payment_url: paymentUrl,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Gagal buat order";
+    const message = error instanceof Error ? error.message : "Couldn't place the order";
     const status = message.toLowerCase().includes("stock")
       ? 400
       : message.toLowerCase().includes("not found") || message.toLowerCase().includes("not available")

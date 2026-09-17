@@ -4,6 +4,7 @@ import { getMurpatiConfigStatus, getMurpatiSessionStatus } from "../../campaigns
 import { getToyyibpayConfigStatus } from "@/lib/toyyibpay";
 import { getBillplzConfigStatus } from "@/lib/billplz";
 import { getChipConfigStatus } from "@/lib/chip";
+import { getWhatsAppCloudConfig, getWhatsAppCloudPhoneInfo, resolveWhatsAppProvider } from "@/lib/whatsapp";
 
 type IntegrationCheck = {
   key: string;
@@ -185,8 +186,43 @@ export async function GET() {
       hint: murpatiError || null,
     };
 
+    // WhatsApp Cloud API (official) — the preferred gateway when configured.
+    const cloudCfg = getWhatsAppCloudConfig();
+    const activeWaProvider = resolveWhatsAppProvider();
+    let cloudTokenValid = false;
+    let cloudDetail: string | null = null;
+    if (cloudCfg.configured) {
+      const info = await getWhatsAppCloudPhoneInfo();
+      cloudTokenValid = info.ok;
+      cloudDetail = info.ok
+        ? `${info.verified_name || "WhatsApp"} · ${info.display_phone_number || ""}${info.quality_rating ? ` · quality ${info.quality_rating}` : ""}`
+        : info.error;
+    }
+    const whatsappCloud: IntegrationSummary = {
+      id: "whatsapp_cloud",
+      name: "WhatsApp Cloud API (rasmi)",
+      category: "messaging",
+      configured: cloudCfg.configured,
+      healthy: cloudCfg.configured && cloudTokenValid,
+      status: cloudCfg.configured
+        ? cloudTokenValid
+          ? `Connected${activeWaProvider === "cloud" ? " · active" : ""}`
+          : "Token / number invalid"
+        : "Not configured",
+      checks: [
+        { key: "accessToken", label: "Access Token", ok: cloudCfg.hasAccessToken },
+        { key: "phoneNumberId", label: "Phone Number ID", ok: cloudCfg.hasPhoneNumberId },
+        { key: "tokenValid", label: "Graph API reachable", ok: cloudTokenValid },
+        { key: "webhook", label: "Webhook verify token (optional)", ok: Boolean(cloudCfg.webhookVerifyToken) },
+      ],
+      hint: cloudCfg.configured
+        ? cloudDetail
+        : "Set WHATSAPP_CLOUD_ACCESS_TOKEN and WHATSAPP_CLOUD_PHONE_NUMBER_ID (docs/whatsapp-cloud-api.md)",
+    };
+
     const integrations: IntegrationSummary[] = [
       payment.summary,
+      whatsappCloud,
       murpati,
       {
         id: "chip",

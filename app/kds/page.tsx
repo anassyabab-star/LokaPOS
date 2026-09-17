@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { OrderTargetBadge } from "@/app/pos/components/order-target-badge";
+
+// ============================================================================
+// Kitchen Display — one shared screen for kitchen + service crew.
+//   BARU (pending) → SEDANG BUAT (preparing) → SIAP — SERAH (ready) → Selesai
+// Only PAID orders appear (the cashier collects first). Sorted FCFS from the
+// moment the order was paid. "Siap!" also notifies the customer (WhatsApp +
+// their order tracker) through the shared state machine.
+// ============================================================================
 
 type KdsItem = {
   id: string;
@@ -15,11 +24,17 @@ type KdsItem = {
 type KdsOrder = {
   id: string;
   receipt_number: string;
+  short_number?: string;
   customer_name: string;
   status: string;
   order_source: string | null;
   payment_status: string | null;
+  order_type?: string | null;
+  table_number?: string | null;
+  buzzer_number?: string | null;
   created_at: string;
+  paid_at?: string | null;
+  queue_since?: string | null;
   elapsed_seconds: number;
   items: KdsItem[];
 };
@@ -27,6 +42,7 @@ type KdsOrder = {
 type MobileFilter = "all" | "pending" | "preparing" | "ready";
 
 const POLL_INTERVAL = 5000;
+const URGENT_AFTER_SECONDS = 300;
 
 function formatElapsed(seconds: number) {
   if (seconds < 60) return `${seconds}s`;
@@ -34,6 +50,12 @@ function formatElapsed(seconds: number) {
   const secs = seconds % 60;
   if (mins < 60) return `${mins}m ${secs}s`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function shortNo(order: KdsOrder) {
+  if (order.short_number) return order.short_number;
+  const m = String(order.receipt_number || "").match(/-(\d+)$/);
+  return m ? m[1].padStart(3, "0") : String(order.receipt_number || order.id.slice(0, 4));
 }
 
 export default function KdsPage() {
@@ -45,10 +67,14 @@ export default function KdsPage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [completedFlash, setCompletedFlash] = useState<string | null>(null);
   const [mobileFilter, setMobileFilter] = useState<MobileFilter>("all");
+  const [toast, setToast] = useState<string | null>(null);
 
   const prevOrderIds = useRef<Set<string>>(new Set());
+  const soundRef = useRef(true);
   const actxRef = useRef<AudioContext | null>(null);
   const alertBufRef = useRef<AudioBuffer | null>(null);
+
+  useEffect(() => { soundRef.current = soundEnabled; }, [soundEnabled]);
 
   // ━━━ Sound ━━━
   useEffect(() => {
@@ -83,15 +109,15 @@ export default function KdsPage() {
     };
   }, []);
 
-  function playAlert() {
-    if (!soundEnabled) return;
+  const playAlert = useCallback(() => {
+    if (!soundRef.current) return;
     try {
       const ctx = actxRef.current; const buf = alertBufRef.current;
       if (!ctx || !buf) return;
       if (ctx.state === "suspended") ctx.resume();
       const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start(0);
     } catch { /* silent */ }
-  }
+  }, []);
 
   // ━━━ Polling ━━━
   const fetchOrders = useCallback(async (isInitial = false) => {
@@ -115,7 +141,7 @@ export default function KdsPage() {
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, [soundEnabled]);
+  }, [playAlert]);
 
   useEffect(() => {
     void fetchOrders(true);
@@ -134,26 +160,40 @@ export default function KdsPage() {
     return () => clearTimeout(t);
   }, [completedFlash]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   // ━━━ Actions ━━━
   async function updateStatus(orderId: string, newStatus: string) {
     setUpdatingId(orderId);
     try {
-      await fetch(`/api/admin/orders/${orderId}/status`, {
+      const res = await fetch(`/api/admin/orders/${orderId}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (newStatus === "completed") setCompletedFlash(orderId);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast(data?.error || `Gagal kemaskini (${res.status})`);
+      } else if (newStatus === "completed") {
+        setCompletedFlash(orderId);
+      }
       await fetchOrders();
-    } catch { /* silent */ }
-    finally { setUpdatingId(null); }
+    } catch {
+      setToast("Tiada sambungan. Cuba lagi.");
+    } finally {
+      setUpdatingId(null);
+    }
   }
 
   function getNextStatus(status: string): { next: string; label: string; color: string } | null {
     switch (status) {
       case "pending": return { next: "preparing", label: "Mula Buat", color: "bg-blue-600 active:bg-blue-700" };
       case "preparing": return { next: "ready", label: "Siap!", color: "bg-green-600 active:bg-green-700" };
-      case "ready": return { next: "completed", label: "Selesai", color: "bg-gray-600 active:bg-gray-700" };
+      case "ready": return { next: "completed", label: "Selesai (Serah)", color: "bg-gray-600 active:bg-gray-700" };
       default: return null;
     }
   }
@@ -176,6 +216,11 @@ export default function KdsPage() {
           <span className="rounded-full bg-gray-800 px-2 py-0.5 text-[11px] font-medium text-gray-400">
             {orders.length}
           </span>
+          {ready.length > 0 && (
+            <span className="hidden rounded-full bg-green-600 px-2 py-0.5 text-[11px] font-bold text-white sm:inline">
+              {ready.length} sedia diserah
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {error && <span className="text-[11px] text-red-400">{error}</span>}
@@ -246,7 +291,7 @@ export default function KdsPage() {
         <div className="flex flex-col items-center justify-center py-32">
           <div className="text-6xl mb-4">☕</div>
           <div className="text-lg font-medium text-gray-500">Tiada order aktif</div>
-          <div className="text-sm text-gray-600 mt-1">Order baru akan muncul secara automatik</div>
+          <div className="text-sm text-gray-600 mt-1">Order yang telah dibayar akan muncul di sini secara automatik</div>
         </div>
       )}
 
@@ -267,10 +312,10 @@ export default function KdsPage() {
               actionLabel="Siap!" actionColor="bg-green-600 active:bg-green-700"
             />
             <DesktopColumn
-              title="SIAP — AMBIL" count={ready.length} color="green" orders={ready}
+              title="SIAP — SERAH" count={ready.length} color="green" orders={ready}
               now={now} updatingId={updatingId} completedFlash={completedFlash}
               onAction={(id) => updateStatus(id, "completed")}
-              actionLabel="Selesai" actionColor="bg-gray-600 active:bg-gray-700"
+              actionLabel="Selesai (Serah)" actionColor="bg-gray-600 active:bg-gray-700"
             />
           </div>
 
@@ -302,6 +347,12 @@ export default function KdsPage() {
             )}
           </div>
         </>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
+          {toast}
+        </div>
       )}
     </div>
   );
@@ -355,9 +406,11 @@ function OrderCard({
   order: KdsOrder; now: number; updatingId: string | null; completedFlash: string | null;
   actionLabel: string; actionColor: string; onAction: () => void; showStatusBadge: boolean;
 }) {
-  const elapsed = Math.max(0, Math.floor((now - new Date(order.created_at).getTime()) / 1000));
-  const isUrgent = elapsed > 300;
+  const since = order.queue_since || order.paid_at || order.created_at;
+  const elapsed = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
+  const isUrgent = elapsed > URGENT_AFTER_SECONDS && order.status !== "ready";
   const isFlashing = completedFlash === order.id;
+  const isReady = order.status === "ready";
 
   const statusBadge: Record<string, { label: string; color: string }> = {
     pending: { label: "BARU", color: "bg-amber-500" },
@@ -370,38 +423,38 @@ function OrderCard({
     <div className={`rounded-xl border overflow-hidden transition-all ${
       isFlashing
         ? "border-green-400 bg-green-900/30 scale-95 opacity-50"
-        : isUrgent && order.status !== "ready"
-          ? "border-red-700/50 bg-gray-900"
-          : "border-gray-700/50 bg-gray-900"
+        : isReady
+          ? "border-green-700/60 bg-gray-900"
+          : isUrgent
+            ? "border-red-700/50 bg-gray-900"
+            : "border-gray-700/50 bg-gray-900"
     }`}>
       {/* Header */}
-      <div className={`flex items-center justify-between px-3 py-2 ${
-        isUrgent && order.status !== "ready" ? "bg-red-900/30" : "bg-gray-800/50"
+      <div className={`flex items-center justify-between gap-2 px-3 py-2 ${
+        isUrgent ? "bg-red-900/30" : isReady ? "bg-green-900/20" : "bg-gray-800/50"
       }`}>
-        <div className="flex items-center gap-2">
-          <span className="text-base font-bold text-white">#{order.receipt_number}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="text-2xl font-black leading-none tabular-nums text-white">#{shortNo(order)}</span>
           {showStatusBadge && badge && (
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold text-white ${badge.color}`}>{badge.label}</span>
           )}
           {order.order_source === "customer_web" && (
             <span className="rounded bg-purple-900/50 px-1.5 py-0.5 text-[10px] font-medium text-purple-300">WEB</span>
           )}
-          {order.payment_status === "pending" && (
-            <span className="rounded bg-amber-900/50 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">BELUM BAYAR</span>
-          )}
         </div>
-        <span className={`text-xs font-mono tabular-nums ${isUrgent && order.status !== "ready" ? "text-red-400 font-bold" : "text-gray-400"}`}>
+        <span className={`shrink-0 text-xs font-mono tabular-nums ${isUrgent ? "text-red-400 font-bold" : "text-gray-400"}`}>
           {formatElapsed(elapsed)}
         </span>
       </div>
 
-      {/* Customer */}
-      <div className="px-3 pt-1.5 pb-1">
-        <span className="text-xs text-gray-500">{order.customer_name}</span>
+      {/* Target (table / buzzer / take away) + customer */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2 pb-1">
+        <OrderTargetBadge order={order} dark size="lg" />
+        <span className="truncate text-xs text-gray-500">{order.customer_name} · {order.receipt_number}</span>
       </div>
 
       {/* Items */}
-      <div className="px-3 pb-2 space-y-1.5">
+      <div className="px-3 pb-2 pt-1 space-y-1.5">
         {order.items.map((item, idx) => (
           <div key={item.id || idx} className="flex items-start gap-2">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-gray-800 text-[11px] font-bold text-gray-300 mt-0.5">
