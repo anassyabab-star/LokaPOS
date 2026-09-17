@@ -52,6 +52,7 @@ export default function RewardsPage() {
   const phone = member?.phone || contact.phone;
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [tiers, setTiers] = useState<Tier[]>([]);
+  const [showAllTiers, setShowAllTiers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -239,32 +240,79 @@ export default function RewardsPage() {
 
         <MissionList phone={phone} />
 
-        {/* redeem */}
+        {/* redeem — one tier, not four.
+            Listing every tier meant a member with 97 points opened this screen
+            to four greyed-out rows reading 97/100, 97/500, 97/1000, 97/2000:
+            a list of things they cannot have. Show what they can do now, or
+            the single nearest target, and keep the rest behind a toggle. */}
         <div>
-          <div className="mb-2 px-1 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Redeem</div>
-          <div className="space-y-2.5">
-            {tiers.map(t => {
-              const affordable = signedIn && points >= t.points;
-              const working = busy === `redeem:${t.points}`;
+          <div className="mb-2 flex items-baseline justify-between gap-3 px-1">
+            <span className="font-sans text-[12px] font-semibold uppercase tracking-label text-muted">Redeem</span>
+            {tiers.length > 1 && (
+              <button
+                onClick={() => setShowAllTiers(v => !v)}
+                className="font-sans text-[12px] font-semibold text-maroon active:opacity-60"
+              >
+                {showAllTiers ? "Show less" : "See all"}
+              </button>
+            )}
+          </div>
+
+          {tiers.length === 0 && !loading ? (
+            <p className="px-1 font-sans text-[13px] text-muted">No rewards available yet.</p>
+          ) : (
+            (() => {
+              const affordable = tiers.filter(t => signedIn && points >= t.points);
+              const next = tiers.filter(t => t.points > points).sort((a, b) => a.points - b.points)[0];
+              // Best value they can take right now; otherwise the nearest one.
+              const best = affordable.length > 0 ? affordable[affordable.length - 1] : null;
+              const shown = showAllTiers ? tiers : best ? [best] : [];
+
               return (
-                <div key={t.points} className="flex items-center gap-3 rounded-[16px] border border-hairline bg-card p-4 shadow-card">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-cream-2 text-[18px]">🎁</div>
-                  <div className="flex-1">
-                    <div className="font-sans text-[14px] font-semibold text-espresso">{t.label} off</div>
-                    <div className="font-sans text-[12px] text-muted">{t.points} pts</div>
-                  </div>
-                  <button
-                    onClick={() => affordable && redeem(t)}
-                    disabled={!affordable || working}
-                    className={`rounded-[12px] px-4 py-2.5 font-sans text-[13px] font-semibold transition active:scale-95 ${affordable ? "bg-maroon text-cream" : "cursor-default bg-cream-2 text-muted-2"}`}
-                  >
-                    {working ? "…" : affordable ? "Redeem" : signedIn ? `${points}/${t.points}` : "Redeem"}
-                  </button>
+                <div className="space-y-2.5">
+                  {shown.map(t => {
+                    const can = signedIn && points >= t.points;
+                    const working = busy === `redeem:${t.points}`;
+                    return (
+                      <div key={t.points} className="flex items-center gap-3 rounded-[16px] border border-hairline bg-card p-4 shadow-card">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-cream-2 text-[18px]">🎁</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-sans text-[14px] font-semibold text-espresso">{t.label} off</div>
+                          <div className="font-sans text-[12px] text-muted">{t.points} pts</div>
+                        </div>
+                        <button
+                          onClick={() => can && redeem(t)}
+                          disabled={!can || working}
+                          className={`min-h-[44px] rounded-[12px] px-4 font-sans text-[13px] font-semibold transition active:scale-95 ${can ? "bg-maroon text-cream" : "cursor-default bg-cream-2 text-muted"}`}
+                        >
+                          {working ? "…" : can ? "Redeem" : `${points}/${t.points}`}
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {/* Nothing affordable yet: one target with a bar, like checkout. */}
+                  {!showAllTiers && !best && next && (
+                    <div className="rounded-[16px] border border-hairline bg-card p-4 shadow-card">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-sans text-[14px] font-semibold text-espresso">{next.label} off</span>
+                        <span className="font-display text-[13px] font-semibold text-leaf">{points}/{next.points}</span>
+                      </div>
+                      <div className="mt-2 h-[6px] w-full overflow-hidden rounded-full bg-hairline">
+                        <div
+                          className="h-full rounded-full bg-leaf"
+                          style={{ width: `${Math.max(Math.min(100, (points / next.points) * 100), points > 0 ? 6 : 0)}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 font-sans text-[12px] text-muted">
+                        {next.points - points} more {next.points - points === 1 ? "point" : "points"} to unlock this
+                      </p>
+                    </div>
+                  )}
                 </div>
               );
-            })}
-            {tiers.length === 0 && !loading && <p className="px-1 font-sans text-[13px] text-muted">No rewards available yet.</p>}
-          </div>
+            })()
+          )}
         </div>
 
         {/* referral */}
