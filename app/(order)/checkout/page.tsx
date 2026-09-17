@@ -43,7 +43,7 @@ function previewDiscount(c: CouponPreview | null | undefined, subtotal: number):
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, subtotal, cartCount, orderType, table, contact, setContact, setLastOrder, clearCart, referral, hydrated } = useOrder();
+  const { cart, subtotal, cartCount, orderType, table, contact, setContact, setLastOrder, clearCart, referral, hydrated, member } = useOrder();
   const [name, setName] = useState(contact.name);
   const [phone, setPhone] = useState(localPhone(contact.phone));
   const [payment, setPayment] = useState<"online" | "counter">("counter");
@@ -59,6 +59,23 @@ export default function CheckoutPage() {
   // options, so "Pay online now" kept showing after online was turned off in
   // Settings — the customer picked a way to pay that does not exist.
   const [methods, setMethods] = useState<Record<string, boolean> | null>(null);
+  // The customer's own rewards, so redeeming points does not mean copying a
+  // generated code out of the rewards screen from memory.
+  type Wallet = { code: string; label: string; reward_type: string; min_spend: number; expires_at: string | null; applies_here: boolean };
+  const [wallet, setWallet] = useState<Wallet[]>([]);
+
+  // Prefer the session phone; fall back to whatever they have typed so a guest
+  // who is also a member still sees their rewards.
+  const walletPhone = member?.phone || (phone.replace(/[^\d]/g, "").length >= 9 ? normalizeMyPhone(phone) : "");
+  useEffect(() => {
+    if (!walletPhone) { setWallet([]); return; }
+    let live = true;
+    fetch(`/api/public/vouchers?phone=${encodeURIComponent(walletPhone)}`, { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { if (live) setWallet(Array.isArray(d?.vouchers) ? d.vouchers : []); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [walletPhone]);
 
   useEffect(() => {
     let live = true;
@@ -100,16 +117,19 @@ export default function CheckoutPage() {
   const discount = couponDiscount ?? 0;
   const total = Math.max(0, Math.round((subtotal - discount) * 100) / 100);
 
-  async function applyCoupon() {
-    const code = couponInput.trim().toUpperCase();
+  // `preset` lets a tapped wallet voucher apply without waiting for the input
+  // state to flush.
+  async function applyCoupon(preset?: string) {
+    const code = String(preset ?? couponInput).trim().toUpperCase();
     if (!code) return;
-    if (phone.replace(/[^\d]/g, "").length < 8) {
+    const lookupPhone = member?.phone || phone;
+    if (lookupPhone.replace(/[^\d]/g, "").length < 8) {
       setCouponMsg("Enter your phone number first to check the coupon.");
       return;
     }
     setCouponChecking(true); setCouponMsg(null);
     try {
-      const canonical = normalizeMyPhone(phone);
+      const canonical = normalizeMyPhone(lookupPhone);
       const res = await fetch(`/api/public/coupon?code=${encodeURIComponent(code)}&phone=${encodeURIComponent(canonical)}`);
       const data = await res.json();
       if (data?.valid) {
@@ -268,7 +288,42 @@ export default function CheckoutPage() {
 
         {/* coupon */}
         <div className="rounded-[18px] border border-hairline bg-card p-4 shadow-card">
-          <div className="mb-2.5 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Coupon</div>
+          <div className="mb-2.5 font-sans text-[12px] font-semibold uppercase tracking-label text-muted">Coupon</div>
+
+          {/* The customer's own rewards, tappable. Without this the only way
+              to spend points was to remember a generated code. */}
+          {!couponCode && wallet.length > 0 && (
+            <div className="mb-3 space-y-1.5">
+              {wallet.map(v => {
+                const tooSmall = v.min_spend > subtotal;
+                const usable = v.applies_here && !tooSmall;
+                return (
+                  <button
+                    key={v.code}
+                    onClick={() => { if (usable) { setCouponInput(v.code); void applyCoupon(v.code); } }}
+                    disabled={!usable}
+                    className={`flex w-full items-center justify-between gap-3 rounded-[12px] border px-3.5 py-2.5 text-left transition ${
+                      usable ? "border-leaf/40 bg-leaf/5 active:scale-[.99]" : "border-hairline bg-cream/40"
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-sans text-[13px] font-semibold text-espresso">{v.label}</span>
+                      <span className="block font-sans text-[11px] text-muted">
+                        {!v.applies_here
+                          ? "Show this at the counter"
+                          : tooSmall
+                            ? `Spend ${rm(v.min_spend)} to use this`
+                            : v.code}
+                      </span>
+                    </span>
+                    <span className={`shrink-0 font-sans text-[12px] font-semibold ${usable ? "text-leaf" : "text-muted-2"}`}>
+                      {usable ? "Use" : "—"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {couponCode ? (
             <div className="flex items-center justify-between rounded-[12px] border border-leaf/40 bg-leaf/5 px-3.5 py-3">
               <span className="font-sans text-[13px] font-semibold text-espresso">

@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const supabase = createSupabaseAdminClient();
   const { data: voucher, error } = await supabase
     .from("vouchers")
-    .select("id,code,status,reward_type,reward_amount,reward_label,reward_product_id,reward_category_id,points_spent,expires_at,customer_id")
+    .select("id,code,status,reward_type,reward_amount,reward_label,discount_percent,max_discount,min_spend,reward_product_id,reward_category_id,points_spent,expires_at,customer_id")
     .eq("code", code)
     .maybeSingle();
 
@@ -37,6 +37,11 @@ export async function GET(req: Request) {
       reward_type: voucher.reward_type || "amount",
       reward_amount: Number(voucher.reward_amount || 0),
       reward_label: voucher.reward_label,
+      // The till needs these to price the voucher against the cart the same
+      // way the web checkout does.
+      discount_percent: voucher.discount_percent === null ? null : Number(voucher.discount_percent),
+      max_discount: voucher.max_discount === null ? null : Number(voucher.max_discount),
+      min_spend: Number(voucher.min_spend || 0),
       reward_product_id: voucher.reward_product_id || null,
       reward_category_id: voucher.reward_category_id || null,
       points_spent: Number(voucher.points_spent || 0),

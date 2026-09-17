@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { applyVoucherToCart } from "@/lib/voucher-cart";
 import {
   Product, Shift, PaidOutEntry, CartItem, ReceiptData, SugarLevel,
   MarketingConsentMode, MemberLookup, DEFAULT_SUGAR_LEVEL, SUGAR_LEVEL_OPTIONS,
@@ -145,6 +146,14 @@ export function usePosState() {
   const [redeemPointsInput, setRedeemPointsInput] = useState("");
 
   // ───── Payment ─────
+  // Voucher applied at the till. The endpoint (app/api/pos/voucher) has always
+  // existed; nothing in the POS ever called it, so points and mission rewards
+  // could not be spent at the counter.
+  const [voucherCode, setVoucherCode] = useState("");
+  const [voucherApplied, setVoucherApplied] = useState<{ code: string; discount: number; note: string } | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [voucherBusy, setVoucherBusy] = useState(false);
+
   const [discountType, setDiscountType] = useState<"none" | "percent" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "qr" | "card">("cash");
@@ -396,6 +405,43 @@ export function usePosState() {
   function clearCart() {
     setCart({}); setCustomPrices({}); setCustomNotes({});
     setB1f1Applied(false); setB1f1DiscountAmount(0);
+    clearVoucher();
+  }
+
+  function clearVoucher() {
+    setVoucherApplied(null); setVoucherCode(""); setVoucherError(null);
+  }
+
+  /**
+   * Validate a voucher and price it against the current cart. Validation only
+   * — the voucher is burned at checkout, with the order id, so a cancelled
+   * sale never consumes it.
+   */
+  async function applyVoucher(rawCode: string) {
+    const code = String(rawCode || "").trim().toUpperCase();
+    if (!code) return;
+    setVoucherBusy(true); setVoucherError(null);
+    try {
+      const res = await fetch(`/api/pos/voucher?code=${encodeURIComponent(code)}`);
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setVoucherError(d?.error || "Gagal semak voucher."); return; }
+      if (!d?.valid) {
+        const why = d?.reason === "expired" ? "Voucher sudah tamat tempoh."
+          : d?.reason === "redeemed" ? "Voucher sudah digunakan."
+          : "Kod voucher tidak dijumpai.";
+        setVoucherError(why);
+        return;
+      }
+      const lines = items.map(i => ({ product_id: i.product_id, name: i.name, price: i.price, qty: i.qty }));
+      const applied = applyVoucherToCart(d.voucher, lines, subtotal);
+      if (!applied.ok) { setVoucherError(applied.reason); return; }
+      setVoucherApplied({ code, discount: applied.discount, note: applied.note });
+      setVoucherCode("");
+    } catch {
+      setVoucherError("Tiada sambungan.");
+    } finally {
+      setVoucherBusy(false);
+    }
   }
 
   function resetCustomerState() {
@@ -404,7 +450,7 @@ export function usePosState() {
     setLinkedCustomerId(null); setMemberPoints(0); setMemberExpiringPoints(0); setMemberTier(null);
     setRedeemPointsInput(""); setMemberLookupMessage(null);
     setDiscountType("none"); setDiscountValue(""); setCashReceived("");
-    setShowDiscountPanel(false);
+    setShowDiscountPanel(false); clearVoucher();
     setMemberB1f1Redeemed(false); setB1f1Applied(false); setB1f1DiscountAmount(0);
   }
 
@@ -427,6 +473,7 @@ export function usePosState() {
 
   // ━━━ Derived: Pricing ━━━
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
+  const voucherDiscount = voucherApplied ? Number(voucherApplied.discount || 0) : 0;
   const discountNum = Number(discountValue) || 0;
   const cashNum = Number(cashReceived) || 0;
   let discountAmount = 0;
@@ -437,7 +484,7 @@ export function usePosState() {
     return isKopiCategory(product?.category) && item.qty >= 2;
   });
   const b1f1Discount = b1f1CartEligible ? b1f1DiscountAmount : 0;
-  const totalAfterDiscount = Math.max(subtotal - discountAmount - b1f1Discount, 0);
+  const totalAfterDiscount = Math.max(subtotal - discountAmount - b1f1Discount - voucherDiscount, 0);
   const requestedRedeem = Math.max(0, Math.floor(Number(redeemPointsInput || 0)));
   const capPct = Math.round(loyaltyConfig.redeemMaxRatio * 100);
   const maxRedeemByAmount = Math.floor((totalAfterDiscount * loyaltyConfig.redeemMaxRatio) / loyaltyConfig.redeemRmPerPoint);
@@ -535,6 +582,8 @@ export function usePosState() {
     b1f1Checking, setB1f1Checking, b1f1Discount,
     // Payment
     discountType, setDiscountType, discountValue, setDiscountValue,
+    voucherCode, setVoucherCode, voucherApplied, voucherError, voucherBusy,
+    applyVoucher, clearVoucher, voucherDiscount,
     paymentMethod, setPaymentMethod, cashReceived, setCashReceived,
     autoPrintEnabled, setAutoPrintEnabled, autoPrintLabel, setAutoPrintLabel,
     printerIp, setPrinterIp,

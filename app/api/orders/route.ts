@@ -599,6 +599,36 @@ export async function POST(req: Request) {
       // If reserveErr (unique violation = already redeemed or concurrent request) → skip discount
     }
 
+    // Voucher redeemed at the till. Burn it only now that the order exists, so
+    // a cancelled sale never consumes a customer's reward, and pass the order
+    // id so the redemption is traceable. The amount is re-derived from the
+    // voucher rather than trusted from the client.
+    let voucherDiscountApplied = 0;
+    let voucherCodeApplied: string | null = null;
+    const voucherCode = String(body.voucher_code || "").trim().toUpperCase();
+    if (voucherCode) {
+      const { data: redeemed, error: voucherErr } = await supabase.rpc("redeem_voucher_code", {
+        p_code: voucherCode,
+        p_order_id: order.id,
+      });
+      if (voucherErr) {
+        // Someone used it in the seconds since the cashier checked it. Do not
+        // fail the sale — but do not silently give the discount either.
+        console.warn(`[orders] voucher ${voucherCode} could not be redeemed:`, voucherErr.message);
+      } else {
+        const row = (Array.isArray(redeemed) ? redeemed[0] : redeemed) as
+          | { reward_type?: string; reward_amount?: number }
+          | null;
+        const claimed = Math.max(0, Number(body.voucher_discount_amount || 0));
+        // A free-product voucher has no cash value of its own; the till priced
+        // it against the cart, so cap that claim at the order total.
+        const serverAmount = row?.reward_type === "amount" ? Number(row.reward_amount || 0) : claimed;
+        voucherDiscountApplied = Math.min(serverAmount, claimed || serverAmount, total);
+        voucherCodeApplied = voucherCode;
+        total = Math.max(total - voucherDiscountApplied, 0);
+      }
+    }
+
     const config = await getLoyaltyConfig();
     const totalAfterDiscount = Math.max(Number(total || 0), 0);
 
