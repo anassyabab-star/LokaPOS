@@ -63,6 +63,11 @@ export default function CheckoutPage() {
   // generated code out of the rewards screen from memory.
   type Wallet = { code: string; label: string; reward_type: string; min_spend: number; expires_at: string | null; applies_here: boolean };
   const [wallet, setWallet] = useState<Wallet[]>([]);
+  const [points, setPoints] = useState(0);
+  const [earnPerRm, setEarnPerRm] = useState(1);
+  const [tiers, setTiers] = useState<{ points: number; amount: number; label: string }[]>([]);
+  const [redeeming, setRedeeming] = useState<number | null>(null);
+  const [pointsMsg, setPointsMsg] = useState<string | null>(null);
 
   // Prefer the session phone; fall back to whatever they have typed so a guest
   // who is also a member still sees their rewards.
@@ -72,7 +77,13 @@ export default function CheckoutPage() {
     let live = true;
     fetch(`/api/public/vouchers?phone=${encodeURIComponent(walletPhone)}`, { cache: "no-store" })
       .then(r => r.json())
-      .then(d => { if (live) setWallet(Array.isArray(d?.vouchers) ? d.vouchers : []); })
+      .then(d => {
+        if (!live) return;
+        setWallet(Array.isArray(d?.vouchers) ? d.vouchers : []);
+        setPoints(Number(d?.points || 0));
+        setEarnPerRm(Number(d?.earn_per_rm || 1));
+        setTiers(Array.isArray(d?.redeem_tiers) ? d.redeem_tiers : []);
+      })
       .catch(() => {});
     return () => { live = false; };
   }, [walletPhone]);
@@ -154,6 +165,36 @@ export default function CheckoutPage() {
       setCouponMsg("Couldn't check the coupon.");
     } finally {
       setCouponChecking(false);
+    }
+  }
+
+  /**
+   * Redeem points into a voucher and apply it to this order in one tap.
+   * Previously the customer had to leave checkout, redeem on the rewards
+   * screen, remember the generated code and come back for it.
+   */
+  async function redeemAndApply(tierPoints: number) {
+    const lookupPhone = member?.phone || (phone ? normalizeMyPhone(phone) : "");
+    if (!lookupPhone) { setPointsMsg("Sign in to use your points."); return; }
+    setRedeeming(tierPoints); setPointsMsg(null);
+    try {
+      const res = await fetch("/api/public/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: lookupPhone, points: tierPoints }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        setPointsMsg("Please sign in again to use your points.");
+        return;
+      }
+      if (!res.ok || !d?.code) { setPointsMsg(d?.error || "Couldn't redeem those points."); return; }
+      setPoints(p => Math.max(0, p - tierPoints));
+      await applyCoupon(String(d.code));
+    } catch {
+      setPointsMsg("No connection.");
+    } finally {
+      setRedeeming(null);
     }
   }
 
@@ -285,6 +326,57 @@ export default function CheckoutPage() {
             );
           })}
         </div>
+
+        {/* points — shown at the moment of paying, which is when knowing the
+            balance actually changes what the customer does */}
+        {walletPhone && (
+          <div className="rounded-[18px] border border-hairline bg-card p-4 shadow-card">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="font-sans text-[12px] font-semibold uppercase tracking-label text-muted">Your points</span>
+              <span className="font-display text-[18px] font-semibold text-espresso">{points} pts</span>
+            </div>
+            <p className="mt-0.5 font-sans text-[12px] text-muted">
+              This order earns about {Math.round(subtotal * earnPerRm)} pts.
+            </p>
+
+            {(() => {
+              const affordable = tiers.filter(t => t.points <= points);
+              const next = tiers.filter(t => t.points > points).sort((a, b) => a.points - b.points)[0];
+              if (couponCode) return null;
+              if (affordable.length > 0) {
+                return (
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {affordable.map(t => (
+                      <button
+                        key={t.points}
+                        onClick={() => void redeemAndApply(t.points)}
+                        disabled={redeeming !== null}
+                        className="min-h-[44px] rounded-[12px] bg-maroon px-4 font-sans text-[13px] font-semibold text-cream disabled:opacity-50 active:scale-95"
+                      >
+                        {redeeming === t.points ? "…" : `Use ${t.points} pts → ${t.label} off`}
+                      </button>
+                    ))}
+                  </div>
+                );
+              }
+              if (next) {
+                const pct = Math.min(100, (points / next.points) * 100);
+                return (
+                  <div className="mt-2.5">
+                    <div className="h-[6px] w-full overflow-hidden rounded-full bg-hairline">
+                      <div className="h-full rounded-full bg-leaf" style={{ width: `${Math.max(pct, points > 0 ? 6 : 0)}%` }} />
+                    </div>
+                    <p className="mt-1.5 font-sans text-[12px] text-muted">
+                      {next.points - points} more pts for {next.label} off
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            {pointsMsg && <p className="mt-2 font-sans text-[12px] text-melon">{pointsMsg}</p>}
+          </div>
+        )}
 
         {/* coupon */}
         <div className="rounded-[18px] border border-hairline bg-card p-4 shadow-card">
