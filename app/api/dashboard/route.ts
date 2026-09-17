@@ -30,6 +30,46 @@ function myDayStartToUtcIso(dateStr: string) {
   return new Date(`${dateStr}T00:00:00+08:00`).toISOString();
 }
 
+/** "YYYY-MM-01" for the month `back` months before the one containing dateStr. */
+function monthStartBack(dateStr: string, back: number) {
+  const [y, m] = dateStr.split("-").map(Number);
+  const d = new Date(Date.UTC(y, (m - 1) - back, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * Sums `total` over a date_key range, paging past PostgREST's 1,000-row cap.
+ * Six months of this cafe is several thousand orders, so a single select would
+ * silently truncate and under-report every month.
+ */
+async function sumOrdersByMonth(fromDateKey: string, toDateKey: string) {
+  const byMonth = new Map<string, { sales: number; orders: number }>();
+  const PAGE = 1000;
+  for (let page = 0; page < 40; page++) {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("date_key,total")
+      .in("status", ["pending", "preparing", "ready", "completed"])
+      .eq("payment_status", "paid")
+      .gte("date_key", fromDateKey)
+      .lte("date_key", toDateKey)
+      .order("date_key", { ascending: true })
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) throw error;
+    const rows = (data || []) as Array<{ date_key: string | null; total: number | string | null }>;
+    for (const r of rows) {
+      const key = String(r.date_key || "").slice(0, 7);
+      if (!key) continue;
+      const b = byMonth.get(key) || { sales: 0, orders: 0 };
+      b.sales += Number(r.total || 0);
+      b.orders += 1;
+      byMonth.set(key, b);
+    }
+    if (rows.length < PAGE) break;
+  }
+  return byMonth;
+}
+
 function plusDays(dateStr: string, days: number) {
   const date = new Date(`${dateStr}T00:00:00+08:00`);
   date.setDate(date.getDate() + days);
@@ -229,6 +269,48 @@ export async function GET(req: NextRequest) {
     const monthOutflow = monthExpenses + monthPaidOut;
     const monthProfitLoss = monthSales - monthOutflow;
 
+    // =========================
+    // LAST 6 MONTHS
+    // =========================
+    // Independent of the range selector — the owner wants the shape of the
+    // year so far, not of today.
+    const trendFrom = monthStartBack(todayStr, 5);
+    const salesByMonth = await sumOrdersByMonth(trendFrom, todayStr);
+
+    const expensesByMonth = new Map<string, number>();
+    const { data: trendExpenseRows, error: trendExpenseError } = await supabase
+      .from("expenses")
+      .select("expense_date,amount")
+      .gte("expense_date", trendFrom)
+      .lte("expense_date", todayStr)
+      .limit(10000);
+    if (!trendExpenseError) {
+      for (const r of (trendExpenseRows || []) as Array<{ expense_date: string | null; amount: number | string | null }>) {
+        const key = String(r.expense_date || "").slice(0, 7);
+        if (!key) continue;
+        expensesByMonth.set(key, (expensesByMonth.get(key) || 0) + Number(r.amount || 0));
+      }
+    } else if (!isMissingRelationError(trendExpenseError.message)) {
+      throw trendExpenseError;
+    }
+
+    const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const salesTrend6m = Array.from({ length: 6 }, (_, i) => {
+      const monthKey = monthStartBack(todayStr, 5 - i).slice(0, 7);
+      const bucket = salesByMonth.get(monthKey) || { sales: 0, orders: 0 };
+      const expenses = expensesByMonth.get(monthKey) || 0;
+      const monthIndex = Number(monthKey.slice(5, 7)) - 1;
+      return {
+        month: monthKey,
+        label: MONTH_LABELS[monthIndex] || monthKey,
+        sales: Math.round(bucket.sales * 100) / 100,
+        orders: bucket.orders,
+        expenses: Math.round(expenses * 100) / 100,
+        profit_loss: Math.round((bucket.sales - expenses) * 100) / 100,
+        partial: monthKey === todayStr.slice(0, 7),
+      };
+    });
+
     return NextResponse.json({
       orders: orders || [],
       topProducts,
@@ -245,6 +327,7 @@ export async function GET(req: NextRequest) {
         outflow: monthOutflow,
         profit_loss: monthProfitLoss,
       },
+      salesTrend6m,
     });
 
   } catch (error) {
@@ -266,6 +349,7 @@ export async function GET(req: NextRequest) {
           outflow: 0,
           profit_loss: 0,
         },
+        salesTrend6m: [],
       },
       { status: 500 }
     );

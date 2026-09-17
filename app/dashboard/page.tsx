@@ -9,6 +9,7 @@ import {
 } from "./_ui";
 
 const SalesChart = dynamic(() => import("./chart"), { ssr: false });
+const MonthlyChart = dynamic(() => import("./monthly-chart"), { ssr: false });
 
 type Order = {
   id: string;
@@ -20,6 +21,16 @@ type Order = {
 
 type TopProduct = { product_name: string; total_qty: number };
 type LowStockItem = { id: string; name: string; stock: number };
+
+type MonthPoint = {
+  month: string;
+  label: string;
+  sales: number;
+  orders: number;
+  expenses: number;
+  profit_loss: number;
+  partial?: boolean;
+};
 
 type MonthlyPL = {
   month: string;
@@ -42,6 +53,7 @@ export default function DashboardPage() {
   const [monthlyPL, setMonthlyPL] = useState<MonthlyPL>({
     month: "", sales: 0, expenses: 0, paid_out: 0, outflow: 0, profit_loss: 0,
   });
+  const [salesTrend6m, setSalesTrend6m] = useState<MonthPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -62,6 +74,7 @@ export default function DashboardPage() {
         setPaymentMix(data.paymentMix || {});
         setLowStock(data.lowStock || []);
         setMonthlyPL((data.monthlyPL as MonthlyPL) || { month: "", sales: 0, expenses: 0, paid_out: 0, outflow: 0, profit_loss: 0 });
+        setSalesTrend6m((data.salesTrend6m as MonthPoint[]) || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Gagal muatkan data dashboard");
       } finally {
@@ -84,6 +97,11 @@ export default function DashboardPage() {
   const trendData = Object.entries(trendMap).map(([date, total]) => ({ date, total }));
   const peakTrendPoint = trendData.length > 0
     ? trendData.reduce((max, pt) => pt.total > max.total ? pt : max)
+    : null;
+
+  const sixMonthTotal = salesTrend6m.reduce((sum, m) => sum + Number(m.sales || 0), 0);
+  const bestMonth = salesTrend6m.length > 0
+    ? salesTrend6m.reduce((max, m) => (m.sales > max.sales ? m : max))
     : null;
 
   const totalPaymentSales = Object.values(paymentMix).reduce((sum, v) => sum + Number(v), 0);
@@ -267,6 +285,38 @@ export default function DashboardPage() {
           )}
         </Card>
       </div>
+
+      {/* Last 6 months — deliberately outside the range selector, so the owner
+          always sees the shape of the half-year regardless of what is picked. */}
+      <Card style={{ padding: 18, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4, gap: 12, flexWrap: "wrap" }}>
+          <SectionLabel>Sales · last 6 months</SectionLabel>
+          {sixMonthTotal > 0 && (
+            <p style={{ fontSize: 11, color: "var(--d-text-3)" }}>
+              Total RM {sixMonthTotal.toFixed(2)} · best {bestMonth?.label} RM {(bestMonth?.sales ?? 0).toFixed(2)}
+            </p>
+          )}
+        </div>
+        {salesTrend6m.length === 0 ? (
+          <p style={{ fontSize: 12, color: "var(--d-text-3)" }}>No sales history yet</p>
+        ) : (
+          <>
+            <MonthlyChart data={salesTrend6m} />
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${salesTrend6m.length}, 1fr)`, gap: 6, marginTop: 10 }}>
+              {salesTrend6m.map(m => (
+                <div key={m.month} style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--d-text-1)" }}>
+                    {m.sales >= 1000 ? `${(m.sales / 1000).toFixed(1)}k` : m.sales.toFixed(0)}
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--d-text-3)" }}>
+                    {m.orders} ord{m.partial ? " ·so far" : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
 
       {/* Sales Trend */}
       <Card style={{ padding: 18, marginBottom: 16 }}>
