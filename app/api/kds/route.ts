@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { requireStaffApi } from "@/lib/staff-api-auth";
 import { isMissingColumnError } from "@/lib/order-status";
 import { expireStaleUnpaidOrders } from "@/lib/order-expiry";
+import { myDateKey } from "@/lib/order-numbering";
 import { KITCHEN_ACTIVE_STATUSES, shortOrderNumber } from "@/lib/order-flow";
 
 const KDS_COLS = "id, receipt_number, customer_name, total, status, order_source, payment_status, created_at";
@@ -67,7 +68,6 @@ export async function GET() {
 
   // Use open shift's opened_at date as date_key so overnight shifts
   // still show orders after midnight (same logic as orders GET route).
-  let dateKey: string;
   const { data: openShift } = await supabase
     .from("pos_shifts")
     .select("opened_at")
@@ -76,11 +76,12 @@ export async function GET() {
     .limit(1)
     .maybeSingle();
 
-  if (openShift?.opened_at) {
-    dateKey = new Date(openShift.opened_at).toISOString().slice(0, 10);
-  } else {
-    dateKey = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Kuala_Lumpur" });
-  }
+  // myDateKey, not toISOString(). Orders are stamped with the Malaysian
+  // business day (app/api/orders/route.ts via lib/order-numbering), and a UTC
+  // slice of opened_at is a day behind for any shift opened before 08:00 MYT —
+  // so the filter below matched nothing and the kitchen saw an empty board for
+  // the whole day.
+  const dateKey = openShift?.opened_at ? myDateKey(new Date(openShift.opened_at)) : myDateKey();
 
   // Best-effort sweep of expired "awaiting_payment" orders (throttled inside).
   try {

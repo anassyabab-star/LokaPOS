@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { getCashSalesSince } from "@/lib/shift-cash";
 import { expireStaleUnpaidOrders } from "@/lib/order-expiry";
+import { myDateKey } from "@/lib/order-numbering";
 
 type ShiftRow = {
   id: string;
@@ -55,9 +56,27 @@ export async function GET(req: NextRequest) {
     }
 
     const results: Array<{ shift_id: string; ok: boolean; error?: string }> = [];
+    const skipped: Array<{ shift_id: string; reason: string }> = [];
     const now = new Date().toISOString();
+    const todayKey = myDateKey(new Date());
+
+    // Only sweep up a shift the cashier genuinely forgot. Previously this
+    // closed EVERY open shift the moment it ran, which — with the cron landing
+    // at 18:25 and 02:37 Malaysia time — killed the live till in the middle of
+    // service every single day.
+    const stale = (shift: ShiftRow) => {
+      const openedKey = myDateKey(new Date(shift.opened_at));
+      const ageHours = (Date.now() - new Date(shift.opened_at).getTime()) / 3_600_000;
+      if (openedKey >= todayKey) return false;   // still today's business day
+      if (ageHours < 2) return false;            // opened minutes ago, just after midnight
+      return true;
+    };
 
     for (const shift of openShifts as ShiftRow[]) {
+      if (!stale(shift)) {
+        skipped.push({ shift_id: shift.id, reason: "still the current business day" });
+        continue;
+      }
       try {
         // Calculate expected cash (every PAID cash order since open — see lib/shift-cash.ts)
         const cashSales = await getCashSalesSince(supabase, shift.opened_at);
@@ -73,19 +92,21 @@ export async function GET(req: NextRequest) {
         );
 
         const expectedCash = toNum(shift.opening_cash) + cashSales - paidOutTotal;
-        // For auto-close: counted = expected (no over/short)
-        const countedCash = expectedCash;
 
+        // Leave counted_cash and over_short NULL. Writing counted = expected
+        // recorded a perfect zero variance for a drawer nobody ever counted,
+        // which is worse than no number: it hides the gap instead of showing
+        // one. A null reads as "not counted" in the shift report.
         const { error: updateError } = await supabase
           .from("pos_shifts")
           .update({
             status: "closed",
             closed_by: shift.opened_by, // attribute to opener
             closed_at: now,
-            counted_cash: countedCash,
+            counted_cash: null,
             expected_cash: expectedCash,
-            over_short: 0,
-            closing_note: "Auto-closed by system",
+            over_short: null,
+            closing_note: "Auto-closed by system — drawer was never counted",
           })
           .eq("id", shift.id);
 
@@ -156,7 +177,7 @@ export async function GET(req: NextRequest) {
     }
 
     const closed = results.filter(r => r.ok).length;
-    return NextResponse.json({ message: `Closed ${closed} shift(s)`, results, expired });
+    return NextResponse.json({ message: `Closed ${closed} shift(s)`, results, skipped, expired });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed";
     console.error("[auto-close] Fatal error:", err);
