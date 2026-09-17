@@ -97,15 +97,23 @@ for (const m of plan.merges) {
       catch (e) { if (!/does not exist|schema cache|column/i.test(String(e))) throw e; }
     }
   }
-  const totalOrders = [m.keep, ...m.absorb].reduce((s, r) => s + Number(r.total_orders || 0), 0);
-  const totalSpend = [m.keep, ...m.absorb].reduce((s, r) => s + Number(r.total_spend || 0), 0);
-  const lastOrder = [m.keep, ...m.absorb].map(r => r.last_order_at).filter(Boolean).sort().pop() || null;
+  // Delete the absorbed rows BEFORE writing the canonical phone onto the kept
+  // one. customers.phone carries a unique constraint (customers_phone_uq), and
+  // when an absorbed row is the one already holding the canonical value,
+  // setting it on the kept row first fails with 23505 and leaves the merge
+  // half applied — children moved, rows not collapsed.
+  for (const a of m.absorb) await rest(`customers?id=eq.${a.id}`, { method: "DELETE" });
+
+  // Re-read: moving the orders may have fired triggers that already
+  // recalculated the kept row's counters, so summing the values we captured
+  // before the move would double-count.
+  const [fresh] = await rest(`customers?select=total_orders,total_spend,last_order_at&id=eq.${m.keep.id}`);
+  const lastOrder = [fresh?.last_order_at, ...m.absorb.map(r => r.last_order_at)].filter(Boolean).sort().pop() || null;
   await rest(`customers?id=eq.${m.keep.id}`, {
     method: "PATCH",
-    body: JSON.stringify({ phone: m.phone, total_orders: totalOrders, total_spend: totalSpend, last_order_at: lastOrder }),
+    body: JSON.stringify({ phone: m.phone, last_order_at: lastOrder }),
   });
-  for (const a of m.absorb) await rest(`customers?id=eq.${a.id}`, { method: "DELETE" });
-  console.log(`   merged ${m.phone}: ${m.absorb.length} row(s) absorbed, ${totalOrders} orders, RM${totalSpend}`);
+  console.log(`   merged ${m.phone}: ${m.absorb.length} row(s) absorbed, now ${fresh?.total_orders ?? "?"} orders, RM${fresh?.total_spend ?? "?"}`);
 }
 for (const r of plan.reformat) {
   await rest(`customers?id=eq.${r.id}`, { method: "PATCH", body: JSON.stringify({ phone: r.to }) });
