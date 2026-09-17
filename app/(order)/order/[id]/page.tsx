@@ -64,6 +64,9 @@ export default function OrderPage() {
   const search = useSearchParams();
   const id = params.id;
   const paymentFailed = search.get("payment") === "failed";
+  // Checkout sets this when "Pay online" was chosen but the gateway returned no
+  // checkout link, so the counter is the only way to pay.
+  const paymentUnavailable = search.get("payment") === "unavailable";
   const { lastOrder, contact, setContact } = useOrder();
   const order = lastOrder && lastOrder.orderId === id ? lastOrder : null;
 
@@ -79,6 +82,11 @@ export default function OrderPage() {
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
   useEffect(() => { if (order?.phone && !phone) setPhone(order.phone); }, [order?.phone]);
+  // contact comes from localStorage, which is read in an effect — without this
+  // a reload of the tracker always asked for the phone number again.
+  useEffect(() => {
+    if (!phone && contact.phone) { setPhone(contact.phone); setPhoneInput(localPhone(contact.phone)); }
+  }, [contact.phone, phone]);
 
   // Poll live status.
   useEffect(() => {
@@ -177,6 +185,57 @@ export default function OrderPage() {
     );
   }
 
+  // ── We have a phone but the server told us nothing about this order.
+  // Without this the status below falls through every branch and lands on the
+  // default "Payment received" hero — a green tick telling an unpaid customer
+  // their drink is being made. Say plainly that we cannot find it instead, and
+  // give them a way to try another number.
+  if (!order && !track) {
+    const looking = !trackError;
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-espresso px-6 text-center">
+        {looking ? (
+          <>
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-cream/20 border-t-melon" />
+            <div className="mt-5 font-display text-[20px] font-semibold text-cream">Checking your order…</div>
+          </>
+        ) : (
+          <>
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-melon/20 text-[26px]">🔍</div>
+            <div className="mt-4 font-display text-[20px] font-semibold text-cream">
+              {trackError === "Order not found for this number." ? "We can\u2019t find this order" : "Can\u2019t check the status"}
+            </div>
+            <p className="mt-2 max-w-[300px] font-sans text-[13px] text-[#C9A88F]">
+              {trackError === "Order not found for this number."
+                ? "This order does not match that phone number. Try the number you gave at checkout."
+                : "You look offline. Check your connection and try again."}
+            </p>
+            <div className="mt-5 flex w-full max-w-[320px] items-center rounded-[12px] border border-cream/20 bg-cream/5 focus-within:border-melon">
+              <span className="pl-3.5 pr-2 font-sans text-[14px] text-[#C9A88F]">🇲🇾 +60</span>
+              <input
+                value={phoneInput}
+                onChange={e => setPhoneInput(e.target.value.replace(/[^\d]/g, ""))}
+                inputMode="numeric"
+                type="tel"
+                autoComplete="tel-national"
+                placeholder="12 345 6789"
+                aria-label="Phone number used for this order"
+                className="w-full bg-transparent py-3 pr-3.5 font-sans text-[16px] text-cream outline-none placeholder:text-[#9C8B79]"
+              />
+            </div>
+            <button onClick={submitPhone} className="mt-3 w-full max-w-[320px] rounded-[14px] bg-maroon py-3.5 font-sans text-[15px] font-semibold text-cream active:scale-[.99]">
+              Try this number
+            </button>
+            <p className="mt-4 max-w-[300px] font-sans text-[12px] text-[#C9A88F]">
+              Still stuck? Show this page to the cashier — they can find your order.
+            </p>
+            <Link href="/menu" className="mt-5 font-sans text-[13px] font-semibold text-[#C9A88F]">\u2190 Back to menu</Link>
+          </>
+        )}
+      </div>
+    );
+  }
+
   const isAwaiting = status === "awaiting_payment";
   const isReady = status === "ready";
   const isCancelled = status === "cancelled";
@@ -191,9 +250,9 @@ export default function OrderPage() {
     : isAwaiting
       ? paymentFailed
         ? { icon: "🧾", tone: "bg-maroon", title: "Online payment failed", sub: "No worries — show this Order ID at the counter to pay." }
-        : paysAtCounter
-          ? { icon: "🧾", tone: "bg-maroon", title: "Pay at the counter", sub: "Show this Order ID to the cashier to pay." }
-          : { icon: "⏳", tone: "bg-maroon", title: "Awaiting payment", sub: "Complete your online payment, or pay at the counter with this Order ID." }
+        : paysAtCounter || paymentUnavailable
+          ? { icon: "🧾", tone: "bg-maroon", title: "Pay at the counter", sub: paymentUnavailable ? "Online payment couldn’t start. Show this Order ID to the cashier to pay." : "Show this Order ID to the cashier to pay." }
+          : { icon: "⏳", tone: "bg-maroon", title: "Awaiting payment", sub: "Finish the payment in the tab that opened, or show this Order ID at the counter." }
       : isReady
         ? { icon: "🔔", tone: "bg-leaf", title: "Your order is ready!", sub: tableNo ? `We'll bring it to ${target}.` : buzzerNo ? `${target} will buzz — collect it at the counter.` : "Collect it at the counter." }
         : isDone

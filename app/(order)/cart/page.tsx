@@ -5,17 +5,35 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useOrder, rm } from "../order-provider";
 
 export default function CartPage() {
   const router = useRouter();
-  const { cart, setQty, removeLine, subtotal, cartCount, orderType, setOrderType, table, member } = useOrder();
+  const { cart, setQty, removeLine, subtotal, cartCount, orderType, setOrderType, table, setTable, member } = useOrder();
+  const [tables, setTables] = useState<string[]>([]);
+
+  // Needed so someone who switches to Dine-in (e.g. they scanned the takeaway
+  // QR) can say which table they are at.
+  useEffect(() => {
+    let live = true;
+    fetch("/api/public/store-status", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { if (live && Array.isArray(d?.dine_in_tables)) setTables(d.dine_in_tables.map((t: unknown) => String(t))); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
 
   const pointsEarned = Math.round(subtotal); // 1 pt / RM1 (earned only when signed in)
+  // Dine-in with no table used to promise table service and then send no table
+  // at all, so staff could not deliver it. Ask before checkout instead.
+  const needsTable = orderType === "dine" && !table;
 
   const note =
     orderType === "dine"
-      ? `Served to ${table ? `Table ${table}` : "your table"} · Loka Bangi`
+      ? table
+        ? `Served to Table ${table} · Loka Bangi`
+        : "Pick your table below so we know where to bring it"
       : "Pick up at the counter · Loka Bangi";
 
   return (
@@ -63,6 +81,30 @@ export default function CartPage() {
             </div>
             <p className="mt-2 px-1 font-sans text-[12px] text-muted">{note}</p>
 
+            {/* table picker — only when dine-in has no table yet */}
+            {needsTable && (
+              <div className="mt-3 rounded-[16px] border border-maroon/30 bg-maroon/5 p-3.5">
+                <div className="font-sans text-[13px] font-semibold text-espresso">Which table are you at?</div>
+                {tables.length > 0 ? (
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    {tables.map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setTable(t)}
+                        className="min-h-[44px] min-w-[52px] rounded-[12px] border border-hairline bg-card px-3 font-display text-[15px] font-semibold text-espresso active:scale-95"
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-1.5 font-sans text-[12px] text-muted">
+                    Scan the QR code on your table, or switch to Takeaway.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* line items */}
             <div className="mt-4">
               {cart.map(line => (
@@ -105,13 +147,22 @@ export default function CartPage() {
                 <span className="text-muted">{member?.signedIn ? "You'll earn" : "Sign in to earn"}</span>
                 <span className="font-display font-semibold text-leaf">+{pointsEarned} pts</span>
               </div>
-              <Link
-                href="/checkout"
-                className="mt-4 flex items-center justify-between rounded-[16px] bg-maroon px-[18px] py-[15px] transition active:scale-[.99]"
-              >
-                <span className="font-sans text-[15px] font-semibold text-cream">Checkout</span>
-                <span className="font-display text-[15px] font-semibold text-cream">{rm(subtotal)}</span>
-              </Link>
+              {needsTable ? (
+                <button
+                  disabled
+                  className="mt-4 flex w-full cursor-default items-center justify-center rounded-[16px] bg-maroon/40 px-[18px] py-[15px]"
+                >
+                  <span className="font-sans text-[15px] font-semibold text-cream">Pick your table to continue</span>
+                </button>
+              ) : (
+                <Link
+                  href="/checkout"
+                  className="mt-4 flex items-center justify-between rounded-[16px] bg-maroon px-[18px] py-[15px] transition active:scale-[.99]"
+                >
+                  <span className="font-sans text-[15px] font-semibold text-cream">Checkout</span>
+                  <span className="font-display text-[15px] font-semibold text-cream">{rm(subtotal)}</span>
+                </Link>
+              )}
             </div>
           </div>
         </>

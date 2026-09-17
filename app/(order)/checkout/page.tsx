@@ -8,9 +8,42 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOrder, rm, normalizeMyPhone, localPhone } from "../order-provider";
 
+type CouponPreview = {
+  reward_type?: string | null;
+  discount_percent?: number | null;
+  reward_amount?: number | null;
+  max_discount?: number | null;
+  min_spend?: number | null;
+  scoped?: boolean | null;
+};
+
+/**
+ * What this coupon takes off, mirroring computeVoucherDiscount on the server.
+ * Returns null when the amount cannot be known here — a product- or
+ * category-scoped coupon needs the catalog to resolve, so we say "applied at
+ * payment" rather than print a number that might be wrong.
+ */
+function previewDiscount(c: CouponPreview | null | undefined, subtotal: number): number | null {
+  if (!c || subtotal <= 0) return null;
+  if (c.scoped) return null;
+  if (Number(c.min_spend || 0) > subtotal) return 0;
+
+  let discount = 0;
+  if (c.reward_type === "percent") {
+    discount = subtotal * (Math.max(0, Number(c.discount_percent || 0)) / 100);
+    const cap = Number(c.max_discount || 0);
+    if (cap > 0) discount = Math.min(discount, cap);
+  } else if (c.reward_type === "amount") {
+    discount = Math.min(Number(c.reward_amount || 0), subtotal);
+  } else {
+    return null; // free product — priced at the counter
+  }
+  return Math.max(0, Math.round(Math.min(discount, subtotal) * 100) / 100);
+}
+
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, subtotal, cartCount, orderType, table, contact, setContact, setLastOrder, clearCart, referral } = useOrder();
+  const { cart, subtotal, cartCount, orderType, table, contact, setContact, setLastOrder, clearCart, referral, hydrated } = useOrder();
   const [name, setName] = useState(contact.name);
   const [phone, setPhone] = useState(localPhone(contact.phone));
   const [payment, setPayment] = useState<"online" | "counter">("counter");
@@ -19,8 +52,16 @@ export default function CheckoutPage() {
   const [couponInput, setCouponInput] = useState("");
   const [couponCode, setCouponCode] = useState<string | null>(null);
   const [couponLabel, setCouponLabel] = useState<string | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState<number | null>(null);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
   const [couponChecking, setCouponChecking] = useState(false);
+
+  // The cart is restored from localStorage in an effect, so on the first render
+  // after any reload it still looks empty. Redirecting here without waiting
+  // threw the customer back to the menu every time they refreshed checkout.
+  if (!hydrated) {
+    return <div className="min-h-[100dvh] bg-cream" />;
+  }
 
   if (cartCount === 0) {
     // Nothing to check out — bounce to menu.
@@ -29,7 +70,12 @@ export default function CheckoutPage() {
   }
 
   const eta = orderType === "dine" ? "8–10 min" : "12–15 min";
-  const total = subtotal; // (redeem applies only for signed-in members — added later)
+  // Show what will actually be charged. The server prices the coupon again on
+  // the order, so this is a preview — but a preview that matches, instead of
+  // the old behaviour where Total and the button kept showing the full price
+  // after a coupon was accepted.
+  const discount = couponDiscount ?? 0;
+  const total = Math.max(0, Math.round((subtotal - discount) * 100) / 100);
 
   async function applyCoupon() {
     const code = couponInput.trim().toUpperCase();
@@ -55,6 +101,7 @@ export default function CheckoutPage() {
         }
         setCouponCode(code);
         setCouponLabel(data.coupon?.label || code);
+        setCouponDiscount(previewDiscount(data.coupon, subtotal));
         setCouponMsg(null);
       } else {
         setCouponCode(null); setCouponLabel(null);
@@ -68,10 +115,13 @@ export default function CheckoutPage() {
   }
 
   function clearCoupon() {
-    setCouponCode(null); setCouponLabel(null); setCouponInput(""); setCouponMsg(null);
+    setCouponCode(null); setCouponLabel(null); setCouponDiscount(null); setCouponInput(""); setCouponMsg(null);
   }
 
   async function placeOrder() {
+    // Dine-in used to be placeable with no table, and the customer was still
+    // told it would be brought to them.
+    if (orderType === "dine" && !table) { setError("Please go back and pick your table, or switch to Takeaway."); return; }
     if (!name.trim()) { setError("Please enter your name"); return; }
     if (phone.replace(/[^\d]/g, "").length < 8) { setError("Invalid phone number"); return; }
     const canonical = normalizeMyPhone(phone);
@@ -123,7 +173,12 @@ export default function CheckoutPage() {
         window.location.assign(data.payment_url);
         return;
       }
-      router.push(`/order/${orderId}`);
+      // Online was chosen but the gateway gave us no checkout link. The order
+      // exists and is unpaid, and there is no in-app way to pay it, so send
+      // the customer to the counter explicitly instead of dropping them on a
+      // tracker that tells them to finish a payment they cannot start.
+      const fellBackToCounter = payment === "online";
+      router.push(`/order/${orderId}${fellBackToCounter ? "?payment=unavailable" : ""}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setPlacing(false);
@@ -144,7 +199,7 @@ export default function CheckoutPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-cream-2 text-[18px]">{orderType === "dine" ? "🍽" : "🥡"}</div>
             <div className="flex-1">
               <div className="font-sans text-[14px] font-semibold text-espresso">{orderType === "dine" ? "Dine-in" : "Takeaway"}</div>
-              <div className="font-sans text-[12px] text-muted">{orderType === "dine" ? `Served to ${table ? `Table ${table}` : "your table"} · Loka Bangi` : "Pick up at the counter · Loka Bangi"}</div>
+              <div className="font-sans text-[12px] text-muted">{orderType === "dine" ? (table ? `Served to Table ${table} · Loka Bangi` : "No table selected — go back and pick one") : "Pick up at the counter · Loka Bangi"}</div>
             </div>
             <div className="text-right font-display text-[13px] font-semibold text-leaf">{eta}</div>
           </div>
@@ -186,7 +241,10 @@ export default function CheckoutPage() {
           <div className="mb-2.5 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Coupon</div>
           {couponCode ? (
             <div className="flex items-center justify-between rounded-[12px] border border-leaf/40 bg-leaf/5 px-3.5 py-3">
-              <span className="font-sans text-[13px] font-semibold text-espresso">✓ {couponCode}{couponLabel ? ` — ${couponLabel}` : ""}</span>
+              <span className="font-sans text-[13px] font-semibold text-espresso">
+                ✓ {couponCode}{couponLabel ? ` — ${couponLabel}` : ""}
+                {couponDiscount !== null && couponDiscount > 0 && <span className="text-leaf"> · saves {rm(couponDiscount)}</span>}
+              </span>
               <button onClick={clearCoupon} className="font-sans text-[12px] font-semibold text-melon active:opacity-60">Remove</button>
             </div>
           ) : (
@@ -207,7 +265,7 @@ export default function CheckoutPage() {
             </div>
           )}
           {couponMsg && <p className="mt-2 font-sans text-[11px] text-melon">{couponMsg}</p>}
-          {couponCode && <p className="mt-2 font-sans text-[11px] text-muted-2">The discount is applied when your payment is confirmed.</p>}
+          {couponCode && couponDiscount === null && <p className="mt-2 font-sans text-[11px] text-muted">This discount is worked out when your payment is confirmed.</p>}
         </div>
 
         {/* summary */}
@@ -219,6 +277,12 @@ export default function CheckoutPage() {
               <span className="whitespace-nowrap font-display font-semibold text-espresso">{rm(l.unitPrice * l.qty)}</span>
             </div>
           ))}
+          {discount > 0 && (
+            <div className="mt-2 flex justify-between border-t border-hairline pt-2 font-sans text-[13px]">
+              <span className="text-leaf">Coupon {couponCode}</span>
+              <span className="font-display font-semibold text-leaf">−{rm(discount)}</span>
+            </div>
+          )}
           <div className="mt-2.5 flex justify-between border-t border-hairline pt-2.5">
             <span className="font-sans text-[14px] font-semibold text-espresso">Total</span>
             <span className="font-display text-[17px] font-semibold text-espresso">{rm(total)}</span>

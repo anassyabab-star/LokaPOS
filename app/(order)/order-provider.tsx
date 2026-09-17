@@ -78,6 +78,9 @@ type OrderState = {
   setLastOrder: (o: LastOrder | null) => void;
   /** Referral code captured from ?ref= (applied on the first order). */
   referral: string | null;
+  /** False until localStorage has been read. Screens that redirect on an empty
+   *  cart must wait for this, or the first render redirects every reload. */
+  hydrated: boolean;
   /** Server-confirmed session, or null while still loading. */
   member: Member | null;
   /** Re-ask the server who we are (after sign-in or sign-out). */
@@ -232,7 +235,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     cart, addLine, setQty, removeLine, clearCart, cartCount, subtotal,
     orderType, setOrderType, redeem, setRedeem, table, setTable,
     contact, setContact, lastOrder, setLastOrder, referral, clearSession, toast, showToast,
-    member, refreshMember,
+    hydrated: loaded, member, refreshMember,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

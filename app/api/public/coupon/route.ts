@@ -32,6 +32,11 @@ export async function GET(req: Request) {
       discount_percent: v.discount_percent,
       reward_amount: v.reward_amount,
       min_spend: v.min_spend,
+      // Needed so checkout can show the real saving instead of a bare
+      // "applied" badge. A scoped coupon (product/category) is left for the
+      // server to price, since the cart alone cannot resolve categories.
+      max_discount: v.max_discount ?? null,
+      scoped: Boolean(v.reward_product_id || v.reward_category_id),
       expires_at: v.expires_at,
     },
   });
