@@ -9,3 +9,6 @@ yarn-error.log*
 pnpm-debug.log*
 tsconfig.tsbuildinfo
 .vercel
+.env*
+# …but the checked-in template must stay tracked.
+!.env.example
