@@ -1,6 +1,8 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = "loka-pos-v1";
+// Bump the version whenever caching rules change — `activate` drops every
+// cache whose name differs, which is how stale bundles get purged.
+const CACHE_NAME = "loka-pos-v2";
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE_URLS = ["/pos", "/login", "/offline.html"];
@@ -31,6 +33,28 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Network-first with cache fallback. Used for both navigations and static
+// assets: production chunks are content-hashed and served with immutable
+// cache headers, so the browser HTTP cache already makes the network path
+// cheap — while a cache-first SW would keep serving a stale bundle forever
+// whenever a URL is reused (dev chunks, sw.js itself, manifest, icons).
+function networkFirst(request, fallbackUrl) {
+  return fetch(request)
+    .then((response) => {
+      if (response && response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+      }
+      return response;
+    })
+    .catch(() =>
+      caches
+        .match(request)
+        .then((cached) => cached || (fallbackUrl ? caches.match(fallbackUrl) : undefined))
+        .then((cached) => cached || Response.error())
+    );
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -39,25 +63,11 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   if (url.pathname.startsWith("/api/")) return;
 
-  // Network-first for navigations
   if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
-        })
-        .catch(() =>
-          caches
-            .match(request)
-            .then((cached) => cached || caches.match(OFFLINE_URL))
-        )
-    );
+    event.respondWith(networkFirst(request, OFFLINE_URL));
     return;
   }
 
-  // Cache-first for static assets
   if (
     CACHEABLE_ORIGINS.includes(url.origin) &&
     (url.pathname.startsWith("/_next/static/") ||
@@ -65,17 +75,6 @@ self.addEventListener("fetch", (event) => {
       url.pathname.endsWith(".css") ||
       url.pathname.endsWith(".js"))
   ) {
-    event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-            return response;
-          })
-      )
-    );
-    return;
+    event.respondWith(networkFirst(request));
   }
 });

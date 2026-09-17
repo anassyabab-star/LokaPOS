@@ -57,5 +57,9 @@ Next.js 15 App Router + Supabase. Coffee shop POS system with customer-facing PW
 - Store settings: `app/api/admin/settings/route.ts`
 - Middleware: lightweight cookie-check only, Node.js runtime (`experimental.nodeMiddleware: true`)
 
+## Dev Gotchas
+- The PWA service worker (`public/sw.js`) is registered in production only; in dev `components/pwa-register.tsx` unregisters it. If localhost ever shows stale UI after a code change, clear site data for localhost:3000 (an old cache-first SW from before 2026-09-17 may still be installed).
+- Stop `next dev` before `npm run build` — building while dev runs corrupts `.next` and the dev server loses its CSS.
+
 ## Working Directory
 Always work from `~/Developer/LokaPOS` — NOT `~/Documents/LokaPOS` (iCloud, causes webpack errors)
