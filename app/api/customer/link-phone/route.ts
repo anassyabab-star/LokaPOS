@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentSessionUser } from "@/lib/auth";
 import { normalizeOtpPhone, requirePhoneOtp, setPhoneOtpSession } from "@/lib/phone-otp";
 import { bindPhoneToAuthCustomer, phoneHasLoyaltyHistory } from "@/lib/customer-auth";
+import { issueCouponsOnSignup } from "@/lib/coupons";
 
 // ============================================================================
 // POST /api/customer/link-phone { phone }
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
     }
 
     const customer = await bindPhoneToAuthCustomer(user, phone);
+    await issueCouponsOnSignup(customer?.id).catch(() => {});
     const res = NextResponse.json({
       success: true,
       verified,

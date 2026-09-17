@@ -1,7 +1,7 @@
 "use client";
 
 // Loyalty / Rewards (design README §8) — the member home of the QR ordering app.
-// Balance + tier, daily check-in, redeem tiers, voucher wallet, referral share,
+// Balance + tier, daily check-in, voucher wallet, redeem tiers, referral share,
 // recent orders and account (sign out). Everything reads the public loyalty
 // APIs keyed on the customer's phone; OTP-gated actions silently refresh the
 // Google-backed session once before bouncing to /signin.
@@ -43,7 +43,7 @@ function shortNo(o: Activity) {
 
 export default function RewardsPage() {
   const router = useRouter();
-  const { contact, clearSession } = useOrder();
+  const { contact, clearSession, member } = useOrder();
   const phone = contact.phone;
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [tiers, setTiers] = useState<Tier[]>([]);
@@ -210,6 +210,27 @@ export default function RewardsPage() {
           </div>
         )}
 
+        {/* voucher wallet */}
+        {signedIn && wallet && wallet.vouchers.length > 0 && (
+          <div>
+            <div className="mb-2 px-1 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Ready to use</div>
+            <div className="space-y-2">
+              {wallet.vouchers.map(v => (
+                <div key={v.code} className="flex items-center gap-3 rounded-[14px] border border-leaf/40 bg-leaf/5 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-display text-[16px] font-semibold tracking-[0.08em] text-espresso">{v.code}</div>
+                    <div className="font-sans text-[12px] text-muted">
+                      {v.reward_label || `RM ${Number(v.reward_amount || 0).toFixed(2)} off`}
+                      {v.expires_at ? ` · valid until ${new Date(v.expires_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-leaf px-2.5 py-1 font-sans text-[10px] font-bold uppercase tracking-wide text-cream">Show at counter</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* redeem */}
         <div>
           <div className="mb-2 px-1 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Redeem</div>
@@ -237,27 +258,6 @@ export default function RewardsPage() {
             {tiers.length === 0 && !loading && <p className="px-1 font-sans text-[13px] text-muted">No rewards available yet.</p>}
           </div>
         </div>
-
-        {/* voucher wallet */}
-        {signedIn && wallet && wallet.vouchers.length > 0 && (
-          <div>
-            <div className="mb-2 px-1 font-sans text-[12px] font-semibold uppercase tracking-label text-muted-2">Your vouchers</div>
-            <div className="space-y-2">
-              {wallet.vouchers.map(v => (
-                <div key={v.code} className="flex items-center gap-3 rounded-[14px] border border-leaf/40 bg-leaf/5 px-4 py-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-display text-[16px] font-semibold tracking-[0.08em] text-espresso">{v.code}</div>
-                    <div className="font-sans text-[12px] text-muted">
-                      {v.reward_label || `RM ${Number(v.reward_amount || 0).toFixed(2)} off`}
-                      {v.expires_at ? ` · valid until ${new Date(v.expires_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-leaf px-2.5 py-1 font-sans text-[10px] font-bold uppercase tracking-wide text-cream">Show at counter</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* referral */}
         {signedIn && wallet?.referral && (
@@ -301,7 +301,7 @@ export default function RewardsPage() {
           <div className="flex items-center gap-3 rounded-[16px] border border-hairline bg-card p-4 shadow-card">
             <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-cream-2 text-[18px]">👤</div>
             <div className="flex-1 min-w-0">
-              <div className="truncate font-sans text-[14px] font-semibold text-espresso">{contact.name || "Loka member"}</div>
+              <div className="truncate font-sans text-[14px] font-semibold text-espresso">{member?.name || contact.name || "Loka member"}</div>
               <div className="font-sans text-[12px] text-muted">+60 {localPhone(phone)}</div>
             </div>
             <button onClick={signOut} className="rounded-[12px] border border-hairline px-3.5 py-2 font-sans text-[12px] font-semibold text-muted active:bg-cream-2">Sign out</button>

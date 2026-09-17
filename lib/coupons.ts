@@ -123,6 +123,86 @@ export async function issueCouponsOnPaid(
   }
 }
 
+/**
+ * Auto-issue "welcome" coupons the moment someone becomes a member.
+ *
+ * Called from the sign-in completion routes (Google callback, OTP verify,
+ * phone link) rather than from /api/public/me, so it runs once per sign-in
+ * instead of on every page load. Idempotent via
+ * issue_event_key = coupon:{code}:signup:{customerId}, so repeat sign-ins and
+ * retries never mint a second voucher.
+ *
+ * Scope guard: only customers who have never had a paid order. That keeps this
+ * a genuine new-member offer instead of handing every one of the existing
+ * walk-in customers a discount the first time they open the app. To turn it
+ * into an app-adoption push later, drop the hasOrdered check below.
+ */
+export async function issueCouponsOnSignup(customerId: string | null | undefined): Promise<void> {
+  const id = String(customerId || "").trim();
+  if (!id) return;
+
+  const supabase = createSupabaseAdminClient();
+  const config = await getLoyaltyConfig();
+  if (!config.couponsEnabled) return;
+
+  const { data: templates, error } = await supabase
+    .from("coupon_templates")
+    .select(
+      "code,discount_type,discount_value,max_discount,applies_to,product_id,category_id,min_spend,validity_days,issue_min_spend,one_active_per_customer"
+    )
+    .eq("active", true)
+    .eq("issue_trigger", "on_signup");
+  if (error || !templates || templates.length === 0) return; // schema missing / nothing to issue
+
+  // New members only.
+  const { count: paidOrders } = await supabase
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("customer_id", id)
+    .eq("payment_status", "paid");
+  if (Number(paidOrders || 0) > 0) return;
+
+  for (const t of templates as CouponTemplate[]) {
+    try {
+      if (t.one_active_per_customer) {
+        const { data: active } = await supabase
+          .from("vouchers")
+          .select("id")
+          .eq("customer_id", id)
+          .eq("source", "coupon")
+          .eq("source_ref", t.code)
+          .eq("status", "issued")
+          .limit(1);
+        if (active && active.length > 0) continue;
+      }
+
+      const expiresAt = new Date(
+        Date.now() + Number(t.validity_days || 14) * 24 * 60 * 60 * 1000
+      ).toISOString();
+      const isPercent = t.discount_type === "percent";
+
+      await issueRewardVoucher({
+        customerId: id,
+        source: "coupon",
+        sourceRef: t.code,
+        rewardType: isPercent ? "percent" : "amount",
+        rewardLabel: couponLabel(t),
+        rewardAmount: isPercent ? 0 : Number(t.discount_value || 0),
+        discountPercent: isPercent ? Number(t.discount_value || 0) : null,
+        maxDiscount: t.max_discount ?? null,
+        rewardProductId: t.applies_to === "product" ? t.product_id : null,
+        rewardCategoryId: t.applies_to === "category" ? t.category_id : null,
+        minSpend: Number(t.min_spend || 0),
+        excludesMission: true,
+        issueEventKey: `coupon:${t.code}:signup:${id}`,
+        expiresAt,
+      });
+    } catch {
+      continue;
+    }
+  }
+}
+
 function couponLabel(t: CouponTemplate): string {
   const scope =
     t.applies_to === "product" ? " (produk terpilih)" : t.applies_to === "category" ? " (kategori terpilih)" : "";

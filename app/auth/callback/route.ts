@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { setPhoneOtpSession } from "@/lib/phone-otp";
 import { ensureCustomerRoleForOAuthUser, resolveCustomerForAuthUser } from "@/lib/customer-auth";
+import { issueCouponsOnSignup } from "@/lib/coupons";
 
 // ============================================================================
 // GET /auth/callback?code=…&next=/rewards
@@ -77,6 +78,9 @@ export async function GET(request: NextRequest) {
       target = new URL("/auth/redirect", request.url);
     } else {
       const customer = await resolveCustomerForAuthUser(user, { allowCreate: true });
+      // Welcome coupon for a brand-new member (no-op if already issued, if the
+      // coupon feature is off, or if they have ordered before).
+      await issueCouponsOnSignup(customer?.id).catch(() => {});
       if (customer?.phone) {
         phoneToMint = customer.phone;
         target = signin({ stage: "sync", next });

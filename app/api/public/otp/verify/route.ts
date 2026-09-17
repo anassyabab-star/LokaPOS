@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { normalizeOtpPhone, setPhoneOtpSession, verifyOtpHash } from "@/lib/phone-otp";
+import { issueCouponsOnSignup } from "@/lib/coupons";
 
 const MAX_ATTEMPTS = 5;
 
@@ -53,6 +54,20 @@ export async function POST(req: Request) {
     .from("otp_codes")
     .update({ consumed_at: new Date().toISOString() })
     .eq("id", row.id);
+
+  // Welcome coupon for a brand-new member. This path only knows the phone, so
+  // look the customer up; a number with no customer row yet gets the coupon on
+  // its first order instead (the row is created there).
+  try {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("phone", phone)
+      .maybeSingle();
+    await issueCouponsOnSignup(customer?.id);
+  } catch {
+    // Never block sign-in on the coupon.
+  }
 
   const res = NextResponse.json({ success: true });
   return setPhoneOtpSession(res, phone);
