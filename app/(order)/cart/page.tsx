@@ -9,7 +9,7 @@ import { useOrder, rm } from "../order-provider";
 
 export default function CartPage() {
   const router = useRouter();
-  const { cart, setQty, removeLine, subtotal, cartCount, orderType, setOrderType, table } = useOrder();
+  const { cart, setQty, removeLine, subtotal, cartCount, orderType, setOrderType, table, member } = useOrder();
 
   const pointsEarned = Math.round(subtotal); // 1 pt / RM1 (earned only when signed in)
 
@@ -102,7 +102,7 @@ export default function CartPage() {
                 <span className="font-display font-semibold text-espresso">{rm(subtotal)}</span>
               </div>
               <div className="mt-2 flex items-center justify-between font-sans text-[13px]">
-                <span className="text-muted">Sign in to earn</span>
+                <span className="text-muted">{member?.signedIn ? "You'll earn" : "Sign in to earn"}</span>
                 <span className="font-display font-semibold text-leaf">+{pointsEarned} pts</span>
               </div>
               <Link

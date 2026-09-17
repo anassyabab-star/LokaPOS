@@ -16,7 +16,7 @@ type StoreStatus = { is_open: boolean; dine_in_tables?: string[] };
 export default function WelcomePage() {
   const params = useParams<{ table: string }>();
   const table = decodeURIComponent(params.table || "").replace(/[^\w-]/g, "").slice(0, 10);
-  const { setTable, setOrderType } = useOrder();
+  const { setTable, setOrderType, member } = useOrder();
   const [store, setStore] = useState<StoreStatus | null>(null);
 
   useEffect(() => {
@@ -92,9 +92,11 @@ export default function WelcomePage() {
             <Link href="/menu" className="mt-9 flex items-center justify-center gap-2 rounded-[18px] bg-maroon py-[18px] font-sans text-[16px] font-semibold text-cream active:scale-[.98]">
               Start your order →
             </Link>
-            <Link href="/signin?next=/menu" className="mt-3 rounded-[18px] border border-cream/[0.18] py-[15px] text-center font-sans text-[14px] font-semibold text-[#C9A88F] active:scale-[.99]">
-              Sign in to earn points
-            </Link>
+            {!member?.signedIn && (
+              <Link href="/signin?next=/menu" className="mt-3 rounded-[18px] border border-cream/[0.18] py-[15px] text-center font-sans text-[14px] font-semibold text-[#C9A88F] active:scale-[.99]">
+                Sign in to earn points
+              </Link>
+            )}
           </>
         )}
       </div>

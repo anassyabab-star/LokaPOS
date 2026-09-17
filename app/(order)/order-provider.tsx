@@ -8,7 +8,7 @@
 // checkout). See design_handoff_loka_ordering/README.md.
 // ============================================================================
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type CartLine = {
   /** Unique per configured line (same product with different options = new line). */
@@ -27,6 +27,17 @@ export type CartLine = {
 };
 
 export type OrderType = "dine" | "takeaway";
+
+/** Who the server says we are. `null` while the first /api/public/me is in
+ *  flight — screens render the signed-out state until it resolves, so the
+ *  static HTML and the first client render always agree. */
+export type Member = {
+  signedIn: boolean;
+  name: string | null;
+  phone: string | null;
+  /** "google" | "otp" | "email" — handy for wording, not for access control. */
+  provider: string | null;
+};
 
 /** Snapshot of a just-placed order (design's `lastOrder`) — drives the
  *  confirmation + track screens without re-fetching items from the server. */
@@ -67,6 +78,10 @@ type OrderState = {
   setLastOrder: (o: LastOrder | null) => void;
   /** Referral code captured from ?ref= (applied on the first order). */
   referral: string | null;
+  /** Server-confirmed session, or null while still loading. */
+  member: Member | null;
+  /** Re-ask the server who we are (after sign-in or sign-out). */
+  refreshMember: () => Promise<void>;
   /** Forget the local member session (contact, last order, referral). */
   clearSession: () => void;
   toast: string | null;
@@ -126,24 +141,44 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   // On every load, ask the server who we are. For a Google-backed session this
   // re-mints the 30-minute loyalty phone cookie (so check-in / redeem never
   // bounce to a code), and on a fresh device it recovers name + phone.
+  const [member, setMember] = useState<Member | null>(null);
+
+  const refreshMember = useCallback(async () => {
+    try {
+      const res = await fetch("/api/public/me", { cache: "no-store" });
+      const d = await res.json();
+      const signedIn = Boolean(d?.signed_in);
+      const phone = d?.phone ? String(d.phone) : null;
+      const name = d?.name ? String(d.name) : null;
+      setMember({ signedIn, name, phone, provider: d?.provider ? String(d.provider) : null });
+      // Recover contact details on a fresh device, without clobbering what the
+      // customer typed themselves.
+      if (signedIn && phone) {
+        setContactRef.current({ name, phone });
+      }
+    } catch {
+      // Offline or the endpoint is down — stay signed-out rather than guess.
+      setMember(m => m ?? { signedIn: false, name: null, phone: null, provider: null });
+    }
+  }, []);
+
+  // `setContact` closes over the current contact, so keep the latest in a ref
+  // instead of re-running (and re-fetching) whenever the contact changes.
+  const setContactRef = useRef<(d: { name: string | null; phone: string }) => void>(() => {});
+  setContactRef.current = (d) => {
+    if (!contact.phone) setContact({ name: contact.name || (d.name ?? ""), phone: d.phone });
+  };
+
   useEffect(() => {
     if (!loaded) return;
-    let live = true;
-    fetch("/api/public/me", { cache: "no-store" })
-      .then(r => r.json())
-      .then(d => {
-        if (!live || !d?.signed_in || !d.phone) return;
-        if (!contact.phone) setContact({ name: contact.name || String(d.name || ""), phone: String(d.phone) });
-      })
-      .catch(() => {});
-    return () => { live = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded]);
+    void refreshMember();
+  }, [loaded, refreshMember]);
 
   function clearSession() {
     setContactState({ name: "", phone: "" });
     setLastOrderState(null);
     setReferral(null);
+    setMember({ signedIn: false, name: null, phone: null, provider: null });
     try {
       localStorage.removeItem(CONTACT_KEY);
       localStorage.removeItem(LAST_KEY);
@@ -197,6 +232,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     cart, addLine, setQty, removeLine, clearCart, cartCount, subtotal,
     orderType, setOrderType, redeem, setRedeem, table, setTable,
     contact, setContact, lastOrder, setLastOrder, referral, clearSession, toast, showToast,
+    member, refreshMember,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

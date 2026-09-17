@@ -23,7 +23,7 @@ function safeNext(raw: string | null) {
 
 export default function SignInPage() {
   const router = useRouter();
-  const { contact, setContact } = useOrder();
+  const { contact, setContact, refreshMember } = useOrder();
   const [phone, setPhone] = useState(localPhone(contact.phone));
   const [stage, setStage] = useState<Stage>("phone");
   const [linking, setLinking] = useState(false); // OTP is being used to bind a Google account
@@ -58,6 +58,7 @@ export default function SignInPage() {
         if (!live) return;
         if (d?.signed_in && d.phone) {
           setContact({ name: contact.name || d.name || "", phone: String(d.phone) });
+          await refreshMember();
           router.replace(next);
           return;
         }
@@ -121,6 +122,7 @@ export default function SignInPage() {
       if (res.status === 401) { setErr("Google session expired. Please sign in again."); return; }
       if (!res.ok) throw new Error(d?.error || "Couldn't link this number");
       setContact({ name: contact.name || String(d?.customer?.name || ""), phone: canonical });
+      await refreshMember();
       router.replace(next);
     } catch (e) { setErr(e instanceof Error ? e.message : "Something went wrong"); }
     finally { setBusy(false); }
@@ -165,6 +167,7 @@ export default function SignInPage() {
         name = name || String(ld?.customer?.name || "");
       }
       setContact({ name, phone: canonical });
+      await refreshMember();
       router.replace(next);
     } catch (e) { setErr(e instanceof Error ? e.message : "Something went wrong"); }
     finally { setBusy(false); }

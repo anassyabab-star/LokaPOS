@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useOrder } from "../../order-provider";
 
 export default function TakeawayWelcomePage() {
-  const { setTable, setOrderType } = useOrder();
+  const { setTable, setOrderType, member } = useOrder();
   const [closed, setClosed] = useState(false);
 
   useEffect(() => {
@@ -55,9 +55,11 @@ export default function TakeawayWelcomePage() {
         <Link href="/menu" className="mt-9 flex items-center justify-center gap-2 rounded-[18px] bg-maroon py-[18px] font-sans text-[16px] font-semibold text-cream active:scale-[.98]">
           Start your order →
         </Link>
-        <Link href="/signin?next=/menu" className="mt-3 rounded-[18px] border border-cream/[0.18] py-[15px] text-center font-sans text-[14px] font-semibold text-[#C9A88F] active:scale-[.99]">
-          Sign in to earn points
-        </Link>
+        {!member?.signedIn && (
+          <Link href="/signin?next=/menu" className="mt-3 rounded-[18px] border border-cream/[0.18] py-[15px] text-center font-sans text-[14px] font-semibold text-[#C9A88F] active:scale-[.99]">
+            Sign in to earn points
+          </Link>
+        )}
       </div>
       <div className="safe-bottom py-5 text-center font-sans text-[11px] text-muted-3">Loka Bangi · 8am–11pm</div>
     </div>

@@ -11,7 +11,7 @@ import type { Product, Category } from "../types";
 import { ItemSheet } from "@/components/order/ItemSheet";
 
 export default function MenuPage() {
-  const { cartCount, subtotal, lastOrder, setLastOrder } = useOrder();
+  const { cartCount, subtotal, lastOrder, setLastOrder, member } = useOrder();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [bestsellers, setBestsellers] = useState<string[]>([]);
@@ -20,6 +20,11 @@ export default function MenuPage() {
   const [cat, setCat] = useState("All");
   const [sheet, setSheet] = useState<Product | null>(null);
   const [storeOpen, setStoreOpen] = useState<boolean | null>(null);
+
+  // Google sessions carry a name; a phone-only (OTP) session often does not,
+  // so fall back to a rewards star rather than an initial made up from digits.
+  const memberFirstName = (member?.name || "").trim().split(/\s+/)[0] || "";
+  const memberInitial = memberFirstName ? memberFirstName[0].toUpperCase() : "\u2605";
 
   useEffect(() => {
     let live = true;
@@ -93,20 +98,42 @@ export default function MenuPage() {
                 What are we<br />spinning today?
               </h1>
             </div>
-            <Link href="/rewards" className="text-right">
-              <div className="font-display text-[22px] font-semibold text-melon">–</div>
-              <div className="font-sans text-[10px] font-medium uppercase tracking-[.1em] text-muted-3">sign in</div>
-            </Link>
+            {/* `member` is null until /api/public/me answers, so the signed-out
+                markup is what the prerendered HTML contains. */}
+            {member?.signedIn ? (
+              <Link href="/rewards" className="flex items-center gap-2 text-right" aria-label="Your rewards">
+                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-melon/[0.16] font-display text-[15px] font-semibold uppercase text-melon">
+                  {memberInitial}
+                </span>
+                <span className="font-sans text-[10px] font-medium uppercase tracking-[.1em] text-muted-3">rewards</span>
+              </Link>
+            ) : (
+              <Link href="/signin?next=/menu" className="text-right">
+                <div className="font-display text-[22px] font-semibold text-melon">–</div>
+                <div className="font-sans text-[10px] font-medium uppercase tracking-[.1em] text-muted-3">sign in</div>
+              </Link>
+            )}
           </div>
 
-          {/* logged-out CTA */}
-          <Link
-            href="/signin"
-            className="mt-4 flex items-center justify-between rounded-[14px] border border-melon/30 bg-melon/10 px-4 py-3.5"
-          >
-            <span className="font-sans text-[13px] font-semibold text-melon-soft">Sign in to earn &amp; redeem points</span>
-            <span className="font-sans text-[13px] font-semibold text-melon-soft">→</span>
-          </Link>
+          {member?.signedIn ? (
+            <Link
+              href="/rewards"
+              className="mt-4 flex items-center justify-between rounded-[14px] border border-melon/30 bg-melon/10 px-4 py-3.5"
+            >
+              <span className="font-sans text-[13px] font-semibold text-melon-soft">
+                {memberFirstName ? `Hi ${memberFirstName} — view your points` : "View your points & rewards"}
+              </span>
+              <span className="font-sans text-[13px] font-semibold text-melon-soft">→</span>
+            </Link>
+          ) : (
+            <Link
+              href="/signin?next=/menu"
+              className="mt-4 flex items-center justify-between rounded-[14px] border border-melon/30 bg-melon/10 px-4 py-3.5"
+            >
+              <span className="font-sans text-[13px] font-semibold text-melon-soft">Sign in to earn &amp; redeem points</span>
+              <span className="font-sans text-[13px] font-semibold text-melon-soft">→</span>
+            </Link>
+          )}
         </div>
 
         {/* cream sheet */}
