@@ -375,19 +375,25 @@ export async function sendWhatsAppText(opts: { to: string; message: string }): P
 
 /**
  * Order lifecycle notifications (received / paid / ready / points receipt)
- * cost a utility conversation each on the Cloud API. The customer web tracker
- * already shows live status, so they can be switched off with
- * WHATSAPP_ORDER_NOTIFICATIONS=off. OTP is unaffected.
+ * cost a utility conversation each on the Cloud API, and the customer web
+ * tracker already shows live status — so these are OFF unless explicitly
+ * enabled with WHATSAPP_ORDER_NOTIFICATIONS=on.
+ *
+ * Deliberately opt-in rather than opt-out: an unset, misspelled or
+ * newly-created environment must never start billing us. The allow-list below
+ * means only a real "on" turns spending on.
+ *
+ * OTP is NOT covered by this switch — sign-in codes always send.
  */
 export function orderNotificationsEnabled(): boolean {
-  const v = String(process.env.WHATSAPP_ORDER_NOTIFICATIONS || "on").trim().toLowerCase();
-  return !(v === "off" || v === "0" || v === "false" || v === "no");
+  const v = String(process.env.WHATSAPP_ORDER_NOTIFICATIONS || "off").trim().toLowerCase();
+  return v === "on" || v === "1" || v === "true" || v === "yes";
 }
 
 const NOTIFICATIONS_OFF: WhatsAppSendResult = {
   ok: false,
   messageId: null,
-  error: "Notifikasi order WhatsApp dimatikan (WHATSAPP_ORDER_NOTIFICATIONS=off)",
+  error: "WhatsApp order notifications are off (set WHATSAPP_ORDER_NOTIFICATIONS=on to enable)",
   provider: "none",
 };
 

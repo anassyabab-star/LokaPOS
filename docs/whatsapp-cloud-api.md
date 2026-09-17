@@ -126,10 +126,19 @@ Customer akan nampak mesej datang dari "Syabab Fresh", bukan Loka. Template
 Message templates). Bila Loka ada nombor sendiri, cukup tukar
 `WHATSAPP_CLOUD_PHONE_NUMBER_ID` (dan buat semula template dalam WABA baru).
 
-## 8. Matikan notifikasi order (jimat kos)
+## 8. Notifikasi order — OFF secara lalai (jimat kos)
 
-Set `WHATSAPP_ORDER_NOTIFICATIONS=off` — mesej order diterima / bayaran / siap /
-resit mata tidak dihantar langsung (tiada percubaan Cloud atau Murpati), butang
-"Notify Sedia" di POS disembunyikan, dan customer ikut status di web app
-(`/order/<id>`, bergetar bila Sedia). OTP `loka_otp` kekal berfungsi. Untuk
-hidupkan semula, buat 4 template Utility (Bahagian 4) dan set semula ke `on`.
+**Tiada env var diperlukan untuk matikan.** `orderNotificationsEnabled()` dalam
+`lib/whatsapp.ts` pulang `false` melainkan `WHATSAPP_ORDER_NOTIFICATIONS`
+diset kepada `on` (atau `1`/`true`/`yes`). Sengaja opt-in: environment baharu
+atau nama pemboleh ubah yang tersalah eja tidak akan mula membelanjakan duit.
+
+Bila mati: mesej order diterima / bayaran / siap / resit mata tidak dihantar
+langsung (tiada percubaan Cloud atau Murpati), butang "Notify Sedia" di POS
+disembunyikan, dan customer ikut status di web app (`/order/<id>`, bergetar
+bila Sedia).
+
+OTP `loka_otp` **tidak** dikawal oleh suis ini — kod sign-in sentiasa dihantar.
+
+Untuk hidupkan kelak: buat 4 template Utility (Bahagian 4), luluskan, kemudian
+set `WHATSAPP_ORDER_NOTIFICATIONS=on`.
