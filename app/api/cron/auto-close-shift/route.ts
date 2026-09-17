@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 import { getCashSalesSince } from "@/lib/shift-cash";
+import { expireStaleUnpaidOrders } from "@/lib/order-expiry";
 
 type ShiftRow = {
   id: string;
@@ -27,6 +28,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Sweep stale unpaid orders here rather than from a cron of its own: the
+  // Hobby plan allows only two cron jobs, and this one already runs nightly.
+  // During opening hours the POS and KDS list endpoints sweep every minute,
+  // so this is the backstop for orders abandoned after the store closes.
+  let expired = 0;
+  try {
+    const sweep = await expireStaleUnpaidOrders({ force: true });
+    expired = sweep.expired;
+  } catch (error) {
+    console.warn("[cron/auto-close-shift] unpaid-order sweep failed:", error);
+  }
+
   const supabase = createSupabaseAdminClient();
 
   try {
@@ -38,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     if (shiftError) throw shiftError;
     if (!openShifts || openShifts.length === 0) {
-      return NextResponse.json({ message: "No open shifts found", closed: 0 });
+      return NextResponse.json({ message: "No open shifts found", closed: 0, expired });
     }
 
     const results: Array<{ shift_id: string; ok: boolean; error?: string }> = [];
@@ -143,7 +156,7 @@ export async function GET(req: NextRequest) {
     }
 
     const closed = results.filter(r => r.ok).length;
-    return NextResponse.json({ message: `Closed ${closed} shift(s)`, results });
+    return NextResponse.json({ message: `Closed ${closed} shift(s)`, results, expired });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed";
     console.error("[auto-close] Fatal error:", err);

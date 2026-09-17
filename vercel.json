@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/loyalty-expiry",
       "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron/expire-unpaid-orders",
-      "schedule": "*/15 * * * *"
     }
   ]
 }
