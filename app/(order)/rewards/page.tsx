@@ -13,7 +13,7 @@ import { useOrder, rm, localPhone } from "../order-provider";
 
 type Tier = { points: number; amount: number; label: string };
 type Activity = { id: string; receipt_number: string | null; short_number?: string; status: string | null; total: number | null; created_at: string };
-type Voucher = { code: string; reward_label: string | null; reward_amount: number; expires_at: string | null };
+type Voucher = { code: string; reward_label: string | null; reward_amount: number; expires_at: string | null; min_spend?: number | null };
 type Wallet = {
   points: number;
   expiring: number;
@@ -221,6 +221,7 @@ export default function RewardsPage() {
                     <div className="font-display text-[16px] font-semibold tracking-[0.08em] text-espresso">{v.code}</div>
                     <div className="font-sans text-[12px] text-muted">
                       {v.reward_label || `RM ${Number(v.reward_amount || 0).toFixed(2)} off`}
+                      {Number(v.min_spend || 0) > 0 ? ` · min spend RM${Number(v.min_spend).toFixed(0)}` : ""}
                       {v.expires_at ? ` · valid until ${new Date(v.expires_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}
                     </div>
                   </div>

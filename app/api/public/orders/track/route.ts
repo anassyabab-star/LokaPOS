@@ -125,7 +125,7 @@ export async function GET(req: Request) {
           .limit(10000),
         supabase
           .from("vouchers")
-          .select("code, reward_label, reward_amount, status, expires_at")
+          .select("code, reward_label, reward_amount, status, expires_at, min_spend")
           .eq("customer_id", customer.id)
           .eq("status", "issued")
           .order("issued_at", { ascending: false })
@@ -157,6 +157,7 @@ export async function GET(req: Request) {
         reward_label: v.reward_label,
         reward_amount: Number(v.reward_amount || 0),
         expires_at: v.expires_at,
+        min_spend: Number(v.min_spend || 0),
       })),
     });
   }

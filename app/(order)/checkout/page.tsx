@@ -44,6 +44,15 @@ export default function CheckoutPage() {
       const res = await fetch(`/api/public/coupon?code=${encodeURIComponent(code)}&phone=${encodeURIComponent(canonical)}`);
       const data = await res.json();
       if (data?.valid) {
+        // The server validates ownership and expiry but not the cart, and a
+        // coupon under its minimum spend silently discounts nothing. Check it
+        // here so the customer is told instead of quietly charged full price.
+        const minSpend = Number(data.coupon?.min_spend || 0);
+        if (minSpend > subtotal) {
+          setCouponCode(null); setCouponLabel(null);
+          setCouponMsg(`Spend at least ${rm(minSpend)} to use this coupon. Your order is ${rm(subtotal)}.`);
+          return;
+        }
         setCouponCode(code);
         setCouponLabel(data.coupon?.label || code);
         setCouponMsg(null);
