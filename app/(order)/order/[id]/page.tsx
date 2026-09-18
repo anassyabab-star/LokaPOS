@@ -43,13 +43,26 @@ const STEPS = [
   { key: "done", label: "Done" },
 ];
 
-function stepIndex(status: string): number {
+/**
+ * Where the customer is, from status AND handover stage.
+ *
+ * With the kitchen display switched off, paying flips an order straight to
+ * `completed` (statusOnPaid) while fulfillment_stage stays "received" until a
+ * staff member presses Notify Ready. Reading status alone therefore told a
+ * customer still standing at the counter that their order was Done. The stage
+ * is what actually tracks the handover, so it wins once the order is paid.
+ */
+function stepIndex(status: string, stage: string): number {
+  if (status === "completed") {
+    if (stage === "picked_up" || stage === "reviewed") return 4; // handed over
+    if (stage === "ready") return 3;
+    return 2; // paid, being made
+  }
   switch (status) {
     case "awaiting_payment": return 0;
     case "pending": return 1;
     case "preparing": return 2;
     case "ready": return 3;
-    case "completed": return 4;
     default: return -1;
   }
 }
@@ -128,7 +141,7 @@ export default function OrderPage() {
   // Until the first /track response lands, a fresh order is always awaiting payment.
   const status = String(track?.status || (order ? "awaiting_payment" : "")).toLowerCase();
   const stage = String(track?.fulfillment_stage || "received").toLowerCase();
-  const idx = stepIndex(status);
+  const idx = stepIndex(status, String(track?.fulfillment_stage || "received").toLowerCase());
   const shortNo = track?.short_number || order?.shortNumber || shortFrom(track?.receipt_number || order?.receipt, id);
   const receipt = track?.receipt_number || order?.receipt || id.slice(0, 8);
   const orderType = track?.order_type || (order?.type === "dine" ? "dine_in" : order?.type === "takeaway" ? "take_away" : null);
@@ -240,10 +253,15 @@ export default function OrderPage() {
   const isAwaiting = status === "awaiting_payment";
   const isReady = status === "ready";
   const isCancelled = status === "cancelled";
-  const isDone = status === "completed";
+  // "Done" means handed over, not merely paid — see stepIndex.
+  const isDone = status === "completed" && (stage === "picked_up" || stage === "reviewed");
+  const paidNotHandedOver = status === "completed" && !isDone;
   const pickedUp = stage === "picked_up" || stage === "reviewed";
   const reviewed = stage === "reviewed";
-  const canPickup = (isReady || isDone) && !pickedUp;
+  // "I've got it" is offered once the drink is ready, including the
+  // kitchen-display-off case where status is already completed but the
+  // handover has not happened yet.
+  const canPickup = (isReady || paidNotHandedOver) && !pickedUp;
   const canReview = pickedUp && !reviewed;
 
   const hero = isCancelled
@@ -254,13 +272,15 @@ export default function OrderPage() {
         : paysAtCounter || paymentUnavailable
           ? { icon: "🧾", tone: "bg-maroon", title: "Pay at the counter", sub: paymentUnavailable ? "Online payment couldn’t start. Show this Order ID to the cashier to pay." : "Show this Order ID to the cashier to pay." }
           : { icon: "⏳", tone: "bg-maroon", title: "Awaiting payment", sub: "Finish the payment in the tab that opened, or show this Order ID at the counter." }
-      : isReady
+      : isReady || (paidNotHandedOver && stage === "ready")
         ? { icon: "🔔", tone: "bg-leaf", title: "Your order is ready!", sub: tableNo ? `We'll bring it to ${target}.` : buzzerNo ? `${target} will buzz — collect it at the counter.` : "Collect it at the counter." }
         : isDone
           ? { icon: "✓", tone: "bg-leaf", title: "Done", sub: "Enjoy your order ☕" }
           : status === "preparing"
             ? { icon: "☕", tone: "bg-leaf", title: "Being prepared", sub: "The barista is making your order now." }
-            : { icon: "✓", tone: "bg-leaf", title: "Payment received", sub: "Your order is in the kitchen queue." };
+            : paidNotHandedOver
+              ? { icon: "☕", tone: "bg-leaf", title: "Paid — we're making it", sub: tableNo ? `We'll bring it to ${target} when it's ready.` : buzzerNo ? `${target} will buzz when it's ready.` : "We'll call you at the counter when it's ready." }
+              : { icon: "✓", tone: "bg-leaf", title: "Payment received", sub: "Your order is in the kitchen queue." };
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-cream">
