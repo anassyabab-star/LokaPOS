@@ -76,11 +76,15 @@ async function handleCallback(req: Request) {
     const payload = await parseRequestPayload(req);
     const config = getToyyibpayConfig();
 
-    if (config.callbackToken) {
-      const providedToken = String(payload.token || "").trim();
-      if (!providedToken || providedToken !== config.callbackToken) {
-        return NextResponse.json({ error: "Invalid callback token" }, { status: 401 });
-      }
+    // ToyyibPay's callback carries no signature we check, so the token is the
+    // only proof it came from them. Without one configured, anyone could POST
+    // {order_id, status_id: "1"} and mark an order paid — refuse instead.
+    if (!config.callbackToken) {
+      return NextResponse.json({ error: "ToyyibPay callback not configured" }, { status: 404 });
+    }
+    const providedToken = String(payload.token || "").trim();
+    if (!providedToken || providedToken !== config.callbackToken) {
+      return NextResponse.json({ error: "Invalid callback token" }, { status: 401 });
     }
 
     const orderId = pickOrderId(payload);

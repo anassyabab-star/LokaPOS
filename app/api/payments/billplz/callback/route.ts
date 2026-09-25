@@ -90,11 +90,15 @@ async function handleCallback(req: Request) {
       }
     }
 
-    if (config.enforceXSignature && config.xSignatureKey) {
-      const signatureCheck = verifyBillplzXSignature(payload);
-      if (!signatureCheck.skipped && !signatureCheck.verified) {
-        return NextResponse.json({ error: "Invalid Billplz x_signature" }, { status: 401 });
-      }
+    // The x_signature is the only proof a callback came from Billplz. Without a
+    // key, or with the signature simply left off, anyone could mark an order
+    // paid — so both cases are refused, not skipped.
+    if (!config.xSignatureKey) {
+      return NextResponse.json({ error: "Billplz callback not configured" }, { status: 404 });
+    }
+    const signatureCheck = verifyBillplzXSignature(payload);
+    if (!signatureCheck.verified) {
+      return NextResponse.json({ error: "Invalid Billplz x_signature" }, { status: 401 });
     }
 
     const orderId = pickOrderId(payload);
