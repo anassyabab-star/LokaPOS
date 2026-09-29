@@ -44,8 +44,10 @@ export default function RegisterPage() {
   }, [slug, base, router]);
 
   useEffect(() => {
-    if (!t || rows.length) return;
-    const first = { ...blankRow(0), phone: me?.phone || "" };
+    // Wait for /api/public/me: building the rows first left the captain's
+    // (read-only) phone empty for good, so the form could never be submitted.
+    if (!t || !me || rows.length) return;
+    const first = { ...blankRow(0), phone: me.phone || "" };
     setRows([first, ...Array.from({ length: Math.max(0, t.min_players - 1) }, (_, i) => blankRow(i + 1))]);
   }, [t, me, rows.length]);
 
@@ -138,16 +140,21 @@ export default function RegisterPage() {
               </div>
               <input className={field} placeholder="Full name" value={r.full_name} onChange={e => set(i, { full_name: e.target.value })} />
               <input className={field} placeholder="IGN (in-game name)" value={r.ign} onChange={e => set(i, { ign: e.target.value })} />
+              {i === 0 && (
+                <p className="px-1 text-[11px] leading-relaxed text-white/40">
+                  In MLBB, tap your profile picture — it shows <span className="text-white/70">ID: 123456789 (2012)</span>. The first number is the User ID, the one in brackets is the Server ID.
+                </p>
+              )}
               <div className="grid grid-cols-[1fr_100px] gap-2">
                 <input className={field} inputMode="numeric" placeholder="MLBB User ID" value={r.mlbb_user_id} onChange={e => set(i, { mlbb_user_id: e.target.value.replace(/\D/g, "") })} />
-                <input className={field} inputMode="numeric" placeholder="Server" value={r.server_id} onChange={e => set(i, { server_id: e.target.value.replace(/\D/g, "") })} />
+                <input className={field} inputMode="numeric" placeholder="Server ID" value={r.server_id} onChange={e => set(i, { server_id: e.target.value.replace(/\D/g, "") })} />
               </div>
               <input
-                className={`${field} ${i === 0 ? "opacity-60" : ""}`}
+                className={`${field} ${i === 0 && me?.phone ? "opacity-60" : ""}`}
                 inputMode="tel"
                 placeholder="Phone (WhatsApp)"
                 value={r.phone}
-                readOnly={i === 0}
+                readOnly={i === 0 && !!me?.phone}
                 onChange={e => set(i, { phone: e.target.value })}
               />
               <select className={field} value={r.player_role} onChange={e => set(i, { player_role: e.target.value as PlayerRole })}>
