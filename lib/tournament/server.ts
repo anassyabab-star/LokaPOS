@@ -77,11 +77,18 @@ export async function loadPublicBundle(tournament: Tournament): Promise<PublicBu
       .order("is_captain", { ascending: false });
     players = (data || []) as PublicPlayer[];
   }
+  let perk: PublicBundle["perk"] = null;
+  const pp = tournament.voucher_config?.player_perk;
+  if (pp?.enabled && pp.percent > 0 && pp.category_ids?.length) {
+    const { data: cats } = await supabase.from("categories").select("id,name").in("id", pp.category_ids);
+    perk = { percent: pp.percent, category_names: (cats || []).map(c => String(c.name)) };
+  }
   // Admin notes are internal.
   const matches = ((matchesRes.data || []) as Match[]).map(m => ({ ...m, admin_notes: undefined }));
   return {
     tournament,
     registration: { taken: takenRes.count ?? teams.length, max: tournament.max_teams },
+    perk,
     teams,
     players,
     matches,
@@ -100,6 +107,16 @@ export async function loadAdminBundle(tournamentId: string) {
     supabase.from("tournament_matches").select(MATCH_COLS).eq("tournament_id", tournamentId).order("match_number"),
     supabase.from("tournament_announcements").select("*").eq("tournament_id", tournamentId).order("created_at", { ascending: false }),
   ]);
+  // Player-perk uses at the till (table from migration 20260930_tournament_perk_uses).
+  const { data: uses } = await supabase
+    .from("tournament_perk_uses")
+    .select("team_id,discount_amount")
+    .eq("tournament_id", tournamentId)
+    .limit(5000);
+  const perkUses = {
+    count: (uses || []).length,
+    total: Math.round((uses || []).reduce((s, u) => s + Number(u.discount_amount || 0), 0) * 100) / 100,
+  };
   const players = (playersRes.data || []) as Player[];
   const teams = ((teamsRes.data || []) as Omit<AdminTeam, "players">[]).map(t => ({
     ...t,
@@ -110,6 +127,7 @@ export async function loadAdminBundle(tournamentId: string) {
     teams,
     matches: (matchesRes.data || []) as Match[],
     announcements: (annRes.data || []) as Announcement[],
+    perkUses,
   };
 }
 

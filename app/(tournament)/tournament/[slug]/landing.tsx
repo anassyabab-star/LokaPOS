@@ -54,10 +54,14 @@ export function RegistrationLanding({ data, base }: { data: PublicBundle; base: 
   const deadline = t.registration_deadline ? countdownParts(t.registration_deadline, now) : null;
   const fee = Number(t.entry_fee || 0);
   const vc = t.voucher_config || {};
+  type Perk = { who: string; big: string; small: string; icon: string };
+  const cats = data.perk?.category_names || [];
+  const catText = cats.length > 1 ? `${cats.slice(0, -1).join(", ")} & ${cats[cats.length - 1]}` : cats[0] || "";
   const perks = [
-    vc.discount?.enabled && { big: voucherSpecLabel(vc.discount), small: `your next Loka order${vc.discount.min_spend ? ` (min ${rmLabel(vc.discount.min_spend)})` : ""} · valid ${vc.discount.validity_days || 30} days` },
-    vc.event_day?.enabled && { big: voucherSpecLabel(vc.event_day), small: "everything you order on tournament day" },
-  ].filter(Boolean) as { big: string; small: string }[];
+    data.perk && { who: "Every player", icon: "🥤", big: `${data.perk.percent}% off ${catText}`, small: "every purchase, all tournament day — show your Player Pass" },
+    vc.discount?.enabled && { who: "Captain", icon: "🎟️", big: voucherSpecLabel(vc.discount), small: `your next Loka order${vc.discount.min_spend ? ` (min ${rmLabel(vc.discount.min_spend)})` : ""} · valid ${vc.discount.validity_days || 30} days` },
+    vc.event_day?.enabled && { who: "Captain", icon: "🎟️", big: voucherSpecLabel(vc.event_day), small: "one order on tournament day" },
+  ].filter(Boolean) as Perk[];
 
   return (
     <div className="space-y-5">
@@ -107,19 +111,22 @@ export function RegistrationLanding({ data, base }: { data: PublicBundle; base: 
 
       {perks.length > 0 && (
         <section className="rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.07] p-5">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">☕ Captain gets</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">☕ Loka perks</div>
           <div className="mt-3 space-y-3">
             {perks.map((p, i) => (
               <div key={i} className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-xl">🎟️</div>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-xl">{p.icon}</div>
                 <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/70">{p.who}</div>
                   <div className="font-display text-xl font-bold text-emerald-100">{p.big}</div>
                   <div className="text-[12px] text-white/55">{p.small}</div>
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[11px] text-white/40">Straight into the captain&apos;s Loka account once the team is approved.</p>
+          {vc.discount?.enabled || vc.event_day?.enabled ? (
+            <p className="mt-3 text-[11px] text-white/40">The captain&apos;s voucher goes straight into their Loka account once the team is approved.</p>
+          ) : null}
         </section>
       )}
 

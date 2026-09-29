@@ -19,7 +19,14 @@ export type VoucherSpec = {
   /** discount voucher only: days from approval. */
   validity_days?: number | null;
 };
-export type VoucherConfig = { discount?: VoucherSpec; event_day?: VoucherSpec };
+/**
+ * Every-purchase discount for every player of an approved team, on the
+ * tournament day(s) only, for the listed categories (e.g. drinks). Applied by
+ * the cashier from the POS; not a voucher.
+ */
+export type PlayerPerk = { enabled: boolean; percent: number; category_ids: string[] };
+
+export type VoucherConfig = { discount?: VoucherSpec; event_day?: VoucherSpec; player_perk?: PlayerPerk };
 
 /** A prize line on the landing page, e.g. { title: "Champion", value: "RM300 + trophy" }. */
 export type Prize = { title: string; value: string };
@@ -138,6 +145,8 @@ export type PublicBundle = {
   tournament: Tournament;
   /** Teams holding a slot (pending, receipt sent or approved) vs the cap. */
   registration: { taken: number; max: number };
+  /** Tournament-day player perk, with category names resolved; null when off. */
+  perk: { percent: number; category_names: string[] } | null;
   teams: Team[];
   players: PublicPlayer[];
   matches: Match[];

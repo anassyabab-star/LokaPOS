@@ -129,6 +129,17 @@ export default function TournamentHome() {
         </section>
         )}
 
+        {/* Player Pass — the tournament-day drinks discount, shown at the counter. */}
+        {data.perk && view.myTeam && (
+          <Link href={`${base}/pass`} className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-700 px-4 py-3.5 active:scale-[.99]">
+            <span className="min-w-0">
+              <span className="block font-display text-[16px] font-bold">🎟️ Player Pass</span>
+              <span className="block truncate text-[12px] text-white/80">{data.perk.percent}% off {data.perk.category_names.join(", ")} on tournament day</span>
+            </span>
+            <span className="text-sm font-semibold">Open →</span>
+          </Link>
+        )}
+
         {/* next match */}
         {(view.myNext || view.nextOverall) && (
           <section>

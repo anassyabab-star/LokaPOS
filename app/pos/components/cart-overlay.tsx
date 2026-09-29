@@ -1,6 +1,7 @@
 "use client";
 
 import { usePos } from "../pos-context";
+import TournamentPerk from "./tournament-perk";
 import { sugarLabel, isKopiCategory } from "../types";
 
 export default function CartOverlay() {
@@ -177,9 +178,11 @@ export default function CartOverlay() {
             )}
             {s.voucherError && <div className="mt-1.5 text-xs font-medium text-red-600">{s.voucherError}</div>}
           </div>
+          <TournamentPerk />
 
           {s.discountAmount > 0 && <div className="mt-2 text-xs font-medium text-green-600">Diskaun: -RM{s.discountAmount.toFixed(2)}</div>}
           {s.voucherDiscount > 0 && <div className="mt-1 text-xs font-medium text-green-600">Voucher: -RM{s.voucherDiscount.toFixed(2)}</div>}
+          {s.perkDiscount > 0 && <div className="mt-1 text-xs font-medium text-violet-700">Pemain tournament: -RM{s.perkDiscount.toFixed(2)}</div>}
           {s.b1f1Applied && s.b1f1DiscountAmount > 0 && <div className="mt-1 text-xs font-medium text-amber-600">B1F1 Kopi: -RM{s.b1f1DiscountAmount.toFixed(2)}</div>}
         </div>
       </div>

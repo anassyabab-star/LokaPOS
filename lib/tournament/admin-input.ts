@@ -47,6 +47,15 @@ export function sanitizeVoucherConfig(v: unknown): VoucherConfig {
   const e = spec(o.event_day, false);
   if (d) out.discount = d;
   if (e) out.event_day = e;
+  const pp = o.player_perk as Record<string, unknown> | undefined;
+  if (pp && typeof pp === "object") {
+    out.player_perk = {
+      enabled: Boolean(pp.enabled),
+      percent: Math.min(100, Math.max(0, Math.round(Number(pp.percent) || 0))),
+      category_ids: (Array.isArray(pp.category_ids) ? pp.category_ids : [])
+        .map(String).filter(id => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 20),
+    };
+  }
   return out;
 }
 

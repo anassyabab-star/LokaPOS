@@ -13,7 +13,10 @@ import { StandingsTab } from "./standings";
 import { AnnouncementsTab } from "./announcements";
 import { SettingsTab } from "./settings";
 
-export type AdminBundle = { tournament: Tournament; teams: AdminTeam[]; matches: Match[]; announcements: Announcement[] };
+export type AdminBundle = {
+  tournament: Tournament; teams: AdminTeam[]; matches: Match[]; announcements: Announcement[];
+  perkUses?: { count: number; total: number };
+};
 export type TabProps = { bundle: AdminBundle; reload: () => Promise<void> };
 
 const TABS = [

@@ -60,6 +60,9 @@ export function OverviewTab({ bundle, reload }: TabProps) {
     { label: "Matches Remaining", value: s.remaining },
     { label: "Current Round", value: s.round },
     { label: "Status", value: STATUS_LABEL[t.status] },
+    ...(t.voucher_config?.player_perk?.enabled
+      ? [{ label: `Diskaun pemain ${t.voucher_config.player_perk.percent}%`, value: `${bundle.perkUses?.count ?? 0}× · RM${(bundle.perkUses?.total ?? 0).toFixed(2)}` }]
+      : []),
   ];
 
   return (

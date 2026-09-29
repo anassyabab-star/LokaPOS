@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FORMAT_LABEL, STATUS_LABEL, voucherSpecLabel, type Tournament, type VoucherSpec } from "@/lib/tournament/types";
 import { ConfirmSheet, ImageField, Toggle, api, btnPrimary, cardCls, fromLocalInput, inputCls, labelCls, toLocalInput } from "../ui";
 import type { TabProps } from "./page";
@@ -60,6 +60,7 @@ export function SettingsTab({ bundle, reload }: TabProps) {
     voucher_config: {
       discount: { ...OFF, validity_days: 30, ...t.voucher_config?.discount },
       event_day: { ...OFF, ...t.voucher_config?.event_day },
+      player_perk: { enabled: false, percent: 20, category_ids: [], ...t.voucher_config?.player_perk },
     },
   });
   const [f, setF] = useState<Tournament>(() => normalise(t0));
@@ -96,6 +97,16 @@ export function SettingsTab({ bundle, reload }: TabProps) {
     if (r.ok) router.replace("/dashboard/tournaments");
     else { setMsg(r.data.error || "Gagal padam"); setConfirmDel(false); }
   }
+
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/categories", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => setCategories(Array.isArray(d) ? d.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })) : []))
+      .catch(() => {});
+  }, []);
+  const perk = f.voucher_config.player_perk || { enabled: false, percent: 20, category_ids: [] };
+  const setPerk = (p: Partial<typeof perk>) => set({ voucher_config: { ...f.voucher_config, player_perk: { ...perk, ...p } } });
 
   const eventDayNoDate = f.voucher_config.event_day?.enabled && !f.start_at;
 
@@ -207,6 +218,46 @@ export function SettingsTab({ bundle, reload }: TabProps) {
           onChange={s => set({ voucher_config: { ...f.voucher_config, event_day: s } })}
         />
         {eventDayNoDate && <p className="text-xs font-semibold text-amber-600">⚠️ Set tarikh Mula — tanpanya baucar hari tournament tak dikeluarkan.</p>}
+      </section>
+
+      <section className={`${cardCls} space-y-3`}>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-gray-900">Diskaun pemain hari tournament</h2>
+            <p className="text-xs text-gray-400">
+              Setiap pemain team yang diluluskan dapat diskaun untuk <b>setiap pembelian</b> pada hari tournament sahaja.
+              Kasyer tekan &quot;🎮 Pemain Tournament&quot; di POS; pemain tunjuk Player Pass di app.
+            </p>
+          </div>
+          <Toggle on={perk.enabled} onChange={v => setPerk({ enabled: v })} />
+        </div>
+        {perk.enabled && (
+          <div className="space-y-3">
+            <label className={`${labelCls} max-w-[160px]`}>Diskaun (%)
+              <input type="number" min={1} max={100} className={`${inputCls} mt-1`} value={perk.percent} onChange={e => setPerk({ percent: Number(e.target.value) })} />
+            </label>
+            <div>
+              <span className={labelCls}>Untuk kategori</span>
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {categories.map(c => {
+                  const on = perk.category_ids.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setPerk({ category_ids: on ? perk.category_ids.filter(x => x !== c.id) : [...perk.category_ids, c.id] })}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-[#7F1D1D] bg-[#7F1D1D]/10 text-[#7F1D1D]" : "border-gray-200 text-gray-500"}`}
+                    >
+                      {on ? "✓ " : ""}{c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {perk.category_ids.length === 0 && <p className="text-xs font-semibold text-amber-600">⚠️ Pilih sekurang-kurangnya satu kategori.</p>}
+            {!f.start_at && <p className="text-xs font-semibold text-amber-600">⚠️ Set tarikh Mula — diskaun hanya aktif pada tarikh tournament.</p>}
+          </div>
+        )}
       </section>
 
       <section className={`${cardCls} space-y-3`}>

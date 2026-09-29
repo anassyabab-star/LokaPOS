@@ -10,6 +10,7 @@ import { expireStaleUnpaidOrders } from "@/lib/order-expiry";
 import { isMissingColumnError as isAnyMissingColumnError } from "@/lib/order-status";
 import { myDateKey, nextReceiptNumber } from "@/lib/order-numbering";
 import { normalizeOrderType, sanitizeTargetLabel, shortOrderNumber } from "@/lib/order-flow";
+import { perkDiscount, recordPerkUse, resolvePerkClaim } from "@/lib/tournament/perk";
 
 const supabase = createSupabaseAdminClient();
 
@@ -437,6 +438,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: error?.message || "Gagal simpan order" });
     }
 
+    // Lines by category, for the tournament player perk (drinks only).
+    const perkLines: { category_id: string | null; line_total: number }[] = [];
+
     // PROCESS ITEMS
     for (const item of body.items) {
       const productId = item.product_id;
@@ -510,6 +514,7 @@ export async function POST(req: Request) {
 
       const lineTotal = price * Number(item.qty);
       subtotal += lineTotal;
+      perkLines.push({ category_id: product.category_id ? String(product.category_id) : null, line_total: lineTotal });
 
       const orderItemPayload = {
         order_id: order.id,
@@ -575,6 +580,19 @@ export async function POST(req: Request) {
     if (body.discount_type === "fixed") {
       const fixed = Math.min(Math.max(Number(body.discount_value || 0), 0), subtotal);
       total = subtotal - fixed;
+    }
+
+    // Tournament player perk (e.g. 20% off drinks on tournament day). Re-checked
+    // and re-priced here from the order's own lines; the till only names the
+    // team/player.
+    let perkApplied = 0;
+    let perkClaim: Awaited<ReturnType<typeof resolvePerkClaim>> = null;
+    if (body.tournament_perk?.team_id) {
+      perkClaim = await resolvePerkClaim(body.tournament_perk);
+      if (perkClaim) {
+        perkApplied = Math.min(perkDiscount(perkClaim.perk, perkLines), total);
+        total = Math.max(total - perkApplied, 0);
+      }
     }
 
     // B1F1 promo — atomic insert-first to prevent race condition double-redeem
@@ -694,6 +712,18 @@ export async function POST(req: Request) {
         balance,
       })
       .eq("id", order.id);
+
+    if (perkClaim && perkApplied > 0) {
+      await recordPerkUse({
+        tournament_id: perkClaim.tournament.id,
+        team_id: perkClaim.team.id,
+        player_id: perkClaim.player?.id ?? null,
+        player_ign: perkClaim.player?.ign ?? null,
+        order_id: order.id,
+        discount_amount: perkApplied,
+        created_by: auth.user.id,
+      });
+    }
 
     // Link B1F1 reservation to the completed order
     if (b1f1Reserved) {

@@ -154,6 +154,13 @@ export function usePosState() {
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const [voucherBusy, setVoucherBusy] = useState(false);
 
+  // Tournament player perk (e.g. 20% off drinks on tournament day). The till
+  // shows the price; /api/orders re-prices it from the order lines.
+  const [tournamentPerk, setTournamentPerk] = useState<{
+    team_id: string; team_name: string; player_id: string | null; player_ign: string | null;
+    percent: number; category_names: string[];
+  } | null>(null);
+
   const [discountType, setDiscountType] = useState<"none" | "percent" | "fixed">("none");
   const [discountValue, setDiscountValue] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "qr" | "card">("cash");
@@ -451,7 +458,7 @@ export function usePosState() {
     setLinkedCustomerId(null); setMemberPoints(0); setMemberExpiringPoints(0); setMemberTier(null);
     setRedeemPointsInput(""); setMemberLookupMessage(null);
     setDiscountType("none"); setDiscountValue(""); setCashReceived("");
-    setShowDiscountPanel(false); clearVoucher();
+    setShowDiscountPanel(false); clearVoucher(); setTournamentPerk(null);
     setMemberB1f1Redeemed(false); setB1f1Applied(false); setB1f1DiscountAmount(0);
   }
 
@@ -485,7 +492,15 @@ export function usePosState() {
     return isKopiCategory(product?.category) && item.qty >= 2;
   });
   const b1f1Discount = b1f1CartEligible ? b1f1DiscountAmount : 0;
-  const totalAfterDiscount = Math.max(subtotal - discountAmount - b1f1Discount - voucherDiscount, 0);
+  const perkCategories = new Set((tournamentPerk?.category_names || []).map(n => n.toLowerCase()));
+  const perkDiscount = tournamentPerk
+    ? Math.round(
+        items
+          .filter(i => perkCategories.has(String(products.find(p => p.id === i.product_id)?.category || "").toLowerCase()))
+          .reduce((sum, i) => sum + i.price * i.qty, 0) * (tournamentPerk.percent / 100) * 100
+      ) / 100
+    : 0;
+  const totalAfterDiscount = Math.max(subtotal - discountAmount - perkDiscount - b1f1Discount - voucherDiscount, 0);
   const requestedRedeem = Math.max(0, Math.floor(Number(redeemPointsInput || 0)));
   const capPct = Math.round(loyaltyConfig.redeemMaxRatio * 100);
   const maxRedeemByAmount = Math.floor((totalAfterDiscount * loyaltyConfig.redeemMaxRatio) / loyaltyConfig.redeemRmPerPoint);
@@ -585,6 +600,7 @@ export function usePosState() {
     discountType, setDiscountType, discountValue, setDiscountValue,
     voucherCode, setVoucherCode, voucherApplied, voucherError, voucherBusy,
     applyVoucher, clearVoucher, voucherDiscount,
+    tournamentPerk, setTournamentPerk, perkDiscount,
     paymentMethod, setPaymentMethod, cashReceived, setCashReceived,
     autoPrintEnabled, setAutoPrintEnabled, autoPrintLabel, setAutoPrintLabel,
     printerIp, setPrinterIp,
