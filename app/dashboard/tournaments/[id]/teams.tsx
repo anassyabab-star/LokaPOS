@@ -25,7 +25,7 @@ function TeamEditor({ team, tournamentId, onClose, onSaved }: {
   });
   const [players, setPlayers] = useState<PlayerDraft[]>(
     t?.players.map(p => ({ id: p.id, full_name: p.full_name, ign: p.ign, mlbb_user_id: p.mlbb_user_id, server_id: p.server_id, phone: p.phone, player_role: p.player_role, is_captain: p.is_captain }))
-    || [{ full_name: "", ign: "", mlbb_user_id: "", server_id: "", phone: "", player_role: "exp", is_captain: true }]
+    || [{ full_name: "", ign: "", mlbb_user_id: "", server_id: null, phone: "", player_role: "exp", is_captain: true }]
   );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -96,17 +96,16 @@ function TeamEditor({ team, tournamentId, onClose, onSaved }: {
 
         <div className="mt-5 mb-2 flex items-center justify-between">
           <h3 className="text-sm font-bold text-gray-900">Pemain ({players.length})</h3>
-          <button onClick={() => setPlayers(ps => [...ps, { full_name: "", ign: "", mlbb_user_id: "", server_id: "", phone: "", player_role: "sub", is_captain: false }])} className="text-xs font-semibold text-[#7F1D1D]">+ Pemain</button>
+          <button onClick={() => setPlayers(ps => [...ps, { full_name: "", ign: "", mlbb_user_id: "", server_id: null, phone: "", player_role: "sub", is_captain: false }])} className="text-xs font-semibold text-[#7F1D1D]">+ Pemain</button>
         </div>
         <div className="space-y-3">
           {players.map((p, i) => (
             <div key={p.id || `new-${i}`} className="rounded-xl border border-gray-100 p-3">
               <div className="grid grid-cols-2 gap-2">
                 <input className={inputCls} placeholder="IGN" value={p.ign} onChange={e => setP(i, { ign: e.target.value })} />
-                <input className={inputCls} placeholder="Nama penuh" value={p.full_name} onChange={e => setP(i, { full_name: e.target.value })} />
-                <input className={inputCls} placeholder="MLBB ID" value={p.mlbb_user_id} onChange={e => setP(i, { mlbb_user_id: e.target.value.replace(/\D/g, "") })} />
-                <input className={inputCls} placeholder="Server" value={p.server_id} onChange={e => setP(i, { server_id: e.target.value.replace(/\D/g, "") })} />
-                <input className={inputCls} placeholder="Telefon" value={p.phone} onChange={e => setP(i, { phone: e.target.value })} />
+                <input className={inputCls} placeholder="MLBB User ID" value={p.mlbb_user_id} onChange={e => setP(i, { mlbb_user_id: e.target.value.replace(/\D/g, "") })} />
+                <input className={inputCls} placeholder="Nama penuh (pilihan)" value={p.full_name ?? ""} onChange={e => setP(i, { full_name: e.target.value })} />
+                <input className={inputCls} placeholder="Telefon (pilihan → dapat baucar)" value={p.phone ?? ""} onChange={e => setP(i, { phone: e.target.value })} />
                 <select className={inputCls} value={p.player_role} onChange={e => setP(i, { player_role: e.target.value as PlayerRole })}>
                   {PLAYER_ROLES.map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                 </select>

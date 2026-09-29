@@ -14,7 +14,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const when = t.start_at
     ? new Date(t.start_at).toLocaleDateString("en-MY", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", year: "numeric" })
     : null;
-  const perk = t.voucher_config?.discount?.enabled ? ` Every player gets ${voucherSpecLabel(t.voucher_config.discount)} at Loka.` : "";
+  const perk = t.voucher_config?.discount?.enabled ? ` Captain gets a ${voucherSpecLabel(t.voucher_config.discount)} Loka voucher.` : "";
   const lead =
     t.status === "registration_open"
       ? `Registration open — ${Number(t.entry_fee) > 0 ? `${rmLabel(t.entry_fee)} per team` : "free entry"}.`

@@ -28,12 +28,12 @@ export async function PATCH(req: Request, context: Ctx) {
   if (Array.isArray(body.players)) {
     const incoming = (body.players as Record<string, unknown>[]).map(p => ({ id: p.id ? String(p.id) : null, ...sanitizePlayer(p) }));
     for (const p of incoming) {
-      if (!p.ign || !p.phone || !p.mlbb_user_id || !p.server_id) {
-        return NextResponse.json({ error: `${p.ign || "A player"}: IGN, phone, MLBB ID and Server ID are required` }, { status: 400 });
+      if (!p.ign || !p.mlbb_user_id) {
+        return NextResponse.json({ error: `${p.ign || "A player"}: IGN and MLBB User ID are required` }, { status: 400 });
       }
     }
     const { data: existing } = await supabase.from("tournament_players").select("id,phone").eq("team_id", teamId);
-    const phoneById = new Map((existing || []).map(r => [r.id as string, r.phone as string]));
+    const phoneById = new Map((existing || []).map(r => [r.id as string, (r.phone as string | null) ?? null]));
     const keep = new Set(incoming.filter(p => p.id).map(p => p.id));
     const removed = (existing || []).map(r => r.id).filter(pid => !keep.has(pid));
     if (removed.length) await supabase.from("tournament_players").delete().in("id", removed);

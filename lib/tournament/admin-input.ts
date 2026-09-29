@@ -109,11 +109,11 @@ export function sanitizeTeam(body: Record<string, unknown>) {
 
 export function sanitizePlayer(p: Record<string, unknown>) {
   return {
-    full_name: str(p.full_name, 60) || "",
+    full_name: str(p.full_name, 60),
     ign: str(p.ign, 30) || "",
     mlbb_user_id: String(p.mlbb_user_id ?? "").replace(/\D/g, "").slice(0, 20),
-    server_id: String(p.server_id ?? "").replace(/\D/g, "").slice(0, 10),
-    phone: canonicalPhone(String(p.phone || "")),
+    server_id: String(p.server_id ?? "").replace(/\D/g, "").slice(0, 10) || null,
+    phone: canonicalPhone(String(p.phone || "")) || null,
     player_role: (PLAYER_ROLES.includes(p.player_role as PlayerRole) ? p.player_role : "sub") as PlayerRole,
     is_captain: Boolean(p.is_captain),
     status: p.status === "inactive" ? "inactive" : "active",

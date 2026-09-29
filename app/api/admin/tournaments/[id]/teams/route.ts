@@ -17,9 +17,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     .map(p => sanitizePlayer(p as Record<string, unknown>))
     .filter(p => p.ign);
   for (const p of players) {
-    if (!p.phone || !p.mlbb_user_id || !p.server_id) {
-      return NextResponse.json({ error: `${p.ign}: phone, MLBB ID and Server ID are required` }, { status: 400 });
-    }
+    if (!p.mlbb_user_id) return NextResponse.json({ error: `${p.ign}: MLBB User ID is required` }, { status: 400 });
   }
 
   const supabase = createSupabaseAdminClient();

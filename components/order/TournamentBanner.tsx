@@ -30,7 +30,7 @@ export function TournamentBanner() {
       <span className="min-w-0">
         <span className="block truncate font-display text-[15px] font-semibold text-cream">🎮 {t.name}</span>
         <span className="block font-sans text-[12px] text-cream/75">
-          {t.status === "ongoing" ? "Live now — scores & schedule" : "Register your team · vouchers for every player"}
+          {t.status === "ongoing" ? "Live now — scores & schedule" : "Register your team now"}
         </span>
       </span>
       <span className="font-sans text-[13px] font-semibold text-cream">→</span>

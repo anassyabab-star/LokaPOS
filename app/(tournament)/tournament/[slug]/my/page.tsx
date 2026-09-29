@@ -13,7 +13,7 @@ type MyTeam = {
   reject_reason: string | null;
   has_payment_proof: boolean;
   payment_ref: string | null;
-  players: { id: string; full_name: string; ign: string; phone?: string; player_role: PlayerRole; is_captain: boolean }[];
+  players: { id: string; full_name: string | null; ign: string; phone?: string | null; player_role: PlayerRole; is_captain: boolean }[];
 };
 type Me = { signed_in: boolean; phone?: string; is_captain?: boolean; team: MyTeam | null };
 
@@ -117,7 +117,7 @@ export default function MyRegistrationPage() {
               <p className="mt-3 text-[13px] leading-relaxed text-white/60">
                 {team.registration_status === "pending_payment" && "Almost there — pay the entry fee and upload the receipt below."}
                 {team.registration_status === "payment_submitted" && (fee > 0 ? "Receipt received. We'll check it and approve your team soon." : "Received. We'll approve your team soon.")}
-                {team.registration_status === "approved" && "You're in! 🎉 Every player's Loka vouchers are in their Rewards — sign in with their own number to see them."}
+                {team.registration_status === "approved" && "You're in! 🎉 Your Loka voucher is waiting in Rewards."}
                 {team.registration_status === "rejected" && (team.reject_reason || "Your registration wasn't approved.")}
                 {team.registration_status === "withdrawn" && "This registration was withdrawn."}
               </p>
@@ -183,7 +183,7 @@ export default function MyRegistrationPage() {
                   <div key={p.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <div className="truncate text-[14px] font-semibold">{p.ign}{p.is_captain ? " 👑" : ""}</div>
-                      <div className="truncate text-[12px] text-white/45">{p.full_name}{p.phone ? ` · ${p.phone}` : ""}</div>
+                      {(p.full_name || p.phone) && <div className="truncate text-[12px] text-white/45">{[p.full_name, p.phone].filter(Boolean).join(" · ")}</div>}
                     </div>
                     <span className="shrink-0 text-[11px] text-white/40">{ROLE_LABEL[p.player_role]}</span>
                   </div>

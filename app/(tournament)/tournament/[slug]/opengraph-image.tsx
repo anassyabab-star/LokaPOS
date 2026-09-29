@@ -18,7 +18,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
     : "Date TBA";
   const open = t?.status === "registration_open";
   const badge = t ? (open ? "REGISTRATION OPEN" : STATUS_LABEL[t.status].toUpperCase()) : "MOBILE LEGENDS";
-  const perk = t?.voucher_config?.discount?.enabled ? `Every player gets ${voucherSpecLabel(t.voucher_config.discount)}` : null;
+  const perk = t?.voucher_config?.discount?.enabled ? `Free ${voucherSpecLabel(t.voucher_config.discount)} Loka voucher` : null;
   const prize = t?.prizes?.[0]?.value ? `${t.prizes[0].title}: ${t.prizes[0].value}` : null;
   const fee = t ? (Number(t.entry_fee) > 0 ? `${rmLabel(t.entry_fee)} / team` : "Free entry") : null;
 

@@ -5,8 +5,9 @@ import { endOfDayMYT, findOrCreateCustomerByPhone, formatDateMYT, startOfDayMYT 
 import { voucherSpecLabel, type Player, type Tournament, type VoucherSpec } from "./types";
 
 // ============================================================================
-// Vouchers for an approved team — one set per player, not just the captain,
-// so every player becomes a Loka customer.
+// Vouchers for an approved team — one set for every player with a phone
+// number. The registration form only asks the captain for one; an admin can
+// add a teammate's phone to give them a set too.
 //
 //   discount  — valid from approval for `validity_days`
 //   event_day — valid only on the tournament day(s), Malaysia time
@@ -60,10 +61,11 @@ export async function issueTournamentVouchers(teamId: string): Promise<IssueResu
   const eventDay = specIsOn(cfg.event_day) && tournament.start_at ? cfg.event_day : null;
   const firstTime = !team.vouchers_issued_at;
 
-  const result: IssueResult = { players: players.length, vouchers: 0, notified: 0, skipped: [] };
+  const withPhone = players.filter(p => p.phone);
+  const result: IssueResult = { players: withPhone.length, vouchers: 0, notified: 0, skipped: [] };
 
-  for (const p of players) {
-    const customerId = p.customer_id || (await findOrCreateCustomerByPhone(p.phone, p.full_name));
+  for (const p of withPhone) {
+    const customerId = p.customer_id || (await findOrCreateCustomerByPhone(p.phone!, p.full_name || p.ign));
     if (!customerId) { result.skipped.push(p.ign); continue; }
     if (!p.customer_id) {
       await supabase.from("tournament_players").update({ customer_id: customerId }).eq("id", p.id);
@@ -107,7 +109,7 @@ export async function issueTournamentVouchers(teamId: string): Promise<IssueResu
         (lines.length ? `\nBaucar Loka untuk anda:\n${lines.join("\n")}\n\nLihat di ${site}/rewards (log masuk dengan nombor ini).\n` : "") +
         `\nJadual & keputusan: ${site}/tournament/${tournament.slug}`;
       try {
-        const sent = await sendWhatsAppText({ to: p.phone, message });
+        const sent = await sendWhatsAppText({ to: p.phone!, message });
         if (sent.ok) result.notified++;
       } catch {
         // Notification is best-effort; the vouchers are already in their wallet.

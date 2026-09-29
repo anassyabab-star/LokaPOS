@@ -7,13 +7,14 @@ import { PLAYER_ROLES, type PlayerRole } from "@/lib/tournament/types";
 // ============================================================================
 // POST /api/public/tournaments/[slug]/register — a captain registers a team.
 //
-// The captain must be signed in (Google or phone OTP) and must be one of the
-// listed players: their verified phone is how we know who owns the entry, and
-// it is where their vouchers go. Every other player's phone is recorded so
-// they get their own vouchers once the payment is approved.
+// The captain must be signed in (Google or phone OTP) and is players[0]:
+// their verified phone is how we know who owns the entry, and where the
+// voucher goes. Teammates only need an IGN and MLBB User ID; a phone for a
+// teammate is optional (with one, they get a voucher of their own too).
+// Server ID isn't asked for — the User ID finds a player for a custom room.
 //
-// Body: { team: { name, short_name? }, players: [{ full_name, ign,
-//         mlbb_user_id, server_id, phone, player_role }] }
+// Body: { team: { name, short_name? }, players: [{ full_name? (captain),
+//         ign, mlbb_user_id, phone? (teammates, optional), player_role }] }
 // ============================================================================
 
 type PlayerIn = {
@@ -45,14 +46,18 @@ export async function POST(req: Request, context: { params: Promise<{ slug: stri
     if (teamName.length < 2) return NextResponse.json({ error: "Team name is required." }, { status: 400 });
 
     const rawPlayers: PlayerIn[] = Array.isArray(body?.players) ? body.players : [];
-    const players = rawPlayers.map(p => ({
-      full_name: clean(p.full_name),
-      ign: clean(p.ign, 30),
-      mlbb_user_id: clean(p.mlbb_user_id, 20).replace(/\D/g, ""),
-      server_id: clean(p.server_id, 10).replace(/\D/g, ""),
-      phone: canonicalPhone(p.phone),
-      player_role: (PLAYER_ROLES.includes(p.player_role as PlayerRole) ? p.player_role : "sub") as PlayerRole,
-    }));
+    const captainPhone = canonicalPhone(session.phone);
+    const players = rawPlayers.map((p, i) => {
+      const phone = i === 0 ? captainPhone : canonicalPhone(p.phone);
+      return {
+        full_name: clean(p.full_name) || null,
+        ign: clean(p.ign, 30),
+        mlbb_user_id: clean(p.mlbb_user_id, 20).replace(/\D/g, ""),
+        server_id: clean(p.server_id, 10).replace(/\D/g, "") || null,
+        phone: phone && isPlausiblePhone(phone) ? phone : null,
+        player_role: (PLAYER_ROLES.includes(p.player_role as PlayerRole) ? p.player_role : "sub") as PlayerRole,
+      };
+    });
 
     if (players.length < tournament.min_players || players.length > tournament.max_players) {
       return NextResponse.json(
@@ -60,26 +65,20 @@ export async function POST(req: Request, context: { params: Promise<{ slug: stri
         { status: 400 }
       );
     }
+    if (!players[0].full_name) return NextResponse.json({ error: "Enter your full name (captain)." }, { status: 400 });
     for (const [i, p] of players.entries()) {
-      const n = i + 1;
-      if (!p.full_name || !p.ign) return NextResponse.json({ error: `Player ${n}: name and IGN are required.` }, { status: 400 });
-      if (!p.mlbb_user_id || !p.server_id) return NextResponse.json({ error: `Player ${n}: MLBB User ID and Server ID are required.` }, { status: 400 });
-      if (!isPlausiblePhone(p.phone)) return NextResponse.json({ error: `Player ${n}: phone number looks wrong.` }, { status: 400 });
+      if (!p.ign || !p.mlbb_user_id) {
+        return NextResponse.json({ error: `Player ${i + 1}: IGN and MLBB User ID are required.` }, { status: 400 });
+      }
     }
-    if (new Set(players.map(p => p.phone)).size !== players.length) {
-      return NextResponse.json({ error: "Each player needs their own phone number — vouchers are per person." }, { status: 400 });
+    const phones = players.map(p => p.phone).filter(Boolean) as string[];
+    if (new Set(phones).size !== phones.length) {
+      return NextResponse.json({ error: "The same phone number is listed for two players." }, { status: 400 });
     }
-    if (new Set(players.map(p => `${p.mlbb_user_id}:${p.server_id}`)).size !== players.length) {
-      return NextResponse.json({ error: "The same MLBB account is listed twice." }, { status: 400 });
+    if (new Set(players.map(p => p.mlbb_user_id)).size !== players.length) {
+      return NextResponse.json({ error: "The same MLBB User ID is listed twice." }, { status: 400 });
     }
-
-    const captainIdx = players.findIndex(p => p.phone === canonicalPhone(session.phone));
-    if (captainIdx < 0) {
-      return NextResponse.json(
-        { error: `Your number (${session.phone}) must be one of the players — you're registering as captain.` },
-        { status: 400 }
-      );
-    }
+    const captainIdx = 0;
 
     const supabase = createSupabaseAdminClient();
     const { count } = await supabase
@@ -98,19 +97,19 @@ export async function POST(req: Request, context: { params: Promise<{ slug: stri
       .eq("tournament_id", tournament.id)
       .or(
         [
-          `phone.in.(${players.map(p => p.phone).join(",")})`,
+          `phone.in.(${phones.join(",")})`,
           `mlbb_user_id.in.(${players.map(p => p.mlbb_user_id).join(",")})`,
         ].join(",")
       );
     for (const c of clash || []) {
-      const hit = players.find(p => p.phone === c.phone || (p.mlbb_user_id === c.mlbb_user_id && p.server_id === c.server_id));
+      const hit = players.find(p => (p.phone && p.phone === c.phone) || p.mlbb_user_id === c.mlbb_user_id);
       if (hit) {
         return NextResponse.json({ error: `${hit.ign} is already registered in another team.` }, { status: 409 });
       }
     }
 
     const captainCustomerId =
-      session.customerId || (await findOrCreateCustomerByPhone(session.phone, players[captainIdx].full_name));
+      session.customerId || (await findOrCreateCustomerByPhone(session.phone, players[captainIdx].full_name || ""));
 
     const needsPayment = Number(tournament.entry_fee || 0) > 0;
     const { data: team, error: teamErr } = await supabase
@@ -143,7 +142,7 @@ export async function POST(req: Request, context: { params: Promise<{ slug: stri
     );
     if (playersErr) {
       await supabase.from("tournament_teams").delete().eq("id", team.id);
-      if (/tournament_players_(phone|mlbb)_uniq/.test(playersErr.message)) {
+      if (/tournament_players_(phone|mlbb\w*)_uniq/.test(playersErr.message)) {
         return NextResponse.json({ error: "One of these players is already registered in another team." }, { status: 409 });
       }
       throw new Error(playersErr.message);

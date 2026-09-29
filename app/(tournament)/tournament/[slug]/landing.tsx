@@ -6,8 +6,8 @@ import { rmLabel, voucherSpecLabel, type PublicBundle, type Prize } from "@/lib/
 
 // ============================================================================
 // The registration pitch — what the shared link shows while entries are open:
-// slots left, the deadline ticking down, prizes, the vouchers every player
-// gets, how it works, and FAQ. A sticky button keeps "Register" in reach.
+// slots left, the deadline ticking down, prizes, the captain's voucher,
+// how it works, and FAQ. A sticky button keeps "Register" in reach.
 // ============================================================================
 
 const MEDALS = ["🥇", "🥈", "🥉"];
@@ -107,7 +107,7 @@ export function RegistrationLanding({ data, base }: { data: PublicBundle; base: 
 
       {perks.length > 0 && (
         <section className="rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.07] p-5">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">☕ Every player gets</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300/90">☕ Captain gets</div>
           <div className="mt-3 space-y-3">
             {perks.map((p, i) => (
               <div key={i} className="flex items-center gap-3">
@@ -119,7 +119,7 @@ export function RegistrationLanding({ data, base }: { data: PublicBundle; base: 
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[11px] text-white/40">Not just the captain — all {t.min_players}{t.max_players > t.min_players ? `–${t.max_players}` : ""} players, straight into their Loka account once your team is approved.</p>
+          <p className="mt-3 text-[11px] text-white/40">Straight into the captain&apos;s Loka account once the team is approved.</p>
         </section>
       )}
 
@@ -127,7 +127,7 @@ export function RegistrationLanding({ data, base }: { data: PublicBundle; base: 
         <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">How it works</div>
         <ol className="mt-3 space-y-3">
           {[
-            ["Register", `Captain signs in and adds ${t.min_players}${t.max_players > t.min_players ? `–${t.max_players}` : ""} players — IGN, MLBB ID and phone.`],
+            ["Register", `Captain signs in and adds ${t.min_players}${t.max_players > t.min_players ? `–${t.max_players}` : ""} players — just IGN and MLBB User ID.`],
             ...(fee > 0 ? [["Pay", `Transfer ${rmLabel(fee)} and upload the receipt.`]] : []),
             ["Get approved", "We check it and confirm your slot on WhatsApp."],
             ["Play", `Show up at ${t.venue || "Loka"}${t.start_at ? ` on ${formatWhen(t.start_at, { dateOnly: true })}` : ""} and follow your matches live here.`],
@@ -148,15 +148,15 @@ export function RegistrationLanding({ data, base }: { data: PublicBundle; base: 
         <Faq q="How many players per team?">
           {t.min_players} players{t.max_players > t.min_players ? `, plus up to ${t.max_players - t.min_players} substitute${t.max_players - t.min_players > 1 ? "s" : ""}` : ""}. Each player can only be in one team.
         </Faq>
-        <Faq q="Why does every player need a phone number?">
-          Vouchers go to each player&apos;s own Loka account, which is tied to their phone. They sign in with that number to see and use them. We only use it for this tournament and their Loka account.
+        <Faq q="What do I need for each player?">
+          Just their IGN and MLBB User ID (tap the profile picture in MLBB — it&apos;s the first number, e.g. ID: 123456789). Only the captain signs in with a phone number.
         </Faq>
         {fee > 0 && (
           <Faq q="How do I pay?">
             After registering you&apos;ll see the bank details{t.payment_qr_url ? " and a DuitNow QR" : ""}. Transfer {rmLabel(fee)} using your team name as the reference, then upload the receipt from the same page.
           </Faq>
         )}
-        <Faq q="When do we get the vouchers?">
+        <Faq q="When does the voucher arrive?">
           As soon as your team is approved — usually shortly after we check the receipt. You&apos;ll get a WhatsApp message.
           {vc.event_day?.enabled ? " The tournament-day voucher only works on the day itself." : ""}
         </Faq>

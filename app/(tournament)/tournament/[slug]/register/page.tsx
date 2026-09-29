@@ -7,10 +7,22 @@ import { useTournament } from "@/components/tournament/tournament-provider";
 import { PLAYER_ROLES, ROLE_LABEL, voucherSpecLabel, type PlayerRole } from "@/lib/tournament/types";
 import { PageHeader } from "../shell";
 
-type Row = { full_name: string; ign: string; mlbb_user_id: string; server_id: string; phone: string; player_role: PlayerRole };
+// Only the captain gives a name and phone (they're the account the entry and
+// its voucher belong to). Teammates: IGN + MLBB User ID + role — no Server ID;
+// for a custom room at Loka the User ID is all we need to find a player.
+type Row = { full_name: string; ign: string; mlbb_user_id: string; player_role: PlayerRole };
 
 const DEFAULT_ROLES: PlayerRole[] = ["exp", "jungler", "mid", "gold", "roamer", "sub"];
-const blankRow = (i: number): Row => ({ full_name: "", ign: "", mlbb_user_id: "", server_id: "", phone: "", player_role: DEFAULT_ROLES[i] || "sub" });
+const blankRow = (i: number): Row => ({ full_name: "", ign: "", mlbb_user_id: "", player_role: DEFAULT_ROLES[i] || "sub" });
+
+type Draft = { teamName: string; shortName: string; rows: Row[] };
+const draftKey = (slug: string) => `loka_tournament_draft:${slug}`;
+function readDraft(slug: string): Draft | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(draftKey(slug)) || "null") as Draft | null;
+    return d && Array.isArray(d.rows) ? d : null;
+  } catch { return null; }
+}
 
 const field = "w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[14px] text-white outline-none placeholder:text-white/25 focus:border-red-500 focus:ring-1 focus:ring-red-500/30";
 
@@ -47,22 +59,39 @@ export default function RegisterPage() {
     // Wait for /api/public/me: building the rows first left the captain's
     // (read-only) phone empty for good, so the form could never be submitted.
     if (!t || !me || rows.length) return;
-    const first = { ...blankRow(0), phone: me.phone || "" };
-    setRows([first, ...Array.from({ length: Math.max(0, t.min_players - 1) }, (_, i) => blankRow(i + 1))]);
-  }, [t, me, rows.length]);
+    // A half-filled form survives closing the page (captains leave to ask
+    // teammates for their IDs, then come back).
+    const draft = readDraft(slug);
+    if (draft && draft.rows.length) {
+      setTeamName(draft.teamName || "");
+      setShortName(draft.shortName || "");
+      const restored = draft.rows.slice(0, t.max_players).map((r, i) => ({ ...blankRow(i), ...r }));
+      while (restored.length < t.min_players) restored.push(blankRow(restored.length));
+      setRows(restored);
+      return;
+    }
+    setRows(Array.from({ length: Math.max(1, t.min_players) }, (_, i) => blankRow(i)));
+  }, [t, me, rows.length, slug]);
+
+  useEffect(() => {
+    if (!rows.length) return;
+    try { localStorage.setItem(draftKey(slug), JSON.stringify({ teamName, shortName, rows })); } catch { /* private mode */ }
+  }, [slug, teamName, shortName, rows]);
 
   if (!data || !t) return null;
 
   const closed = t.status !== "registration_open" || (t.registration_deadline && Date.now() > new Date(t.registration_deadline).getTime());
   const set = (i: number, patch: Partial<Row>) => setRows(rs => rs.map((r, k) => (k === i ? { ...r, ...patch } : r)));
   const vc = t.voucher_config || {};
+  const vc0 = !!(vc.discount?.enabled || vc.event_day?.enabled);
 
   async function submit() {
     setError(null);
     if (teamName.trim().length < 2) { setError("Enter your team name."); return; }
+    if (!rows[0]?.full_name.trim()) { setError("Enter your full name."); return; }
     for (const [i, r] of rows.entries()) {
-      if (!r.full_name.trim() || !r.ign.trim() || !r.mlbb_user_id.trim() || !r.server_id.trim() || r.phone.replace(/\D/g, "").length < 9) {
-        setError(`Player ${i + 1}: fill in every field.`); return;
+      if (!r.ign.trim() || !r.mlbb_user_id.trim()) {
+        setError(`Player ${i + 1}: IGN and MLBB User ID are required.`); return;
       }
     }
     setBusy(true);
@@ -70,11 +99,16 @@ export default function RegisterPage() {
       const res = await fetch(`/api/public/tournaments/${encodeURIComponent(slug)}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ team: { name: teamName, short_name: shortName }, players: rows }),
+        body: JSON.stringify({
+          team: { name: teamName, short_name: shortName },
+          // The captain's phone is their signed-in number; the server checks it.
+          players: rows.map((r, i) => ({ ...r, full_name: i === 0 ? r.full_name : "", phone: i === 0 ? me?.phone : undefined })),
+        }),
       });
       const d = await res.json().catch(() => ({}));
       if (res.status === 401) { router.push(`/signin?next=${encodeURIComponent(`${base}/register`)}`); return; }
       if (!res.ok) { setError(d.error || "Registration failed"); return; }
+      try { localStorage.removeItem(draftKey(slug)); } catch { /* ignore */ }
       router.replace(`${base}/my?new=1`);
     } catch {
       setError("No connection.");
@@ -100,7 +134,7 @@ export default function RegisterPage() {
           <div className="text-5xl">📱</div>
           <h2 className="mt-4 font-display text-xl font-bold">Sign in as the captain</h2>
           <p className="mt-2 text-sm leading-relaxed text-white/55">
-            Use your own phone number (or Google). You&apos;ll be listed as captain, and it&apos;s where your Loka vouchers go.
+            Use your own phone number (or Google). You&apos;ll be listed as captain — it&apos;s the only number we need{vc0 ? ", and where your Loka voucher goes" : ""}.
           </p>
           <Link href={`/signin?next=${encodeURIComponent(`${base}/register`)}`} className="mt-6 inline-block w-full rounded-2xl bg-red-600 py-3.5 font-bold">
             Sign in to continue
@@ -111,14 +145,16 @@ export default function RegisterPage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-[13px] leading-relaxed text-white/65">
             <div className="font-semibold text-white">How it works</div>
             <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
-              <li>Fill in your team ({t.min_players}–{t.max_players} players).</li>
+              <li>Add your team: each player&apos;s IGN and MLBB User ID ({t.min_players}–{t.max_players} players).</li>
               {Number(t.entry_fee) > 0 && <li>Transfer RM{Number(t.entry_fee).toFixed(2).replace(/\.00$/, "")} and upload the receipt.</li>}
               <li>We check it and approve your team.</li>
-              <li>
-                Every player gets Loka vouchers
-                {vc.discount?.enabled ? ` — ${voucherSpecLabel(vc.discount)}` : ""}
-                {vc.event_day?.enabled ? `${vc.discount?.enabled ? " +" : " —"} ${voucherSpecLabel(vc.event_day)} on tournament day` : ""}.
-              </li>
+              {vc0 && (
+                <li>
+                  You get a Loka voucher
+                  {vc.discount?.enabled ? ` — ${voucherSpecLabel(vc.discount)}` : ""}
+                  {vc.event_day?.enabled ? `${vc.discount?.enabled ? " +" : " —"} ${voucherSpecLabel(vc.event_day)} on tournament day` : ""}.
+                </li>
+              )}
             </ol>
           </div>
 
@@ -138,25 +174,24 @@ export default function RegisterPage() {
                   <button onClick={() => setRows(rs => rs.filter((_, k) => k !== i))} className="text-[12px] text-white/40">Remove</button>
                 )}
               </div>
-              <input className={field} placeholder="Full name" value={r.full_name} onChange={e => set(i, { full_name: e.target.value })} />
-              <input className={field} placeholder="IGN (in-game name)" value={r.ign} onChange={e => set(i, { ign: e.target.value })} />
               {i === 0 && (
-                <p className="px-1 text-[11px] leading-relaxed text-white/40">
-                  In MLBB, tap your profile picture — it shows <span className="text-white/70">ID: 123456789 (2012)</span>. The first number is the User ID, the one in brackets is the Server ID.
-                </p>
+                <input className={field} placeholder="Your full name" value={r.full_name} onChange={e => set(i, { full_name: e.target.value })} />
               )}
-              <div className="grid grid-cols-[1fr_100px] gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input className={field} placeholder="IGN" value={r.ign} onChange={e => set(i, { ign: e.target.value })} />
                 <input className={field} inputMode="numeric" placeholder="MLBB User ID" value={r.mlbb_user_id} onChange={e => set(i, { mlbb_user_id: e.target.value.replace(/\D/g, "") })} />
-                <input className={field} inputMode="numeric" placeholder="Server ID" value={r.server_id} onChange={e => set(i, { server_id: e.target.value.replace(/\D/g, "") })} />
               </div>
-              <input
-                className={`${field} ${i === 0 && me?.phone ? "opacity-60" : ""}`}
-                inputMode="tel"
-                placeholder="Phone (WhatsApp)"
-                value={r.phone}
-                readOnly={i === 0 && !!me?.phone}
-                onChange={e => set(i, { phone: e.target.value })}
-              />
+              {i === 0 && (
+                <>
+                  <p className="px-1 text-[11px] leading-relaxed text-white/40">
+                    User ID: in MLBB, tap your profile picture — <span className="text-white/70">ID: 123456789 (2012)</span>. Enter the first number only.
+                  </p>
+                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[13px]">
+                    <span className="text-white/45">WhatsApp</span>
+                    <span className="font-semibold text-white/80">{me?.phone}</span>
+                  </div>
+                </>
+              )}
               <select className={field} value={r.player_role} onChange={e => set(i, { player_role: e.target.value as PlayerRole })}>
                 {PLAYER_ROLES.map(role => <option key={role} value={role} className="bg-[#12151C]">{ROLE_LABEL[role]}</option>)}
               </select>
@@ -170,7 +205,7 @@ export default function RegisterPage() {
           )}
 
           <p className="px-1 text-[11px] leading-relaxed text-white/35">
-            Each player needs their own phone number — vouchers are sent to it. Their numbers are only used for this tournament and their Loka account.
+            Your form is saved on this phone — you can leave to collect your teammates&apos; IDs and come back.
           </p>
 
           {error && <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">⚠️ {error}</div>}

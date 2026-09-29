@@ -77,10 +77,12 @@ export type PublicPlayer = { id: string; team_id: string; ign: string; player_ro
 export type Player = PublicPlayer & {
   tournament_id: string;
   customer_id: string | null;
-  full_name: string;
+  /** Captain only (optional for teammates since 20260930_tournament_simpler_players). */
+  full_name: string | null;
   mlbb_user_id: string;
-  server_id: string;
-  phone: string;
+  server_id: string | null;
+  /** Captain only, unless an admin adds one — a phone is what a voucher is issued to. */
+  phone: string | null;
   status: "active" | "inactive";
 };
 

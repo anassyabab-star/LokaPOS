@@ -44,7 +44,7 @@ function VoucherEditor({ title, hint, spec, withValidity, onChange }: {
               <input type="number" min={1} className={`${inputCls} mt-1`} value={spec.validity_days ?? 30} onChange={e => onChange({ ...spec, validity_days: Number(e.target.value) })} />
             </label>
           )}
-          <p className="col-span-full text-xs text-[#7F1D1D]">Setiap pemain: {voucherSpecLabel(spec)}{spec.min_spend ? ` · min RM${spec.min_spend}` : ""}</p>
+          <p className="col-span-full text-xs text-[#7F1D1D]">Kapten: {voucherSpecLabel(spec)}{spec.min_spend ? ` · min RM${spec.min_spend}` : ""}</p>
         </div>
       )}
     </div>
@@ -179,8 +179,8 @@ export function SettingsTab({ bundle, reload }: TabProps) {
       </section>
 
       <section className={`${cardCls} space-y-3`}>
-        <h2 className="font-bold text-gray-900">Baucar setiap pemain</h2>
-        <p className="text-xs text-gray-400">Dikeluarkan bila team diluluskan — setiap pemain dapat sendiri di akaun Loka (ikut nombor telefon).</p>
+        <h2 className="font-bold text-gray-900">Baucar</h2>
+        <p className="text-xs text-gray-400">Dikeluarkan bila team diluluskan, ke akaun Loka setiap pemain yang ada no. telefon — biasanya kapten sahaja (borang hanya minta nombor kapten). Admin boleh tambah nombor pemain lain di tab Teams.</p>
         <VoucherEditor
           title="Baucar diskaun"
           hint="Boleh guna mulai hari lulus"

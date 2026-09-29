@@ -55,7 +55,7 @@ export function RegistrationsTab({ bundle, reload }: TabProps) {
           </button>
         ))}
       </div>
-      <p className="text-xs text-gray-400">Lulus = setiap pemain dapat: {voucherText}.</p>
+      <p className="text-xs text-gray-400">Lulus = pemain yang ada no. telefon (biasanya kapten sahaja) dapat: {voucherText}. Nak beri kepada pemain lain? Tambah nombor mereka di tab Teams, kemudian &quot;Keluarkan semula baucar&quot;.</p>
 
       {teams.length === 0 ? (
         <div className={`${cardCls} py-10 text-center`}>
@@ -111,9 +111,9 @@ export function RegistrationsTab({ bundle, reload }: TabProps) {
                   {team.players.map(p => (
                     <tr key={p.id} className="border-t border-gray-100">
                       <td className="py-1.5 pr-2 font-semibold text-gray-900">{p.ign}{p.is_captain ? " 👑" : ""}</td>
-                      <td className="py-1.5 pr-2 text-gray-600">{p.full_name}</td>
-                      <td className="py-1.5 pr-2 font-mono text-gray-600">{p.mlbb_user_id} ({p.server_id})</td>
-                      <td className="py-1.5 pr-2 font-mono text-gray-600">{p.phone}{p.customer_id ? " ✓" : ""}</td>
+                      <td className="py-1.5 pr-2 text-gray-600">{p.full_name || "—"}</td>
+                      <td className="py-1.5 pr-2 font-mono text-gray-600">{p.mlbb_user_id}{p.server_id ? ` (${p.server_id})` : ""}</td>
+                      <td className="py-1.5 pr-2 font-mono text-gray-600">{p.phone || "—"}{p.customer_id ? " ✓" : ""}</td>
                       <td className="py-1.5 text-gray-500">{ROLE_LABEL[p.player_role]}</td>
                     </tr>
                   ))}
@@ -128,7 +128,7 @@ export function RegistrationsTab({ bundle, reload }: TabProps) {
       <ConfirmSheet
         open={!!approving}
         title={`Luluskan ${approving?.name}?`}
-        message={`${approving?.players.length || 0} pemain akan dapat ${voucherText}, dan WhatsApp makluman. ${Number(t.entry_fee) > 0 && !approving?.payment_proof_path ? "⚠️ Team ini belum upload resit." : ""}`}
+        message={`${approving?.players.filter(p => p.phone).length || 0} pemain (yang ada no. telefon) akan dapat ${voucherText}, dan WhatsApp makluman. ${Number(t.entry_fee) > 0 && !approving?.payment_proof_path ? "⚠️ Team ini belum upload resit." : ""}`}
         confirmLabel="Luluskan & keluarkan baucar"
         danger={false}
         busy={busy === approving?.id}
