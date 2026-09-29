@@ -65,6 +65,7 @@ export function sanitizeTournament(body: Record<string, unknown>, partial: boole
   if (has("slug") && body.slug) out.slug = slugify(String(body.slug)) || null;
   if (has("description")) out.description = str(body.description, 2000);
   if (has("logo_url")) out.logo_url = str(body.logo_url, 500);
+  if (partial ? "cover_url" in body : !!body.cover_url) out.cover_url = str(body.cover_url, 500);
   if (has("venue")) out.venue = str(body.venue, 120);
   if (has("format")) out.format = FORMATS.includes(String(body.format)) ? body.format : "round_robin";
   if (has("status")) out.status = STATUSES.includes(String(body.status)) ? body.status : "draft";

@@ -14,6 +14,7 @@ const ACTIVE = ["live", "ready", "check_in", "delayed", "scheduled"];
 export default function TournamentHome() {
   const { slug, data, teams, myTeamId, live } = useTournament();
   const [picking, setPicking] = useState(false);
+  const [posterOpen, setPosterOpen] = useState(false);
   const now = useNow(30_000);
   const base = `/tournament/${slug}`;
 
@@ -44,11 +45,18 @@ export default function TournamentHome() {
   return (
     <>
     <div className="animate-scrIn">
+      {/* The event poster, uncropped — it already carries the pitch. Tap for full screen. */}
+      {t.cover_url && (
+        <button onClick={() => setPosterOpen(true)} className="block w-full bg-black" aria-label="View poster">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={t.cover_url} alt={`${t.name} poster`} className="mx-auto block h-auto w-full" />
+        </button>
+      )}
       {/* hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-[#7F1D1D] via-[#5a1212] to-[#0A0C11] px-5 pb-6 pt-8">
+      <section className={`relative overflow-hidden bg-gradient-to-br from-[#7F1D1D] via-[#5a1212] to-[#0A0C11] px-5 pb-6 ${t.cover_url ? "pt-5" : "pt-8"}`}>
         <div className="pointer-events-none absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(white 1px, transparent 1px)", backgroundSize: "14px 14px" }} />
         <div className="relative flex items-start gap-4">
-          {t.logo_url ? (
+          {t.cover_url ? null : t.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={t.logo_url} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-white/20" />
           ) : (
@@ -195,6 +203,13 @@ export default function TournamentHome() {
     {/* Fixed-position overlays live outside the animated wrapper (see StickyRegister). */}
     <StickyRegister data={data} base={base} />
     <TeamPicker open={picking} onClose={() => setPicking(false)} />
+    {posterOpen && t.cover_url && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-3 animate-fadeIn" onClick={() => setPosterOpen(false)}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={t.cover_url} alt={`${t.name} poster`} className="max-h-full max-w-full rounded-xl object-contain" />
+        <button className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl" style={{ marginTop: "env(safe-area-inset-top, 0px)" }} aria-label="Close">×</button>
+      </div>
+    )}
     </>
   );
 }

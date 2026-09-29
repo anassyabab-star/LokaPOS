@@ -118,7 +118,8 @@ export function SettingsTab({ bundle, reload }: TabProps) {
             <input className={`${inputCls} mt-1`} value={f.venue || ""} onChange={e => set({ venue: e.target.value })} />
           </label>
           <div className="flex items-end pb-1"><Toggle on={f.published} onChange={v => set({ published: v })} label="Published" /></div>
-          <div className="col-span-2"><ImageField label="Logo tournament" value={f.logo_url} onChange={url => set({ logo_url: url })} /></div>
+          <div className="col-span-2"><ImageField label="Poster (atas landing page + gambar bila link dikongsi)" value={f.cover_url} onChange={url => set({ cover_url: url })} /></div>
+          <div className="col-span-2"><ImageField label="Logo tournament (kecil, jika tiada poster)" value={f.logo_url} onChange={url => set({ logo_url: url })} /></div>
           <label className={`${labelCls} col-span-2`}>Penerangan / peraturan / hadiah (dilihat peserta)
             <textarea rows={5} className={`${inputCls} mt-1`} value={f.description || ""} onChange={e => set({ description: e.target.value })} />
           </label>

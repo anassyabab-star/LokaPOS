@@ -33,13 +33,15 @@ export async function PATCH(req: Request, context: Ctx) {
   const write = (f: Record<string, unknown>) =>
     supabase.from("tournaments").update({ ...f, updated_at: new Date().toISOString() }).eq("id", id).select("*").single();
   let { data, error } = await write(fields);
-  // Prizes need migration 20260930; save everything else rather than fail.
-  let prizesSkipped = false;
-  if (error && /prizes/i.test(error.message) && "prizes" in fields) {
-    const { prizes: _skip, ...rest } = fields;
-    void _skip;
-    ({ data, error } = await write(rest));
-    prizesSkipped = !error;
+  // prizes / cover_url arrive with the 20260930 migrations; if one isn't run
+  // yet, save everything else rather than fail the whole form.
+  const skipped: string[] = [];
+  for (const col of ["prizes", "cover_url"]) {
+    if (error && new RegExp(col, "i").test(error.message) && col in fields) {
+      delete fields[col];
+      skipped.push(col);
+      ({ data, error } = await write(fields));
+    }
   }
   if (error) {
     const msg = /slug/i.test(error.message) ? "That link name is taken." : error.message;
@@ -47,7 +49,9 @@ export async function PATCH(req: Request, context: Ctx) {
   }
   return NextResponse.json({
     tournament: data,
-    ...(prizesSkipped ? { warning: "Prizes not saved — run migration 20260930_tournament_prizes.sql" } : {}),
+    ...(skipped.length
+      ? { warning: `Not saved: ${skipped.join(", ")} — run ${skipped.map(c => (c === "prizes" ? "20260930_tournament_prizes.sql" : "20260930_tournament_cover.sql")).join(" + ")}` }
+      : {}),
   });
 }
 

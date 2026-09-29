@@ -30,6 +30,8 @@ export type Tournament = {
   name: string;
   description: string | null;
   logo_url: string | null;
+  /** Poster shown on the landing page + share card. Migration 20260930_tournament_cover. */
+  cover_url?: string | null;
   venue: string | null;
   format: TournamentFormat;
   status: TournamentStatus;

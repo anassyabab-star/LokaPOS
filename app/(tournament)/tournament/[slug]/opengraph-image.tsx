@@ -22,6 +22,35 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const prize = t?.prizes?.[0]?.value ? `${t.prizes[0].title}: ${t.prizes[0].value}` : null;
   const fee = t ? (Number(t.entry_fee) > 0 ? `${rmLabel(t.entry_fee)} / team` : "Free entry") : null;
 
+  // With a poster: poster on the left (3:4, uncropped), the essentials beside it.
+  if (t?.cover_url) {
+    return new ImageResponse(
+      (
+        <div style={{ width: "100%", height: "100%", display: "flex", color: "white", fontFamily: "sans-serif", background: "linear-gradient(135deg, #7F1D1D 0%, #3b0d0d 60%, #0A0C11 100%)" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={t.cover_url} width={472} height={630} style={{ objectFit: "cover" }} alt="" />
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 48, flex: 1 }}>
+            <div style={{ display: "flex" }}>
+              <div style={{ display: "flex", padding: "8px 18px", borderRadius: 999, background: open ? "#DC2626" : "rgba(255,255,255,0.15)", fontSize: 22, fontWeight: 700, letterSpacing: 2 }}>
+                {badge}
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", fontSize: name.length > 40 ? 44 : 56, fontWeight: 800, lineHeight: 1.1 }}>{name}</div>
+              <div style={{ display: "flex", marginTop: 16, fontSize: 28, opacity: 0.75 }}>{when}{t.venue ? ` · ${t.venue}` : ""}</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[fee, prize, perk].filter(Boolean).map(line => (
+                <div key={line!} style={{ display: "flex", padding: "12px 20px", borderRadius: 16, background: "rgba(0,0,0,0.35)", fontSize: 26, fontWeight: 600 }}>{line}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+      size
+    );
+  }
+
   return new ImageResponse(
     (
       <div

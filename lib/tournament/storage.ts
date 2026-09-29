@@ -34,12 +34,23 @@ export async function uploadTournamentFile(opts: {
   if (!types.includes(mime)) throw new Error(bucket === PAYMENT_BUCKET ? "Use an image or PDF" : "Use an image");
 
   await ensureBucket(bucket, bucket === ASSET_BUCKET, types);
-  const safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-80);
+  let body: Buffer = Buffer.from(await file.arrayBuffer());
+  let contentType = mime;
+  let safe = file.name.replace(/[^\w.\-]+/g, "_").slice(-80);
+  // Public images are opened on phones (and fetched for the share card):
+  // a 2.5 MB PNG poster becomes a few hundred KB.
+  if (bucket === ASSET_BUCKET) {
+    const shrunk = await shrinkImage(body);
+    if (shrunk) {
+      ({ body, contentType } = shrunk);
+      safe = safe.replace(/\.[a-z0-9]+$/i, "") + (contentType === "image/png" ? ".png" : ".jpg");
+    }
+  }
   const path = `${prefix}/${Date.now()}-${safe}`;
   const supabase = createSupabaseAdminClient();
   const { error } = await supabase.storage
     .from(bucket)
-    .upload(path, Buffer.from(await file.arrayBuffer()), { contentType: mime, upsert: false });
+    .upload(path, body, { contentType, upsert: false });
   if (error) throw new Error(error.message);
   return path;
 }
@@ -54,4 +65,24 @@ export async function signedReceiptUrl(path: string) {
   const { data, error } = await supabase.storage.from(PAYMENT_BUCKET).createSignedUrl(path, 60 * 10);
   if (error) throw new Error(error.message);
   return data.signedUrl;
+}
+
+/**
+ * Fit within 1600px and re-encode: JPEG q82, or PNG when the image has
+ * transparency (logos). Returns null if sharp can't read it — the original
+ * is uploaded instead.
+ */
+async function shrinkImage(input: Buffer): Promise<{ body: Buffer; contentType: string } | null> {
+  try {
+    const sharp = (await import("sharp")).default;
+    const img = sharp(input, { failOn: "none" }).rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true });
+    const { hasAlpha } = await sharp(input).metadata();
+    const out = hasAlpha
+      ? await img.png({ compressionLevel: 9, palette: true }).toBuffer()
+      : await img.jpeg({ quality: 82, mozjpeg: true }).toBuffer();
+    if (out.length >= input.length) return null;
+    return { body: out, contentType: hasAlpha ? "image/png" : "image/jpeg" };
+  } catch {
+    return null;
+  }
 }
