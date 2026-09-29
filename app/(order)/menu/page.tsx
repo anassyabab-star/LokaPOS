@@ -10,6 +10,7 @@ import { useOrder, rm, swatchFor } from "../order-provider";
 import type { Product, Category } from "../types";
 import { ItemSheet } from "@/components/order/ItemSheet";
 import { MissionStrip } from "@/components/order/MissionCards";
+import { TournamentBanner } from "@/components/order/TournamentBanner";
 
 export default function MenuPage() {
   const { cartCount, subtotal, lastOrder, setLastOrder, member } = useOrder();
@@ -137,6 +138,7 @@ export default function MenuPage() {
           )}
 
           <MissionStrip phone={member?.phone} />
+          <TournamentBanner />
         </div>
 
         {/* cream sheet */}

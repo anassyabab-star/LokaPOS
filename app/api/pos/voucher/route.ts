@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   const supabase = createSupabaseAdminClient();
   const { data: voucher, error } = await supabase
     .from("vouchers")
-    .select("id,code,status,reward_type,reward_amount,reward_label,discount_percent,max_discount,min_spend,reward_product_id,reward_category_id,points_spent,expires_at,customer_id")
+    .select("*") // "*" so valid_from is read once the tournament migration has run
     .eq("code", code)
     .maybeSingle();
 
@@ -26,11 +26,12 @@ export async function GET(req: Request) {
   if (!voucher) return NextResponse.json({ valid: false, reason: "not_found" });
 
   const expired = voucher.expires_at && new Date(voucher.expires_at).getTime() < Date.now();
-  const valid = voucher.status === "issued" && !expired;
+  const notYet = voucher.valid_from && new Date(voucher.valid_from).getTime() > Date.now();
+  const valid = voucher.status === "issued" && !expired && !notYet;
 
   return NextResponse.json({
     valid,
-    reason: valid ? null : expired ? "expired" : voucher.status,
+    reason: valid ? null : expired ? "expired" : notYet ? "not_yet_valid" : voucher.status,
     voucher: {
       code: voucher.code,
       status: voucher.status,
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
       // Determine the precise reason for a helpful message.
       const { data: existing } = await supabase
         .from("vouchers")
-        .select("status,expires_at")
+        .select("*")
         .eq("code", code)
         .maybeSingle();
       let reason = "not_found";
@@ -79,7 +80,9 @@ export async function POST(req: Request) {
         reason =
           existing.expires_at && new Date(existing.expires_at).getTime() < Date.now()
             ? "expired"
-            : existing.status; // 'redeemed' | 'expired'
+            : existing.valid_from && new Date(existing.valid_from).getTime() > Date.now()
+              ? "not_yet_valid"
+              : existing.status; // 'redeemed' | 'expired'
       }
       return NextResponse.json({ success: false, reason }, { status: 409 });
     }

@@ -13,7 +13,7 @@ import { generateVoucherCode } from "@/lib/loyalty";
 
 export type RewardVoucherInput = {
   customerId: string;
-  /** provenance: 'mission' | 'coupon' | 'review' */
+  /** provenance: 'mission' | 'coupon' | 'review' | 'tournament' */
   source: string;
   /** e.g. mission/coupon code */
   sourceRef?: string | null;
@@ -32,6 +32,8 @@ export type RewardVoucherInput = {
   issueEventKey: string;
   /** ISO timestamp; null = never expires. */
   expiresAt?: string | null;
+  /** ISO timestamp before which it can't be redeemed (tournament-day vouchers). */
+  validFrom?: string | null;
 };
 
 export type VoucherRow = {
@@ -145,6 +147,8 @@ export async function issueRewardVoucher(input: RewardVoucherInput): Promise<Vou
     excludes_mission: Boolean(input.excludesMission),
     issue_event_key: input.issueEventKey,
     expires_at: input.expiresAt ?? null,
+    // Only sent when set: the column arrives with the tournament migration.
+    ...(input.validFrom ? { valid_from: input.validFrom } : {}),
   };
 
   for (let attempt = 0; attempt < 6; attempt++) {

@@ -428,6 +428,7 @@ export function usePosState() {
       if (!d?.valid) {
         const why = d?.reason === "expired" ? "Voucher sudah tamat tempoh."
           : d?.reason === "redeemed" ? "Voucher sudah digunakan."
+          : d?.reason === "not_yet_valid" ? "Voucher belum sah — hanya boleh guna pada hari tournament."
           : "Kod voucher tidak dijumpai.";
         setVoucherError(why);
         return;

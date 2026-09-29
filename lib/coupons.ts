@@ -213,7 +213,7 @@ function couponLabel(t: CouponTemplate): string {
 
 export type CouponLoadResult =
   | { ok: true; voucher: CouponVoucher }
-  | { ok: false; reason: "disabled" | "not_found" | "wrong_customer" | "expired" | "used" };
+  | { ok: false; reason: "disabled" | "not_found" | "wrong_customer" | "expired" | "used" | "not_yet_valid" };
 
 /**
  * Load a coupon voucher for redemption by a specific customer. Validates status,
@@ -224,14 +224,13 @@ export async function loadRedeemableCoupon(
   customerId: string
 ): Promise<CouponLoadResult> {
   const config = await getLoyaltyConfig();
-  if (!config.couponsEnabled) return { ok: false, reason: "disabled" };
 
   const supabase = createSupabaseAdminClient();
+  // "*" so valid_from (tournament migration) is read when present without
+  // breaking DBs that don't have it yet.
   const { data: voucher, error } = await supabase
     .from("vouchers")
-    .select(
-      "id,code,customer_id,status,reward_type,reward_amount,reward_label,discount_percent,max_discount,min_spend,reward_product_id,reward_category_id,source,source_ref,excludes_mission,expires_at"
-    )
+    .select("*")
     .eq("code", code)
     .maybeSingle();
   if (error) {
@@ -239,12 +238,18 @@ export async function loadRedeemableCoupon(
     return { ok: false, reason: "not_found" };
   }
   if (!voucher) return { ok: false, reason: "not_found" };
+  // The coupon programme toggle doesn't switch off vouchers earned elsewhere
+  // (a tournament entry was paid for).
+  if (!config.couponsEnabled && voucher.source !== "tournament") return { ok: false, reason: "disabled" };
   if (voucher.customer_id && voucher.customer_id !== customerId) {
     return { ok: false, reason: "wrong_customer" };
   }
   if (voucher.status !== "issued") return { ok: false, reason: "used" };
   if (voucher.expires_at && new Date(voucher.expires_at).getTime() < Date.now()) {
     return { ok: false, reason: "expired" };
+  }
+  if (voucher.valid_from && new Date(voucher.valid_from).getTime() > Date.now()) {
+    return { ok: false, reason: "not_yet_valid" };
   }
   return { ok: true, voucher: voucher as unknown as CouponVoucher };
 }
