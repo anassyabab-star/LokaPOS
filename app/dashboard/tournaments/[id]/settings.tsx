@@ -54,26 +54,38 @@ function VoucherEditor({ title, hint, spec, withValidity, onChange }: {
 export function SettingsTab({ bundle, reload }: TabProps) {
   const router = useRouter();
   const t0 = bundle.tournament;
-  const [f, setF] = useState<Tournament>({
-    ...t0,
-    prizes: t0.prizes && t0.prizes.length ? t0.prizes : [],
+  const normalise = (t: Tournament): Tournament => ({
+    ...t,
+    prizes: t.prizes && t.prizes.length ? t.prizes : [],
     voucher_config: {
-      discount: { ...OFF, validity_days: 30, ...t0.voucher_config?.discount },
-      event_day: { ...OFF, ...t0.voucher_config?.event_day },
+      discount: { ...OFF, validity_days: 30, ...t.voucher_config?.discount },
+      event_day: { ...OFF, ...t.voucher_config?.event_day },
     },
   });
+  const [f, setF] = useState<Tournament>(() => normalise(t0));
+  // What this tab loaded. Saving sends only fields changed since then, so a
+  // tab left open overnight can't overwrite edits made elsewhere meanwhile.
+  const [base, setBase] = useState<Tournament>(() => normalise(t0));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const set = (patch: Partial<Tournament>) => setF(x => ({ ...x, ...patch }));
 
+  const changed = (Object.keys(f) as (keyof Tournament)[]).filter(
+    k => JSON.stringify(f[k] ?? null) !== JSON.stringify(base[k] ?? null)
+  );
+
   async function save() {
+    if (!changed.length) { setMsg("Tiada perubahan"); return; }
     setBusy(true); setMsg(null);
-    const r = await api(`/api/admin/tournaments/${t0.id}`, "PATCH", f);
+    const patch = Object.fromEntries(changed.map(k => [k, f[k]]));
+    const r = await api<{ tournament: Tournament; warning?: string }>(`/api/admin/tournaments/${t0.id}`, "PATCH", patch);
     setBusy(false);
     if (!r.ok) { setMsg(`⚠️ ${r.data.error || "Gagal simpan"}`); return; }
-    const warning = (r.data as { warning?: string }).warning;
-    setMsg(warning ? `⚠️ ${warning}` : "✓ Disimpan");
+    // Continue from what the server now holds (including other people's edits).
+    const fresh = normalise(r.data.tournament);
+    setF(fresh); setBase(fresh);
+    setMsg(r.data.warning ? `⚠️ ${r.data.warning}` : `✓ Disimpan (${changed.length} medan)`);
     await reload();
   }
 
@@ -236,7 +248,7 @@ export function SettingsTab({ bundle, reload }: TabProps) {
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-100 bg-white px-4 py-3 md:left-[248px]" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}>
         <div className="mx-auto flex max-w-5xl items-center justify-end gap-3">
           {msg && <span className="text-sm text-gray-600">{msg}</span>}
-          <button onClick={() => void save()} disabled={busy} className={btnPrimary}>{busy ? "Menyimpan…" : "Simpan"}</button>
+          <button onClick={() => void save()} disabled={busy || !changed.length} className={btnPrimary}>{busy ? "Menyimpan…" : changed.length ? `Simpan (${changed.length})` : "Simpan"}</button>
         </div>
       </div>
 
