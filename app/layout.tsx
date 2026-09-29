@@ -19,9 +19,14 @@ const dmSans = DM_Sans({
   display: "swap",
 });
 
+// What a shared link shows by default (WhatsApp, IG, FB) — customer-facing.
+// Staff areas (POS, KDS, dashboard) set their own "Loka POS" title; the
+// default share image is app/opengraph-image.png.
 export const metadata: Metadata = {
-  title: "Loka POS",
-  description: "Point-of-Sale system untuk kedai kopi Loka",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://pos.lokacafe.my"),
+  title: "Loka — Coffee & Fruits Specialists",
+  description: "Coffee & fruits at Bangi Sentral. Order ahead, collect rewards and join Loka events.",
+  openGraph: { siteName: "Loka Coffee", type: "website" },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -29,7 +34,6 @@ export const metadata: Metadata = {
     title: "Loka POS",
   },
   icons: {
-    icon: "/icons/icon-192.png",
     apple: "/icons/apple-touch-icon.png",
   },
 };

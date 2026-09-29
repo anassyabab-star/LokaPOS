@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Loka Tournament" };
+export const metadata: Metadata = {
+  title: "Loka Tournaments",
+  description: "Mobile Legends tournaments at Loka, Bangi Sentral — register your team and follow live scores.",
+};
 
 // Dark, phone-width shell for the participant app. Separate from the cream
 // ordering app on purpose — this is an esports screen people glance at
