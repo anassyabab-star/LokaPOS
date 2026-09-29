@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTournament } from "@/components/tournament/tournament-provider";
-import { REG_STATUS_LABEL, ROLE_LABEL, type PlayerRole, type RegistrationStatus } from "@/lib/tournament/types";
+import { ROLE_LABEL, type PlayerRole, type RegistrationStatus } from "@/lib/tournament/types";
 import { PageHeader } from "../shell";
 
 type MyTeam = {
@@ -16,6 +16,15 @@ type MyTeam = {
   players: { id: string; full_name: string; ign: string; phone?: string; player_role: PlayerRole; is_captain: boolean }[];
 };
 type Me = { signed_in: boolean; phone?: string; is_captain?: boolean; team: MyTeam | null };
+
+// The participant app is in English; the dashboard's labels are Malay.
+const STATUS_TEXT: Record<RegistrationStatus, string> = {
+  pending_payment: "Awaiting payment",
+  payment_submitted: "Under review",
+  approved: "Approved",
+  rejected: "Not approved",
+  withdrawn: "Withdrawn",
+};
 
 const TONE: Record<RegistrationStatus, string> = {
   pending_payment: "bg-amber-500/15 text-amber-300",
@@ -34,6 +43,8 @@ export default function MyRegistrationPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // Once a receipt is in, the payment box folds away behind "Replace receipt".
+  const [replacing, setReplacing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -56,7 +67,7 @@ export default function MyRegistrationPage() {
       const res = await fetch(`/api/public/tournaments/${encodeURIComponent(slug)}/payment-proof`, { method: "POST", body: form });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setMsg(d.error || "Upload failed"); return; }
-      setFile(null); setRef("");
+      setFile(null); setRef(""); setReplacing(false);
       await load();
     } catch {
       setMsg("No connection.");
@@ -100,7 +111,7 @@ export default function MyRegistrationPage() {
                   <div className="truncate font-display text-xl font-bold">{team.name}</div>
                 </div>
                 <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${TONE[team.registration_status]}`}>
-                  {REG_STATUS_LABEL[team.registration_status]}
+                  {STATUS_TEXT[team.registration_status]}
                 </span>
               </div>
               <p className="mt-3 text-[13px] leading-relaxed text-white/60">
@@ -118,7 +129,14 @@ export default function MyRegistrationPage() {
               )}
             </div>
 
-            {canUpload && (
+            {canUpload && team.has_payment_proof && team.registration_status === "payment_submitted" && !replacing && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/[0.07] px-4 py-3">
+                <span className="text-[13px] font-semibold text-emerald-200">✓ Receipt uploaded{team.payment_ref ? ` · Ref ${team.payment_ref}` : ""}</span>
+                <button onClick={() => setReplacing(true)} className="shrink-0 text-[12px] font-semibold text-white/60">Replace</button>
+              </div>
+            )}
+
+            {canUpload && (!team.has_payment_proof || team.registration_status !== "payment_submitted" || replacing) && (
               <div className="space-y-3 rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] p-5">
                 <div className="font-display text-lg font-bold">
                   {team.has_payment_proof ? "Replace receipt" : `Pay RM${fee.toFixed(2).replace(/\.00$/, "")}`}

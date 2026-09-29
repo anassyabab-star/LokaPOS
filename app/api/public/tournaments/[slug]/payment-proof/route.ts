@@ -13,8 +13,13 @@ export async function POST(req: Request, context: { params: Promise<{ slug: stri
     if (!tournament) return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
 
     const session = await getCustomerSession(req);
-    if (!session?.customerId) {
+    if (!session) {
       return NextResponse.json({ error: "Please sign in first.", code: "SIGN_IN_REQUIRED" }, { status: 401 });
+    }
+    // Teammates get a customer account only at approval, so a signed-in
+    // non-captain may have none yet — that's "not the captain", not "sign in".
+    if (!session.customerId) {
+      return NextResponse.json({ error: "Only the team captain can upload the receipt." }, { status: 403 });
     }
 
     const supabase = createSupabaseAdminClient();
