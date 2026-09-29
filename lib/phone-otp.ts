@@ -148,3 +148,12 @@ export function requirePhoneOtp(req: Request, phone: string): PhoneOtpGuard {
   }
   return { ok: true, phone: normalized };
 }
+
+/**
+ * Whether this request carries a verified session for `phone`. For read paths
+ * that should hide secrets (voucher codes) rather than fail outright.
+ */
+export function hasPhoneSession(req: Request, phone: string): boolean {
+  const session = getPhoneOtpSession(req);
+  return !!session && session === normalizeOtpPhone(phone);
+}

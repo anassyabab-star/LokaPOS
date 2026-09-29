@@ -40,7 +40,7 @@ function pickAddonName(row: ItemAddonRow) {
   return String(row.addon_name_snapshot || row.addon_name || row.name || "").trim();
 }
 function couponErrorMessage(
-  reason: "disabled" | "not_found" | "wrong_customer" | "expired" | "used"
+  reason: "disabled" | "not_found" | "wrong_customer" | "expired" | "used" | "not_yet_valid"
 ): string {
   switch (reason) {
     case "disabled": return "Coupons aren't active right now.";
@@ -48,6 +48,7 @@ function couponErrorMessage(
     case "wrong_customer": return "This coupon belongs to a different phone number.";
     case "expired": return "This coupon has expired.";
     case "used": return "This coupon has already been used.";
+    case "not_yet_valid": return "This voucher isn't valid yet — it can be used on the event day.";
     default: return "Invalid coupon.";
   }
 }
@@ -351,6 +352,9 @@ export async function POST(req: Request) {
     }
     let resolvedCoupon: { code: string; discount: number } | null = null;
     if (couponCode && customerId) {
+      // Same rule as points: spending a customer's voucher needs their session.
+      const guard = requirePhoneOtp(req, normalizeOtpPhone(customerPhone));
+      if (!guard.ok) return guard.response;
       const loaded = await loadRedeemableCoupon(couponCode, customerId);
       if (!loaded.ok) {
         return NextResponse.json({ error: couponErrorMessage(loaded.reason) }, { status: 400 });

@@ -14,7 +14,7 @@ import { MissionList } from "@/components/order/MissionCards";
 
 type Tier = { points: number; amount: number; label: string };
 type Activity = { id: string; receipt_number: string | null; short_number?: string; status: string | null; total: number | null; created_at: string };
-type Voucher = { code: string; reward_label: string | null; reward_amount: number; expires_at: string | null; min_spend?: number | null };
+type Voucher = { code: string; reward_label: string | null; reward_amount: number; expires_at: string | null; valid_from?: string | null; min_spend?: number | null };
 type Wallet = {
   points: number;
   expiring: number;
@@ -57,6 +57,8 @@ export default function RewardsPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  // The phone is known (typed at checkout) but its session has lapsed.
+  const [sessionLapsed, setSessionLapsed] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,7 +70,8 @@ export default function RewardsPage() {
           : Promise.resolve(null),
       ]);
       setTiers((status?.loyalty_config?.voucherTiers || []) as Tier[]);
-      if (track && !track.error) {
+      setSessionLapsed(!!track?.needs_signin);
+      if (track && !track.error && !track.needs_signin) {
         setWallet({
           points: typeof track.loyalty_points === "number" ? track.loyalty_points : 0,
           expiring: Number(track.expiring_points_30d || 0),
@@ -216,6 +219,17 @@ export default function RewardsPage() {
           </div>
         )}
 
+        {/* Balance, history and codes are only sent to a verified session. */}
+        {sessionLapsed && (
+          <button
+            onClick={() => router.push("/signin?next=/rewards")}
+            className="flex w-full items-center justify-between rounded-[14px] border border-leaf/40 bg-leaf/5 px-4 py-3 text-left"
+          >
+            <span className="font-sans text-[13px] font-semibold text-espresso">Sign in again to see your points &amp; vouchers</span>
+            <span className="font-sans text-[12px] font-semibold text-leaf">Sign in</span>
+          </button>
+        )}
+
         {/* voucher wallet */}
         {signedIn && wallet && wallet.vouchers.length > 0 && (
           <div>
@@ -228,6 +242,7 @@ export default function RewardsPage() {
                     <div className="font-sans text-[12px] text-muted">
                       {v.reward_label || `RM ${Number(v.reward_amount || 0).toFixed(2)} off`}
                       {Number(v.min_spend || 0) > 0 ? ` · min spend RM${Number(v.min_spend).toFixed(0)}` : ""}
+                      {v.valid_from && new Date(v.valid_from).getTime() > Date.now() ? ` · valid from ${new Date(v.valid_from).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}
                       {v.expires_at ? ` · valid until ${new Date(v.expires_at).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}` : ""}
                     </div>
                   </div>

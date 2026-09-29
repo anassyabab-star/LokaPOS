@@ -61,7 +61,7 @@ export default function CheckoutPage() {
   const [methods, setMethods] = useState<Record<string, boolean> | null>(null);
   // The customer's own rewards, so redeeming points does not mean copying a
   // generated code out of the rewards screen from memory.
-  type Wallet = { code: string; label: string; reward_type: string; min_spend: number; expires_at: string | null; applies_here: boolean };
+  type Wallet = { code: string; label: string; reward_type: string; min_spend: number; expires_at: string | null; valid_from?: string | null; applies_here: boolean };
   const [wallet, setWallet] = useState<Wallet[]>([]);
   const [points, setPoints] = useState(0);
   const [earnPerRm, setEarnPerRm] = useState(1);
@@ -234,6 +234,9 @@ export default function CheckoutPage() {
         }),
       });
       const data = await res.json();
+      if ((res.status === 401 || res.status === 403) && couponCode) {
+        throw new Error("Please sign in again to use your coupon.");
+      }
       if (!res.ok) {
         throw new Error(data.store_closed ? "⏰ We're closed right now. Please try again during opening hours." : data.error || "Couldn't place the order");
       }
@@ -401,7 +404,9 @@ export default function CheckoutPage() {
                     <span className="min-w-0">
                       <span className="block font-sans text-[13px] font-semibold text-espresso">{v.label}</span>
                       <span className="block font-sans text-[11px] text-muted">
-                        {!v.applies_here
+                        {v.valid_from && new Date(v.valid_from).getTime() > Date.now()
+                          ? `Valid from ${new Date(v.valid_from).toLocaleDateString("en-MY", { day: "numeric", month: "short" })}`
+                          : !v.applies_here
                           ? "Show this at the counter"
                           : tooSmall
                             ? `Spend ${rm(v.min_spend)} to use this`

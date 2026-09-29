@@ -32,13 +32,20 @@ export default function OrdersPage() {
   const phone = contact.phone;
   const [orders, setOrders] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Order history needs a verified session for this phone (it lapses after 30 min for OTP).
+  const [needsSignIn, setNeedsSignIn] = useState(false);
 
   useEffect(() => {
     if (!phone) { setOrders([]); return; }
     let live = true;
     fetch(`/api/public/orders/track?phone=${encodeURIComponent(phone)}`, { cache: "no-store" })
       .then(r => r.json())
-      .then(d => { if (!live) return; if (d?.error) setError(d.error); setOrders(Array.isArray(d?.orders) ? d.orders : []); })
+      .then(d => {
+        if (!live) return;
+        if (d?.error) setError(d.error);
+        setNeedsSignIn(!!d?.needs_signin);
+        setOrders(Array.isArray(d?.orders) ? d.orders : []);
+      })
       .catch(() => { if (live) { setError("No connection."); setOrders([]); } });
     return () => { live = false; };
   }, [phone]);
@@ -51,7 +58,7 @@ export default function OrdersPage() {
       </div>
 
       <div className="no-scrollbar flex-1 space-y-2 overflow-auto px-5 pb-8">
-        {!phone ? (
+        {!phone || needsSignIn ? (
           <div className="rounded-[18px] bg-espresso p-5">
             <div className="font-display text-[18px] font-semibold text-cream">Sign in to see your orders</div>
             <p className="mt-1.5 font-sans text-[13px] text-[#C9A88F]">Your order history follows your phone number.</p>

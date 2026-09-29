@@ -9,6 +9,7 @@ import {
 } from "@/lib/loyalty";
 import { isMissingColumnError } from "@/lib/order-status";
 import { shortOrderNumber } from "@/lib/order-flow";
+import { hasPhoneSession } from "@/lib/phone-otp";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -78,7 +79,14 @@ export async function GET(req: Request) {
     });
   }
 
-  // Track recent orders by phone (last 30 days) — loyalty points require customer auth
+  // Recent orders + loyalty wallet by phone (last 30 days). Order history,
+  // balance and voucher codes belong to whoever owns the number, so they're
+  // only returned to a session verified for it — otherwise anyone who knew a
+  // phone number could read it. The caller shows a sign-in prompt instead.
+  if (phone && !hasPhoneSession(req, phone)) {
+    return NextResponse.json({ needs_signin: true, orders: [], loyalty_points: 0, expiring_points_30d: 0, vouchers: [] });
+  }
+
   if (phone) {
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -126,7 +134,7 @@ export async function GET(req: Request) {
           .limit(10000),
         supabase
           .from("vouchers")
-          .select("code, reward_label, reward_amount, status, expires_at, min_spend")
+          .select("*") // "*" so valid_from comes through once migrated, without breaking older DBs
           .eq("customer_id", customer.id)
           .eq("status", "issued")
           .order("issued_at", { ascending: false })
@@ -158,6 +166,7 @@ export async function GET(req: Request) {
         reward_label: v.reward_label,
         reward_amount: Number(v.reward_amount || 0),
         expires_at: v.expires_at,
+        valid_from: (v as { valid_from?: string | null }).valid_from ?? null,
         min_spend: Number(v.min_spend || 0),
       })),
     });
