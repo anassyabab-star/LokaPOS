@@ -21,6 +21,9 @@ export type VoucherSpec = {
 };
 export type VoucherConfig = { discount?: VoucherSpec; event_day?: VoucherSpec };
 
+/** A prize line on the landing page, e.g. { title: "Champion", value: "RM300 + trophy" }. */
+export type Prize = { title: string; value: string };
+
 export type Tournament = {
   id: string;
   slug: string;
@@ -47,6 +50,8 @@ export type Tournament = {
   points_win: number;
   points_loss: number;
   voucher_config: VoucherConfig;
+  /** Arrives with migration 20260930; absent before it. */
+  prizes?: Prize[];
   created_at?: string;
   updated_at?: string;
 };
@@ -127,6 +132,8 @@ export type Announcement = {
 
 export type PublicBundle = {
   tournament: Tournament;
+  /** Teams holding a slot (pending, receipt sent or approved) vs the cap. */
+  registration: { taken: number; max: number };
   teams: Team[];
   players: PublicPlayer[];
   matches: Match[];
@@ -180,6 +187,11 @@ export const MATCH_STATUSES: MatchStatus[] = ["scheduled", "check_in", "ready", 
 /** Games needed to take a best-of-N. */
 export function winsNeeded(bestOf: number) {
   return Math.floor(Math.max(1, bestOf) / 2) + 1;
+}
+
+/** "RM50" / "RM12.50" */
+export function rmLabel(n: number) {
+  return `RM${Number(n || 0).toFixed(2).replace(/\.00$/, "")}`;
 }
 
 export function voucherSpecLabel(spec: VoucherSpec) {

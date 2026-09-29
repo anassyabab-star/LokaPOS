@@ -30,17 +30,25 @@ export async function PATCH(req: Request, context: Ctx) {
   if (!Object.keys(fields).length) return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("tournaments")
-    .update({ ...fields, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select("*")
-    .single();
+  const write = (f: Record<string, unknown>) =>
+    supabase.from("tournaments").update({ ...f, updated_at: new Date().toISOString() }).eq("id", id).select("*").single();
+  let { data, error } = await write(fields);
+  // Prizes need migration 20260930; save everything else rather than fail.
+  let prizesSkipped = false;
+  if (error && /prizes/i.test(error.message) && "prizes" in fields) {
+    const { prizes: _skip, ...rest } = fields;
+    void _skip;
+    ({ data, error } = await write(rest));
+    prizesSkipped = !error;
+  }
   if (error) {
     const msg = /slug/i.test(error.message) ? "That link name is taken." : error.message;
     return NextResponse.json({ error: msg }, { status: 400 });
   }
-  return NextResponse.json({ tournament: data });
+  return NextResponse.json({
+    tournament: data,
+    ...(prizesSkipped ? { warning: "Prizes not saved — run migration 20260930_tournament_prizes.sql" } : {}),
+  });
 }
 
 export async function DELETE(_req: Request, context: Ctx) {

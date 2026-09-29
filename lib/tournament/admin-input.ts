@@ -50,6 +50,13 @@ export function sanitizeVoucherConfig(v: unknown): VoucherConfig {
   return out;
 }
 
+export function sanitizePrizes(v: unknown) {
+  return (Array.isArray(v) ? v : [])
+    .map(p => ({ title: str((p as Record<string, unknown>)?.title, 40) || "", value: str((p as Record<string, unknown>)?.value, 120) || "" }))
+    .filter(p => p.title || p.value)
+    .slice(0, 8);
+}
+
 /** Tournament create/update. `partial` keeps only keys present in the body. */
 export function sanitizeTournament(body: Record<string, unknown>, partial: boolean) {
   const has = (k: string) => !partial || k in body;
@@ -78,6 +85,7 @@ export function sanitizeTournament(body: Record<string, unknown>, partial: boole
   if (has("points_win")) out.points_win = int(body.points_win, 0, 100, 3);
   if (has("points_loss")) out.points_loss = int(body.points_loss, 0, 100, 0);
   if (has("voucher_config")) out.voucher_config = sanitizeVoucherConfig(body.voucher_config);
+  if (partial ? "prizes" in body : Array.isArray(body.prizes)) out.prizes = sanitizePrizes(body.prizes);
   if (typeof out.min_players === "number" && typeof out.max_players === "number" && out.max_players < out.min_players) {
     out.max_players = out.min_players;
   }

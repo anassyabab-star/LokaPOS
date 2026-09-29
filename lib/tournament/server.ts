@@ -40,7 +40,7 @@ export async function getTournamentById(id: string) {
 /** Participant view: approved teams only, IGN/role only for players. */
 export async function loadPublicBundle(tournament: Tournament): Promise<PublicBundle> {
   const supabase = createSupabaseAdminClient();
-  const [teamsRes, matchesRes, annRes] = await Promise.all([
+  const [teamsRes, matchesRes, annRes, takenRes] = await Promise.all([
     supabase
       .from("tournament_teams")
       .select(TEAM_PUBLIC_COLS)
@@ -59,6 +59,11 @@ export async function loadPublicBundle(tournament: Tournament): Promise<PublicBu
       .eq("tournament_id", tournament.id)
       .order("created_at", { ascending: false })
       .limit(30),
+    supabase
+      .from("tournament_teams")
+      .select("id", { count: "exact", head: true })
+      .eq("tournament_id", tournament.id)
+      .in("registration_status", ["pending_payment", "payment_submitted", "approved"]),
   ]);
   const teams = (teamsRes.data || []) as Team[];
   const teamIds = teams.map(t => t.id);
@@ -76,6 +81,7 @@ export async function loadPublicBundle(tournament: Tournament): Promise<PublicBu
   const matches = ((matchesRes.data || []) as Match[]).map(m => ({ ...m, admin_notes: undefined }));
   return {
     tournament,
+    registration: { taken: takenRes.count ?? teams.length, max: tournament.max_teams },
     teams,
     players,
     matches,

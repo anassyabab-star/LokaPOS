@@ -7,6 +7,7 @@ import { AnnouncementCard, Countdown, MatchCard, TeamLogo, formatWhen, useNow } 
 import { computeStandings } from "@/lib/tournament/standings";
 import { STATUS_LABEL } from "@/lib/tournament/types";
 import { TeamPicker } from "./shell";
+import { PrizesCard, RegistrationLanding, StickyRegister } from "./landing";
 
 const ACTIVE = ["live", "ready", "check_in", "delayed", "scheduled"];
 
@@ -41,6 +42,7 @@ export default function TournamentHome() {
   const alert = data.announcements.find(a => a.priority === "urgent") || data.announcements.find(a => a.priority === "important");
 
   return (
+    <>
     <div className="animate-scrIn">
       {/* hero */}
       <section className="relative overflow-hidden bg-gradient-to-br from-[#7F1D1D] via-[#5a1212] to-[#0A0C11] px-5 pb-6 pt-8">
@@ -86,21 +88,10 @@ export default function TournamentHome() {
           <Link href={`${base}/announcements`} className="block"><AnnouncementCard {...alert} /></Link>
         )}
 
-        {t.status === "registration_open" && (
-          <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4">
-            <div className="font-display text-lg font-bold">Registration is open</div>
-            <p className="mt-1 text-[13px] text-white/60">
-              {Number(t.entry_fee) > 0 ? `Entry RM${Number(t.entry_fee).toFixed(2).replace(/\.00$/, "")} per team. ` : "Free entry. "}
-              Every player gets Loka vouchers once approved.
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <Link href={`${base}/register`} className="rounded-xl bg-red-600 py-2.5 text-center text-sm font-bold">Register team</Link>
-              <Link href={`${base}/my`} className="rounded-xl border border-white/15 py-2.5 text-center text-sm font-semibold text-white/80">My registration</Link>
-            </div>
-          </div>
-        )}
+        {t.status === "registration_open" && <RegistrationLanding data={data} base={base} />}
 
         {/* my team */}
+        {(t.status !== "registration_open" || data.teams.length > 0) && (
         <section>
           <div className="mb-2 flex items-center justify-between px-1">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">My team</h2>
@@ -128,6 +119,7 @@ export default function TournamentHome() {
             </button>
           )}
         </section>
+        )}
 
         {/* next match */}
         {(view.myNext || view.nextOverall) && (
@@ -187,6 +179,8 @@ export default function TournamentHome() {
           </section>
         )}
 
+        {t.status !== "registration_open" && <PrizesCard prizes={t.prizes || []} compact />}
+
         {t.description && (
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <h2 className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">About</h2>
@@ -194,10 +188,13 @@ export default function TournamentHome() {
           </section>
         )}
 
-        <Link href="/menu" className="block py-2 text-center text-[12px] text-white/35">☕ Order from Loka</Link>
+        <Link href="/menu" className={`block py-2 text-center text-[12px] text-white/35 ${t.status === "registration_open" ? "mb-20" : ""}`}>☕ Order from Loka</Link>
       </div>
 
-      <TeamPicker open={picking} onClose={() => setPicking(false)} />
     </div>
+    {/* Fixed-position overlays live outside the animated wrapper (see StickyRegister). */}
+    <StickyRegister data={data} base={base} />
+    <TeamPicker open={picking} onClose={() => setPicking(false)} />
+    </>
   );
 }

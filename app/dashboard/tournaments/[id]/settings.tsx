@@ -56,6 +56,7 @@ export function SettingsTab({ bundle, reload }: TabProps) {
   const t0 = bundle.tournament;
   const [f, setF] = useState<Tournament>({
     ...t0,
+    prizes: t0.prizes && t0.prizes.length ? t0.prizes : [],
     voucher_config: {
       discount: { ...OFF, validity_days: 30, ...t0.voucher_config?.discount },
       event_day: { ...OFF, ...t0.voucher_config?.event_day },
@@ -71,7 +72,8 @@ export function SettingsTab({ bundle, reload }: TabProps) {
     const r = await api(`/api/admin/tournaments/${t0.id}`, "PATCH", f);
     setBusy(false);
     if (!r.ok) { setMsg(`⚠️ ${r.data.error || "Gagal simpan"}`); return; }
-    setMsg("✓ Disimpan");
+    const warning = (r.data as { warning?: string }).warning;
+    setMsg(warning ? `⚠️ ${warning}` : "✓ Disimpan");
     await reload();
   }
 
@@ -121,6 +123,33 @@ export function SettingsTab({ bundle, reload }: TabProps) {
             <textarea rows={5} className={`${inputCls} mt-1`} value={f.description || ""} onChange={e => set({ description: e.target.value })} />
           </label>
         </div>
+      </section>
+
+      <section className={`${cardCls} space-y-3`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-gray-900">Hadiah</h2>
+            <p className="text-xs text-gray-400">Dipapar besar di landing page pendaftaran.</p>
+          </div>
+          {(f.prizes || []).length < 8 && (
+            <button onClick={() => set({ prizes: [...(f.prizes || []), { title: "", value: "" }] })} className="text-xs font-semibold text-[#7F1D1D]">+ Hadiah</button>
+          )}
+        </div>
+        {(f.prizes || []).length === 0 && (
+          <button
+            onClick={() => set({ prizes: [{ title: "Juara", value: "" }, { title: "Naib Juara", value: "" }, { title: "MVP", value: "" }] })}
+            className="w-full rounded-xl border border-dashed border-gray-200 py-3 text-sm text-gray-500"
+          >
+            Mula dengan Juara / Naib Juara / MVP
+          </button>
+        )}
+        {(f.prizes || []).map((p, i) => (
+          <div key={i} className="grid grid-cols-[1fr_2fr_auto] items-center gap-2">
+            <input className={inputCls} placeholder="Juara" value={p.title} onChange={e => set({ prizes: (f.prizes || []).map((x, k) => (k === i ? { ...x, title: e.target.value } : x)) })} />
+            <input className={inputCls} placeholder="RM300 + trofi" value={p.value} onChange={e => set({ prizes: (f.prizes || []).map((x, k) => (k === i ? { ...x, value: e.target.value } : x)) })} />
+            <button onClick={() => set({ prizes: (f.prizes || []).filter((_, k) => k !== i) })} className="px-1 text-lg text-gray-400" aria-label="Buang">×</button>
+          </div>
+        ))}
       </section>
 
       <section className={`${cardCls} space-y-3`}>
