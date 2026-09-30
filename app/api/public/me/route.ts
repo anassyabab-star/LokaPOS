@@ -19,8 +19,16 @@ export const revalidate = 0;
 export async function GET(req: Request) {
   try {
     const user = await getCurrentSessionUser();
+    const otpPhone = getPhoneOtpSession(req);
     if (user) {
-      const customer = await resolveCustomerForAuthUser(user, { allowCreate: false });
+      const customer = await resolveCustomerForAuthUser(user, { allowCreate: false }).catch(() => null);
+      // An account with no phone linked (a staff login on the same phone, or a
+      // Google account not linked yet) must not hide a phone the person has
+      // just verified by WhatsApp code — that made sign-in loop straight back
+      // to the phone step.
+      if (!customer?.phone && otpPhone) {
+        return NextResponse.json({ signed_in: true, provider: "otp", name: customer?.name || null, email: user.email || null, phone: otpPhone, needs_phone: false });
+      }
       const phone = customer?.phone || null;
       const meta = (user.user_metadata || {}) as Record<string, unknown>;
       const name = customer?.name || String(meta.full_name || meta.name || "").trim() || null;
@@ -38,7 +46,6 @@ export async function GET(req: Request) {
       return res;
     }
 
-    const otpPhone = getPhoneOtpSession(req);
     if (otpPhone) {
       return NextResponse.json({ signed_in: true, provider: "otp", name: null, email: null, phone: otpPhone, needs_phone: false });
     }
