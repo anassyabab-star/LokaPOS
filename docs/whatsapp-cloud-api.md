@@ -95,25 +95,24 @@ Terima kasih {{1}}! 🎉
 ```
 1 nama · 2 tarikh · 3 jumlah · 4 baris points (`Points diterima: +12 pts` / `Points ditukar: -100 pts`) · 5 baki points · 6 nilai RM · 7 tarikh luput · 8 nama kedai
 
-### `loka_team_approved` — kategori **Utility** (format **bernombor**)
+### `loka_team_confirmed` — kategori **Utility** (format **bernombor**)
 ```
-Hai {{1}}! Pendaftaran team {{2}} untuk {{3}} telah diluluskan. 🎮
+Hai {{1}}, pendaftaran team {{2}} untuk {{3}} telah disahkan.
 
-🎟 Baucar Loka anda: {{4}}
-Lihat di {{5}}
+Tarikh & tempat: {{4}}
+Status pendaftaran & jadual: {{5}}
 
-📅 Jadual, keputusan & Player Pass: {{6}}.
-
-Terima kasih.
+Sila hadir 30 minit lebih awal untuk check-in. Terima kasih.
 ```
-Bahasa **Malay** (sama macam template `loka_*` lain). Jangan sebut "log masuk"
-— Meta akan anggap ia template Authentication dan tolak. Body mesti tepat 6
-variable dan tidak berakhir dengan variable. Butang URL (pilihan) mesti URL
-tetap, bukan URL bervariable — kod tidak menghantar parameter butang.
-1 nama pemain · 2 nama team · 3 nama tournament · 4 baucar (`RM3 off (sah 30 hari)`, atau `-`) ·
-5 link baucar (`https://pos.lokacafe.my/rewards`) · 6 link tournament
-Nama template boleh ditukar dengan env `WHATSAPP_TEMPLATE_TEAM_APPROVED`.
-Dihantar bila admin tekan **Luluskan** di Dashboard → Tournaments → Pendaftaran.
+1 nama pemain · 2 nama team · 3 nama tournament · 4 tarikh & tempat (`10 Oktober 2026 pada 10:00 PG, Loka Cafe`) ·
+5 link halaman pendaftaran (status, baucar kapten, jadual)
+
+Jangan sebut baucar/diskaun — Meta tukar ke **Marketing** (berlaku pada
+`loka_team_approved` yang terdahulu). Jangan sebut "log masuk" — Meta anggap
+Authentication. Body mesti tepat 5 variable dan tidak berakhir dengan
+variable. Butang URL (pilihan) mesti URL tetap. Bahasa dikesan automatik
+ikut template yang diluluskan. Nama boleh ditukar dengan env
+`WHATSAPP_TEMPLATE_TEAM_APPROVED`. Dihantar bila admin tekan **Luluskan**.
 
 Semasa template masih **Pending** kelulusan, penghantaran Cloud akan gagal dan
 sistem jatuh balik ke Murpati (jika masih dikonfigurasi). Uji di Admin →

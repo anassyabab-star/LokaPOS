@@ -110,23 +110,30 @@ export async function issueTournamentVouchers(teamId: string): Promise<IssueResu
         `\nJadual & keputusan: ${site}/tournament/${tournament.slug}`;
       // Meta only lets a business start a conversation with an approved
       // template; free text to someone who hasn't messaged Loka in 24h is
-      // accepted by the API and then silently not delivered. So: template on
-      // Cloud (name from WHATSAPP_TEMPLATE_TEAM_APPROVED, body params
-      // {{1}} player · {{2}} team · {{3}} tournament · {{4}} voucher ·
-      // {{5}} rewards link · {{6}} tournament link), with
-      // the full text as the Murpati fallback.
+      // accepted by the API and then silently not delivered. The template is
+      // a plain registration confirmation so Meta keeps it as Utility (one
+      // that mentioned the voucher was reclassified as Marketing); the
+      // voucher is on the linked entry page. Name from
+      // WHATSAPP_TEMPLATE_TEAM_APPROVED; body params:
+      // {{1}} player · {{2}} team · {{3}} tournament · {{4}} date & venue ·
+      // {{5}} entry page (status, voucher, schedule). Full text (with the
+      // voucher) is the Murpati fallback.
       try {
+        const when = tournament.start_at
+          ? new Date(tournament.start_at).toLocaleString("ms-MY", {
+              timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit",
+            })
+          : "akan dimaklumkan";
         const sent = await sendTransactional({
           to: p.phone!,
           template: {
-            name: process.env.WHATSAPP_TEMPLATE_TEAM_APPROVED || "loka_team_approved",
+            name: process.env.WHATSAPP_TEMPLATE_TEAM_APPROVED || "loka_team_confirmed",
             bodyParams: [
               p.full_name || p.ign,
               team.name,
               tournament.name,
-              lines.length ? lines.map(l => l.replace(/^• /, "")).join(" + ") : "-",
-              `${site}/rewards`,
-              `${site}/tournament/${tournament.slug}`,
+              `${when}${tournament.venue ? `, ${tournament.venue}` : ""}`,
+              `${site}/tournament/${tournament.slug}/my`,
             ],
           },
           text: message,
