@@ -165,6 +165,25 @@ export async function resolveTemplateLanguage(kind: keyof WhatsAppTemplateNames,
   return cfg.lang;
 }
 
+/**
+ * Language of an approved template, looked up by name in the WABA — for
+ * templates outside the loka_* set (e.g. loka_team_approved, which was
+ * created in English). Falls back to WHATSAPP_TEMPLATE_LANG.
+ */
+export async function templateLanguageByName(name: string): Promise<string> {
+  const cfg = getWhatsAppCloudConfig();
+  if (cfg.wabaId) {
+    try {
+      const matches = (await cachedTemplates()).filter(t => t.name === name);
+      const approved = matches.find(t => t.status === "APPROVED") || matches[0];
+      if (approved?.language) return approved.language;
+    } catch {
+      // fall through to the default
+    }
+  }
+  return cfg.lang;
+}
+
 /** Which gateway sends right now (env preference + what is configured). */
 export function resolveWhatsAppProvider(): WhatsAppProvider {
   const pref = String(process.env.WHATSAPP_PROVIDER || "auto").trim().toLowerCase();
@@ -329,7 +348,10 @@ export async function sendTransactional(opts: {
 
   const useNamed = templateParamFormat() === "named" && opts.template.kind && opts.template.kind !== "otp";
   const lang =
-    opts.template.lang || (opts.template.kind ? await resolveTemplateLanguage(opts.template.kind, opts.template.name) : undefined);
+    opts.template.lang ||
+    (opts.template.kind
+      ? await resolveTemplateLanguage(opts.template.kind, opts.template.name)
+      : await templateLanguageByName(opts.template.name));
   const cloud = await sendCloudTemplate({
     to: opts.to,
     name: opts.template.name,
