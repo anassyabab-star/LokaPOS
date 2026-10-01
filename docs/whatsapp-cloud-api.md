@@ -100,10 +100,16 @@ Terima kasih {{1}}! 🎉
 Hai {{1}}! Pendaftaran team {{2}} untuk {{3}} telah diluluskan. 🎮
 
 🎟 Baucar Loka anda: {{4}}
-Lihat di {{5}} (log masuk dengan nombor ini)
+Lihat di {{5}}
 
-📅 Jadual, keputusan & Player Pass: {{6}}
+📅 Jadual, keputusan & Player Pass: {{6}}.
+
+Terima kasih.
 ```
+Bahasa **Malay** (sama macam template `loka_*` lain). Jangan sebut "log masuk"
+— Meta akan anggap ia template Authentication dan tolak. Body mesti tepat 6
+variable dan tidak berakhir dengan variable. Butang URL (pilihan) mesti URL
+tetap, bukan URL bervariable — kod tidak menghantar parameter butang.
 1 nama pemain · 2 nama team · 3 nama tournament · 4 baucar (`RM3 off (sah 30 hari)`, atau `-`) ·
 5 link baucar (`https://pos.lokacafe.my/rewards`) · 6 link tournament
 Nama template boleh ditukar dengan env `WHATSAPP_TEMPLATE_TEAM_APPROVED`.
