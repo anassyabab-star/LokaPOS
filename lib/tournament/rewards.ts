@@ -112,7 +112,8 @@ export async function issueTournamentVouchers(teamId: string): Promise<IssueResu
       // template; free text to someone who hasn't messaged Loka in 24h is
       // accepted by the API and then silently not delivered. So: template on
       // Cloud (name from WHATSAPP_TEMPLATE_TEAM_APPROVED, body params
-      // {{1}} player · {{2}} team · {{3}} tournament · {{4}} voucher), with
+      // {{1}} player · {{2}} team · {{3}} tournament · {{4}} voucher ·
+      // {{5}} rewards link · {{6}} tournament link), with
       // the full text as the Murpati fallback.
       try {
         const sent = await sendTransactional({
@@ -124,6 +125,8 @@ export async function issueTournamentVouchers(teamId: string): Promise<IssueResu
               team.name,
               tournament.name,
               lines.length ? lines.map(l => l.replace(/^• /, "")).join(" + ") : "-",
+              `${site}/rewards`,
+              `${site}/tournament/${tournament.slug}`,
             ],
           },
           text: message,

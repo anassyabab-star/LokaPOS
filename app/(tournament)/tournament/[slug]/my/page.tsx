@@ -15,6 +15,7 @@ type MyTeam = {
   payment_ref: string | null;
   players: { id: string; full_name: string | null; ign: string; phone?: string | null; player_role: PlayerRole; is_captain: boolean }[];
 };
+type Voucher = { code: string; label: string; expires_at: string | null; valid_from?: string | null; min_spend: number };
 type Me = { signed_in: boolean; phone?: string; is_captain?: boolean; team: MyTeam | null };
 
 // The participant app is in English; the dashboard's labels are Malay.
@@ -45,6 +46,7 @@ export default function MyRegistrationPage() {
   const [copied, setCopied] = useState(false);
   // Once a receipt is in, the payment box folds away behind "Replace receipt".
   const [replacing, setReplacing] = useState(false);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -52,8 +54,16 @@ export default function MyRegistrationPage() {
     await fetch("/api/public/me", { cache: "no-store" }).catch(() => {});
     const d = await fetch(`/api/public/tournaments/${encodeURIComponent(slug)}/me`, { cache: "no-store" }).then(r => r.json()).catch(() => null);
     setMe(d && !d.error ? d : { signed_in: false, team: null });
-    if (d?.team?.registration_status === "approved") setMyTeamId(d.team.id);
-  }, [slug, setMyTeamId]);
+    if (d?.team?.registration_status === "approved") {
+      setMyTeamId(d.team.id);
+      // The voucher lives in the Loka wallet; show it here too so players
+      // don't have to know about /rewards. Codes only come back for the
+      // signed-in owner of the number.
+      const w = await fetch(`/api/public/vouchers?phone=${encodeURIComponent(d.phone)}`, { cache: "no-store" }).then(r => r.json()).catch(() => null);
+      const list = (Array.isArray(w?.vouchers) ? w.vouchers : []) as Voucher[];
+      setVouchers(list.filter(v => v.label.startsWith(data?.tournament.name || "\u0000") || v.label.startsWith(`Hari ${data?.tournament.name}`)));
+    }
+  }, [slug, setMyTeamId, data?.tournament.name]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -121,6 +131,23 @@ export default function MyRegistrationPage() {
                 {team.registration_status === "rejected" && (team.reject_reason || "Your registration wasn't approved.")}
                 {team.registration_status === "withdrawn" && "This registration was withdrawn."}
               </p>
+              {team.registration_status === "approved" && vouchers.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {vouchers.map(v => (
+                    <div key={v.code} className="flex items-center justify-between gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.08] px-3.5 py-3">
+                      <div className="min-w-0">
+                        <div className="font-display text-lg font-bold tracking-wider text-emerald-100">{v.code}</div>
+                        <div className="truncate text-[12px] text-white/55">
+                          {v.label.replace(/^.*?:\s*/, "")}
+                          {v.min_spend ? ` · min RM${v.min_spend}` : ""}
+                          {v.expires_at ? ` · until ${new Date(v.expires_at).toLocaleDateString("en-MY", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short" })}` : ""}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-[11px] font-semibold text-emerald-300">Show at counter</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {team.registration_status === "approved" && (
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <Link href={base} className="rounded-xl bg-red-600 py-2.5 text-center text-sm font-bold">Tournament home</Link>

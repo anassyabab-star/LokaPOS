@@ -98,10 +98,14 @@ Terima kasih {{1}}! 🎉
 ### `loka_team_approved` — kategori **Utility** (format **bernombor**)
 ```
 Hai {{1}}! Pendaftaran team {{2}} untuk {{3}} telah diluluskan. 🎮
-Baucar Loka anda: {{4}}
-Lihat baucar & jadual di pos.lokacafe.my — log masuk dengan nombor ini.
+
+🎟 Baucar Loka anda: {{4}}
+Lihat di {{5}} (log masuk dengan nombor ini)
+
+📅 Jadual, keputusan & Player Pass: {{6}}
 ```
-1 nama pemain · 2 nama team · 3 nama tournament · 4 baucar (`RM3 off (sah 30 hari)`, atau `-`)
+1 nama pemain · 2 nama team · 3 nama tournament · 4 baucar (`RM3 off (sah 30 hari)`, atau `-`) ·
+5 link baucar (`https://pos.lokacafe.my/rewards`) · 6 link tournament
 Nama template boleh ditukar dengan env `WHATSAPP_TEMPLATE_TEAM_APPROVED`.
 Dihantar bila admin tekan **Luluskan** di Dashboard → Tournaments → Pendaftaran.
 
