@@ -1,6 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { issueRewardVoucher } from "@/lib/rewards-vouchers";
-import { sendWhatsAppText } from "@/lib/whatsapp";
+import { sendTransactional } from "@/lib/whatsapp";
 import { endOfDayMYT, findOrCreateCustomerByPhone, formatDateMYT, startOfDayMYT } from "./server";
 import { voucherSpecLabel, type Player, type Tournament, type VoucherSpec } from "./types";
 
@@ -108,11 +108,31 @@ export async function issueTournamentVouchers(teamId: string): Promise<IssueResu
         `Hai ${p.ign}! Pendaftaran team *${team.name}* telah diluluskan. Jumpa di ${tournament.venue || "Loka"}!\n` +
         (lines.length ? `\nBaucar Loka untuk anda:\n${lines.join("\n")}\n\nLihat di ${site}/rewards (log masuk dengan nombor ini).\n` : "") +
         `\nJadual & keputusan: ${site}/tournament/${tournament.slug}`;
+      // Meta only lets a business start a conversation with an approved
+      // template; free text to someone who hasn't messaged Loka in 24h is
+      // accepted by the API and then silently not delivered. So: template on
+      // Cloud (name from WHATSAPP_TEMPLATE_TEAM_APPROVED, body params
+      // {{1}} player · {{2}} team · {{3}} tournament · {{4}} voucher), with
+      // the full text as the Murpati fallback.
       try {
-        const sent = await sendWhatsAppText({ to: p.phone!, message });
+        const sent = await sendTransactional({
+          to: p.phone!,
+          template: {
+            name: process.env.WHATSAPP_TEMPLATE_TEAM_APPROVED || "loka_team_approved",
+            bodyParams: [
+              p.full_name || p.ign,
+              team.name,
+              tournament.name,
+              lines.length ? lines.map(l => l.replace(/^• /, "")).join(" + ") : "-",
+            ],
+          },
+          text: message,
+        });
+        console.log(`[tournament] approval WhatsApp for team ${team.id}: ${sent.ok ? "sent" : "failed"} via ${sent.provider}${sent.error ? ` — ${sent.error}` : ""}`);
         if (sent.ok) result.notified++;
-      } catch {
-        // Notification is best-effort; the vouchers are already in their wallet.
+      } catch (err) {
+        // Best-effort; the vouchers are already in their wallet.
+        console.warn(`[tournament] approval WhatsApp for team ${team.id} threw:`, err);
       }
     }
   }

@@ -95,6 +95,16 @@ Terima kasih {{1}}! 🎉
 ```
 1 nama · 2 tarikh · 3 jumlah · 4 baris points (`Points diterima: +12 pts` / `Points ditukar: -100 pts`) · 5 baki points · 6 nilai RM · 7 tarikh luput · 8 nama kedai
 
+### `loka_team_approved` — kategori **Utility** (format **bernombor**)
+```
+Hai {{1}}! Pendaftaran team {{2}} untuk {{3}} telah diluluskan. 🎮
+Baucar Loka anda: {{4}}
+Lihat baucar & jadual di pos.lokacafe.my — log masuk dengan nombor ini.
+```
+1 nama pemain · 2 nama team · 3 nama tournament · 4 baucar (`RM3 off (sah 30 hari)`, atau `-`)
+Nama template boleh ditukar dengan env `WHATSAPP_TEMPLATE_TEAM_APPROVED`.
+Dihantar bila admin tekan **Luluskan** di Dashboard → Tournaments → Pendaftaran.
+
 Semasa template masih **Pending** kelulusan, penghantaran Cloud akan gagal dan
 sistem jatuh balik ke Murpati (jika masih dikonfigurasi). Uji di Admin →
 Campaigns → kad **WhatsApp Cloud API**: butang *hello_world* menguji token dan
