@@ -85,8 +85,13 @@ function POSPageInner() {
       } catch { /* silent */ }
     }
     void poll(true);
-    const interval = setInterval(() => void poll(false), 15000);
-    return () => { cancelled = true; clearInterval(interval); };
+    // Skip while the till is in the background (screen locked, other app):
+    // it was reading today's orders every 15s around the clock. Catch up the
+    // moment it's visible again.
+    const interval = setInterval(() => { if (document.visibilityState === "visible") void poll(false); }, 15000);
+    const onVisible = () => { if (document.visibilityState === "visible") void poll(false); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { cancelled = true; clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   }, [s.mainTab]);
 
   // ━━━ Actions ━━━

@@ -67,7 +67,9 @@ export function TournamentProvider({ slug, children }: { slug: string; children:
   useEffect(() => {
     try { setMyTeamIdState(localStorage.getItem(teamKey(slug))); } catch { /* private mode */ }
     void refresh();
-    const poll = setInterval(() => void refresh(), 30_000);
+    // Realtime pushes changes; this poll is only a safety net, and never runs
+    // for a tab nobody is looking at.
+    const poll = setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60_000);
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(poll); document.removeEventListener("visibilitychange", onVisible); };

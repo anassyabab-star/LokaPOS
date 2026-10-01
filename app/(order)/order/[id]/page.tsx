@@ -93,6 +93,8 @@ export default function OrderPage() {
   const [pickupBusy, setPickupBusy] = useState(false);
   const [origin, setOrigin] = useState("");
   const prevStatus = useRef<string | null>(null);
+  const prevStage = useRef<string>("received");
+  const createdMs = useRef<number | null>(null);
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
   useEffect(() => { if (order?.phone && !phone) setPhone(order.phone); }, [order?.phone]);
@@ -120,6 +122,8 @@ export default function OrderPage() {
         const t = data.order as Track;
         setTrackError(null);
         setTrack(t);
+        prevStage.current = String(t.fulfillment_stage || "received").toLowerCase();
+        createdMs.current = t.created_at ? new Date(t.created_at).getTime() : null;
         const st = String(t.status || "").toLowerCase();
         if (prevStatus.current && prevStatus.current !== "ready" && st === "ready") readyAlert();
         prevStatus.current = st;
@@ -128,8 +132,22 @@ export default function OrderPage() {
       } finally {
         if (!live) return;
         const st = String(prevStatus.current || "");
-        const done = st === "cancelled" || (st === "completed" && track?.fulfillment_stage === "reviewed");
-        if (!done) timer = setTimeout(load, st === "completed" ? 30000 : 10000);
+        // Nothing left to watch once the drink is ready (with the kitchen
+        // display off an order is "completed" at payment, and "ready" arrives
+        // later as the fulfilment stage). It used to keep polling every 30s
+        // until the customer left a review — i.e. forever, for every tracker
+        // left open. A hidden tab waits and checks on its way back.
+        const stage = prevStage.current;
+        const stale = createdMs.current !== null && Date.now() - createdMs.current > 4 * 60 * 60 * 1000;
+        const done = stale || st === "cancelled" || (st === "completed" && ["ready", "picked_up", "reviewed"].includes(stage));
+        if (!done) timer = setTimeout(() => {
+          if (document.visibilityState === "visible") void load();
+          else document.addEventListener("visibilitychange", function once() {
+            if (document.visibilityState !== "visible") return;
+            document.removeEventListener("visibilitychange", once);
+            if (live) void load();
+          });
+        }, 10000);
       }
     };
 

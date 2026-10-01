@@ -41,7 +41,9 @@ type KdsOrder = {
 
 type MobileFilter = "all" | "pending" | "preparing" | "ready";
 
-const POLL_INTERVAL = 5000;
+// Every poll reads orders + their items. 10s is plenty for a kitchen screen,
+// and a hidden tab (screen off, another app) doesn't poll at all.
+const POLL_INTERVAL = 10_000;
 const URGENT_AFTER_SECONDS = 300;
 
 function formatElapsed(seconds: number) {
@@ -145,8 +147,10 @@ export default function KdsPage() {
 
   useEffect(() => {
     void fetchOrders(true);
-    const interval = setInterval(() => void fetchOrders(), POLL_INTERVAL);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => { if (document.visibilityState === "visible") void fetchOrders(); }, POLL_INTERVAL);
+    const onVisible = () => { if (document.visibilityState === "visible") void fetchOrders(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); };
   }, [fetchOrders]);
 
   useEffect(() => {
