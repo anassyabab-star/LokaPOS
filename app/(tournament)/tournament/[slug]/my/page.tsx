@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTournament } from "@/components/tournament/tournament-provider";
 import { ROLE_LABEL, type PlayerRole, type RegistrationStatus } from "@/lib/tournament/types";
 import { PageHeader } from "../shell";
+import { RosterEditor } from "./roster-editor";
 
 type MyTeam = {
   id: string;
@@ -13,7 +14,7 @@ type MyTeam = {
   reject_reason: string | null;
   has_payment_proof: boolean;
   payment_ref: string | null;
-  players: { id: string; full_name: string | null; ign: string; phone?: string | null; player_role: PlayerRole; is_captain: boolean }[];
+  players: { id: string; full_name: string | null; ign: string; mlbb_user_id: string; phone?: string | null; player_role: PlayerRole; is_captain: boolean }[];
 };
 type Voucher = { code: string; label: string; expires_at: string | null; valid_from?: string | null; min_spend: number };
 type Me = { signed_in: boolean; phone?: string; is_captain?: boolean; team: MyTeam | null };
@@ -47,6 +48,7 @@ export default function MyRegistrationPage() {
   // Once a receipt is in, the payment box folds away behind "Replace receipt".
   const [replacing, setReplacing] = useState(false);
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [editingRoster, setEditingRoster] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -203,21 +205,57 @@ export default function MyRegistrationPage() {
               </div>
             )}
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">Players</div>
-              <div className="divide-y divide-white/5">
-                {team.players.map(p => (
-                  <div key={p.id} className="flex items-center justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                      <div className="truncate text-[14px] font-semibold">{p.ign}{p.is_captain ? " 👑" : ""}</div>
-                      {(p.full_name || p.phone) && <div className="truncate text-[12px] text-white/45">{[p.full_name, p.phone].filter(Boolean).join(" · ")}</div>}
-                    </div>
-                    <span className="shrink-0 text-[11px] text-white/40">{ROLE_LABEL[p.player_role]}</span>
+            {(() => {
+              // Captains change their own roster until registration closes;
+              // after that the organiser does it.
+              const lockAt = t.registration_deadline ? new Date(t.registration_deadline) : null;
+              const open = !(lockAt && Date.now() > lockAt.getTime()) && !["ongoing", "completed"].includes(t.status)
+                && !["rejected", "withdrawn"].includes(team.registration_status);
+              const lockText = lockAt
+                ? lockAt.toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+                : null;
+              return (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">Players</span>
+                    {me.is_captain && open && !editingRoster && (
+                      <button onClick={() => setEditingRoster(true)} className="rounded-full bg-white/10 px-3 py-1 text-[12px] font-semibold">Edit roster</button>
+                    )}
                   </div>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] text-white/35">Need to change a player? Message Loka — we&apos;ll update it for you.</p>
-            </div>
+                  {editingRoster ? (
+                    <RosterEditor
+                      slug={slug}
+                      initial={team.players.map(p => ({ id: p.id, full_name: p.full_name, ign: p.ign, mlbb_user_id: p.mlbb_user_id, player_role: p.player_role, is_captain: p.is_captain }))}
+                      min={t.min_players}
+                      max={t.max_players}
+                      onCancel={() => setEditingRoster(false)}
+                      onSaved={async () => { setEditingRoster(false); await load(); }}
+                    />
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {team.players.map(p => (
+                        <div key={p.id} className="flex items-center justify-between gap-3 py-2.5">
+                          <div className="min-w-0">
+                            <div className="truncate text-[14px] font-semibold">{p.ign}{p.is_captain ? " 👑" : ""}</div>
+                            <div className="truncate text-[12px] text-white/45">{[p.full_name, `ID ${p.mlbb_user_id}`, p.phone].filter(Boolean).join(" · ")}</div>
+                          </div>
+                          <span className="shrink-0 text-[11px] text-white/40">{ROLE_LABEL[p.player_role]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!editingRoster && (
+                    <p className="mt-2 text-[11px] text-white/35">
+                      {open
+                        ? me.is_captain
+                          ? `You can change players until ${lockText || "registration closes"}.`
+                          : `Only your captain can change the roster (until ${lockText || "registration closes"}).`
+                        : "Roster is locked. Need a change? Contact the organiser."}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
       </div>
