@@ -15,7 +15,11 @@ export async function GET() {
       .order("start_at", { ascending: false, nullsFirst: false })
       .limit(20);
     if (error) return NextResponse.json({ tournaments: [] });
-    return NextResponse.json({ tournaments: data || [] });
+    // Asked on every /menu load (tournament banner) — a minute's cache is plenty.
+    return NextResponse.json(
+      { tournaments: data || [] },
+      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+    );
   } catch {
     return NextResponse.json({ tournaments: [] });
   }
