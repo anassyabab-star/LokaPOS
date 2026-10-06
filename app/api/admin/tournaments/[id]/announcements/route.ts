@@ -16,7 +16,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("tournament_announcements")
-    .insert([{ tournament_id: id, title, message: String(body.message || "").trim().slice(0, 2000), priority }])
+    .insert([{ tournament_id: id, title, message: String(body.message || "").trim().slice(0, 10000), priority }])
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

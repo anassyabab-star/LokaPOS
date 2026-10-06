@@ -93,7 +93,7 @@ export default function TournamentHome() {
 
       <div className="space-y-5 px-4 pt-5">
         {alert && (
-          <Link href={`${base}/announcements`} className="block"><AnnouncementCard {...alert} /></Link>
+          <Link href={`${base}/announcements`} className="block"><AnnouncementCard {...alert} preview /></Link>
         )}
 
         {t.status === "registration_open" && <RegistrationLanding data={data} base={base} />}
@@ -193,7 +193,9 @@ export default function TournamentHome() {
               <Link href={`${base}/announcements`} className="text-[12px] font-semibold text-red-400">All</Link>
             </div>
             <div className="space-y-2">
-              {data.announcements.slice(0, 3).map(a => <AnnouncementCard key={a.id} {...a} />)}
+              {data.announcements.slice(0, 3).map(a => (
+                <Link key={a.id} href={`${base}/announcements`} className="block"><AnnouncementCard {...a} preview /></Link>
+              ))}
             </div>
           </section>
         )}

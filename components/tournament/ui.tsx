@@ -277,7 +277,33 @@ function BracketCell({ match, teams, myTeamId, onClick }: { match: Match; teams:
   );
 }
 
-export function AnnouncementCard({ title, message, priority, created_at }: { title: string; message: string; priority: string; created_at: string }) {
+// Links in an announcement (maps, Waze, Instagram…) are tappable.
+function Linkified({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        /^https?:\/\//.test(p) ? (
+          <a key={i} href={p} target="_blank" rel="noreferrer" className="break-all font-semibold text-sky-300 underline">{p}</a>
+        ) : (
+          <span key={i}>{p}</span>
+        )
+      )}
+    </>
+  );
+}
+
+/**
+ * `preview` (home screen): a few lines only — the card links to the full list.
+ * Otherwise a long announcement (full rules, tentatif…) starts folded with
+ * "Read more", so one post can't push everything else off the screen.
+ */
+export function AnnouncementCard({ title, message, priority, created_at, preview }: {
+  title: string; message: string; priority: string; created_at: string; preview?: boolean;
+}) {
+  const long = message.length > 360 || message.split("\n").length > 8;
+  const [open, setOpen] = useState(false);
+  const clamp = preview ? "line-clamp-3" : long && !open ? "line-clamp-[8]" : "";
   const tone =
     priority === "urgent" ? "border-red-500/60 bg-red-500/15" :
     priority === "important" ? "border-amber-400/40 bg-amber-400/10" :
@@ -290,7 +316,17 @@ export function AnnouncementCard({ title, message, priority, created_at }: { tit
         </div>
         <span className="shrink-0 text-[11px] text-white/40">{formatWhen(created_at, { timeOnly: true })}</span>
       </div>
-      {message && <p className="mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-white/70">{message}</p>}
+      {message && (
+        <p className={`mt-1.5 whitespace-pre-line text-[13px] leading-relaxed text-white/70 ${clamp}`}>
+          {preview ? message : <Linkified text={message} />}
+        </p>
+      )}
+      {preview && long && <div className="mt-1.5 text-[12px] font-semibold text-red-300">Read more →</div>}
+      {!preview && long && (
+        <button onClick={() => setOpen(o => !o)} className="mt-2 text-[12px] font-semibold text-red-300">
+          {open ? "Show less ▴" : "Read more ▾"}
+        </button>
+      )}
     </div>
   );
 }

@@ -38,7 +38,8 @@ export function AnnouncementsTab({ bundle, reload }: TabProps) {
           <input className={`${inputCls} mt-1`} value={f.title} onChange={e => setF({ ...f, title: e.target.value })} placeholder="Match #5 lewat 15 minit" />
         </label>
         <label className={labelCls}>Mesej
-          <textarea rows={4} className={`${inputCls} mt-1`} value={f.message} onChange={e => setF({ ...f, message: e.target.value })} />
+          <textarea rows={12} maxLength={10000} className={`${inputCls} mt-1 font-mono text-[12px]`} value={f.message} onChange={e => setF({ ...f, message: e.target.value })} />
+          <span className="mt-1 block text-right text-[11px] font-normal text-gray-400">{f.message.length.toLocaleString()} / 10,000</span>
         </label>
         <div>
           <span className={labelCls}>Keutamaan</span>
