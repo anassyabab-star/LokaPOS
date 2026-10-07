@@ -1,17 +1,17 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { PublicBundle, Team } from "@/lib/tournament/types";
 
 // ============================================================================
 // One live copy of the tournament for every participant screen.
 //
-// Data comes from /api/public/tournaments/[slug] (personal data stripped).
-// Supabase Realtime on tournament_matches / announcements / tournaments only
-// says "something changed" — we refetch the bundle rather than patch rows, so
-// the screens can never disagree with the server. A 30s poll covers phones
-// where the websocket drops.
+// Data comes from /api/public/tournaments/[slug] (personal data stripped),
+// polled every 5s while the screen is visible. That endpoint is cached on the
+// CDN for 5s, so the database is read at most once per 5s however many phones
+// are watching. (Supabase Realtime was dropped on 2026-10-07: the project's
+// 1 GB instance was swapping and Realtime's always-on WAL reading was the
+// cost we could remove.)
 // ============================================================================
 
 type Ctx = {
@@ -34,6 +34,8 @@ export function useTournament() {
   return ctx;
 }
 
+const POLL_MS = 5_000;
+
 const teamKey = (slug: string) => `loka_tournament_team:${slug}`;
 
 export function TournamentProvider({ slug, children }: { slug: string; children: ReactNode }) {
@@ -42,7 +44,6 @@ export function TournamentProvider({ slug, children }: { slug: string; children:
   const [loading, setLoading] = useState(true);
   const [myTeamId, setMyTeamIdState] = useState<string | null>(null);
   const [live, setLive] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -51,42 +52,24 @@ export function TournamentProvider({ slug, children }: { slug: string; children:
       if (!res.ok) { setError(d.error || "Couldn't load the tournament"); return; }
       setData(d as PublicBundle);
       setError(null);
+      setLive(true);
     } catch {
       setError("No connection");
+      setLive(false);
     } finally {
       setLoading(false);
     }
   }, [slug]);
 
-  // Coalesce bursts (a score save touches the match + the next match).
-  const soon = useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void refresh(), 350);
-  }, [refresh]);
-
   useEffect(() => {
     try { setMyTeamIdState(localStorage.getItem(teamKey(slug))); } catch { /* private mode */ }
     void refresh();
-    // Realtime pushes changes; this poll is only a safety net, and never runs
-    // for a tab nobody is looking at.
-    const poll = setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 60_000);
+    // Never polls a tab nobody is looking at; catches up when it's shown.
+    const poll = setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, POLL_MS);
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(poll); document.removeEventListener("visibilitychange", onVisible); };
   }, [slug, refresh]);
-
-  const tournamentId = data?.tournament.id;
-  useEffect(() => {
-    if (!tournamentId) return;
-    const supabase = createSupabaseBrowserClient();
-    const channel = supabase
-      .channel(`tournament:${tournamentId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_matches", filter: `tournament_id=eq.${tournamentId}` }, soon)
-      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_announcements", filter: `tournament_id=eq.${tournamentId}` }, soon)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "tournaments", filter: `id=eq.${tournamentId}` }, soon)
-      .subscribe(status => setLive(status === "SUBSCRIBED"));
-    return () => { void supabase.removeChannel(channel); };
-  }, [tournamentId, soon]);
 
   const setMyTeamId = useCallback((id: string | null) => {
     setMyTeamIdState(id);
