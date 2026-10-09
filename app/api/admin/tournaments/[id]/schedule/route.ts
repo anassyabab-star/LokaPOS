@@ -68,8 +68,16 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       );
       rows = buildKnockout(tournament, seeded.map(t => t.id), 1);
     } else {
-      // Keep groups the admin set by hand; snake-draft only if any team has none.
-      if (teams.some(t => !t.group_name)) {
+      // Keep the groups from the draw (set by hand); snake-draft only when no
+      // team has one. A half-finished draw is refused, not silently filled.
+      const missing = teams.filter(t => !t.group_name);
+      if (missing.length && missing.length < teams.length) {
+        return NextResponse.json(
+          { error: `${missing.length} team belum ada group: ${missing.map(t => t.name).join(", ")}` },
+          { status: 400 }
+        );
+      }
+      if (missing.length) {
         const groups = assignGroups(teams, tournament.group_count);
         teams = teams.map(t => ({ ...t, group_name: groups.get(t.id) || null }));
         for (const t of teams) await supabase.from("tournament_teams").update({ group_name: t.group_name }).eq("id", t.id);

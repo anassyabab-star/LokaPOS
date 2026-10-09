@@ -202,6 +202,16 @@ export function winsNeeded(bestOf: number) {
   return Math.floor(Math.max(1, bestOf) / 2) + 1;
 }
 
+/**
+ * The third-place match sits in the Final's round at bracket_slot 1 (the
+ * Final is slot 0). It has no next match: the semi-final losers drop into it
+ * instead (lib/tournament/results.ts), so prizes can go down to 4th.
+ */
+export const THIRD_PLACE_ROUND = "3rd Place";
+export function isThirdPlace(m: Pick<Match, "stage" | "round_name">) {
+  return m.stage === "knockout" && m.round_name === THIRD_PLACE_ROUND;
+}
+
 /** "RM50" / "RM12.50" */
 export function rmLabel(n: number) {
   return `RM${Number(n || 0).toFixed(2).replace(/\.00$/, "")}`;

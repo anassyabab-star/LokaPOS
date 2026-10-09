@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { Match, Team, Tournament } from "./types";
+import { THIRD_PLACE_ROUND, type Match, type Team, type Tournament } from "./types";
 import { computeStandings, groupNames } from "./standings";
 
 // ============================================================================
@@ -157,9 +157,24 @@ export function buildKnockout(
       }
     }
   }
+  // Third-place match once there are semi-finals: the semi losers drop into it.
+  const third: NewMatch | null = totalRounds >= 2
+    ? {
+        ...baseRow(tournament.id),
+        id: randomUUID(),
+        match_number: 0,
+        stage: "knockout",
+        round_index: totalRounds,
+        round_name: THIRD_PLACE_ROUND,
+        bracket_slot: 1,
+        best_of: tournament.knockout_best_of,
+      }
+    : null;
+  // Numbered (and so timed) just before the Final.
+  const ordered = third ? [...rounds.slice(0, -1).flat(), third, ...rounds[rounds.length - 1]] : rounds.flat();
   let n = startNumber;
-  for (const round of rounds) for (const m of round) m.match_number = n++;
-  return rounds.flat();
+  for (const m of ordered) m.match_number = n++;
+  return ordered;
 }
 
 /** Give each match a start time and station, in match-number order. */
@@ -168,10 +183,17 @@ export function applyTiming(matches: NewMatch[], opts: TimingOpts) {
   const interval = Math.max(0, Number(opts.intervalMinutes || 0));
   const start = opts.startAt ? new Date(opts.startAt).getTime() : null;
   const playable = [...matches].filter(m => m.status !== "completed").sort((a, b) => a.match_number - b.match_number);
-  playable.forEach((m, i) => {
-    m.station = `Station ${(i % stations) + 1}`;
-    if (start !== null) m.scheduled_at = new Date(start + Math.floor(i / stations) * interval * 60_000).toISOString();
-  });
+  // A knockout round waits for the one before it, so it starts a fresh slot.
+  let slot = 0, used = 0, round = "";
+  for (const m of playable) {
+    const key = m.stage === "knockout" ? `ko:${m.round_index}` : "group";
+    if (key !== round && used > 0) { slot++; used = 0; }
+    if (used === stations) { slot++; used = 0; }
+    round = key;
+    m.station = `Station ${used + 1}`;
+    if (start !== null) m.scheduled_at = new Date(start + slot * interval * 60_000).toISOString();
+    used++;
+  }
   return matches;
 }
 

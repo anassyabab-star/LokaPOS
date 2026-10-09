@@ -134,6 +134,72 @@ function TeamEditor({ team, tournamentId, onClose, onSaved }: {
   );
 }
 
+// After the live draw at check-in: tap a letter on each team. Saves straight
+// away; tap the chosen letter again to clear it. "Jana jadual" then builds
+// the group matches from these groups.
+function GroupDraw({ bundle, reload }: TabProps) {
+  const t = bundle.tournament;
+  const approved = bundle.teams.filter(x => x.registration_status === "approved");
+  const letters = Array.from({ length: Math.max(1, t.group_count) }, (_, i) => String.fromCharCode(65 + i));
+  const perGroup = Math.ceil(approved.length / letters.length);
+  const [local, setLocal] = useState<Record<string, string | null>>({});
+  const [err, setErr] = useState<string | null>(null);
+  const groupOf = (team: AdminTeam) => (team.id in local ? local[team.id] : team.group_name);
+  const count = (g: string) => approved.filter(x => groupOf(x) === g).length;
+  const unset = approved.filter(x => !groupOf(x)).length;
+
+  async function pick(team: AdminTeam, g: string) {
+    const value = groupOf(team) === g ? null : g;
+    setErr(null);
+    setLocal(l => ({ ...l, [team.id]: value }));
+    const r = await api(`/api/admin/tournaments/${t.id}/teams/${team.id}`, "PATCH", { group_name: value });
+    if (!r.ok) {
+      setErr(`${team.name}: ${r.data.error || "gagal simpan"}`);
+      setLocal(l => ({ ...l, [team.id]: team.group_name }));
+      return;
+    }
+    await reload();
+  }
+
+  const list = [...approved].sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className={cardCls}>
+      <div className="font-bold text-gray-900">Cabutan group</div>
+      <p className="text-xs text-gray-400">Lepas cabutan, tekan huruf group untuk setiap team. Tekan sekali lagi untuk buang.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {letters.map(g => (
+          <span key={g} className={`rounded-full px-3 py-1 text-xs font-semibold ${count(g) === perGroup ? "bg-emerald-50 text-emerald-700" : count(g) > perGroup ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-600"}`}>
+            Group {g}: {count(g)}/{perGroup}
+          </span>
+        ))}
+        {unset > 0 && <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Belum: {unset}</span>}
+      </div>
+      <div className="mt-3 divide-y divide-gray-100">
+        {list.map(team => (
+          <div key={team.id} className="flex items-center gap-3 py-2">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{team.name}</span>
+            <div className="flex shrink-0 gap-1.5">
+              {letters.map(g => {
+                const on = groupOf(team) === g;
+                return (
+                  <button
+                    key={g}
+                    onClick={() => void pick(team, g)}
+                    className={`h-8 w-8 rounded-lg text-sm font-bold transition ${on ? "bg-[#7F1D1D] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}
+                  >
+                    {g}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      {err && <p className="mt-2 text-sm text-red-600">⚠️ {err}</p>}
+    </div>
+  );
+}
+
 export function TeamsTab({ bundle, reload }: TabProps) {
   const t = bundle.tournament;
   const [editing, setEditing] = useState<AdminTeam | "new" | null>(null);
@@ -144,6 +210,7 @@ export function TeamsTab({ bundle, reload }: TabProps) {
 
   return (
     <div className="space-y-4">
+      {t.format === "group_knockout" && <GroupDraw bundle={bundle} reload={reload} />}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-xs text-gray-500">
           <input type="checkbox" checked={showAll} onChange={e => setShowAll(e.target.checked)} /> Tunjuk semua status

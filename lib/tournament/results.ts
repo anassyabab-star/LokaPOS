@@ -1,6 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { MATCH_COLS } from "./server";
-import { MATCH_STATUSES, winsNeeded, type Match, type MatchStatus } from "./types";
+import { MATCH_STATUSES, THIRD_PLACE_ROUND, winsNeeded, type Match, type MatchStatus } from "./types";
 
 // ============================================================================
 // One path for every match edit, so the knockout bracket can't drift:
@@ -18,6 +18,24 @@ export class MatchError extends Error {}
 
 function untouched(m: Pick<Match, "status" | "team_a_score" | "team_b_score">) {
   return ["scheduled", "check_in", "ready", "delayed"].includes(m.status) && m.team_a_score === 0 && m.team_b_score === 0;
+}
+
+/** Put `team` into a later match's slot, replacing `old` — refused once that match has started. */
+async function moveInto(target: Match, slot: "a" | "b", old: string | null, team: string | null) {
+  const slotKey = slot === "a" ? "team_a_id" : "team_b_id";
+  const current = target[slotKey];
+  const occupiedByOld = current && current === old;
+  if (current && !occupiedByOld && current !== team) {
+    throw new MatchError(`Match #${target.match_number} already has a different team in that slot`);
+  }
+  if (occupiedByOld && current !== team && !untouched(target)) {
+    throw new MatchError(`Match #${target.match_number} has already started — reset it first`);
+  }
+  const { error } = await createSupabaseAdminClient()
+    .from("tournament_matches")
+    .update({ [slotKey]: team, updated_at: new Date().toISOString() })
+    .eq("id", target.id);
+  if (error) throw new Error(error.message);
 }
 
 export async function updateMatch(matchId: string, patch: MatchPatch): Promise<Match> {
@@ -47,27 +65,28 @@ export async function updateMatch(matchId: string, patch: MatchPatch): Promise<M
     next.winner_team_id = null;
   }
 
-  // Knockout advancement.
+  // Knockout advancement: the winner moves on…
   const winnerChanged = prev.winner_team_id !== next.winner_team_id;
   if (next.next_match_id && next.next_slot && (winnerChanged || (wasDone && !isDone))) {
     const { data: nm } = await supabase.from("tournament_matches").select(MATCH_COLS).eq("id", next.next_match_id).maybeSingle();
-    const nextMatch = nm as Match | null;
-    if (nextMatch) {
-      const slotKey = next.next_slot === "a" ? "team_a_id" : "team_b_id";
-      const current = nextMatch[slotKey];
-      const occupiedByOld = current && current === prev.winner_team_id;
-      if (current && !occupiedByOld && current !== next.winner_team_id) {
-        throw new MatchError("The next match already has a different team in that slot");
-      }
-      if (occupiedByOld && !untouched(nextMatch)) {
-        throw new MatchError(`Match #${nextMatch.match_number} has already started — reset it first`);
-      }
-      const { error: advErr } = await supabase
-        .from("tournament_matches")
-        .update({ [slotKey]: next.winner_team_id, updated_at: new Date().toISOString() })
-        .eq("id", nextMatch.id);
-      if (advErr) throw new Error(advErr.message);
-    }
+    if (nm) await moveInto(nm as Match, next.next_slot, prev.winner_team_id, next.winner_team_id);
+  }
+
+  // …and a semi-final loser drops into the third-place match (same slot the
+  // winner takes in the Final).
+  const loserOf = (m: Match) =>
+    m.status === "completed" && m.winner_team_id ? (m.winner_team_id === m.team_a_id ? m.team_b_id : m.team_a_id) : null;
+  const prevLoser = loserOf(prev), nextLoser = loserOf(next);
+  if (next.stage === "knockout" && next.next_slot && prevLoser !== nextLoser) {
+    const { data: tp } = await supabase
+      .from("tournament_matches")
+      .select(MATCH_COLS)
+      .eq("tournament_id", next.tournament_id)
+      .eq("stage", "knockout")
+      .eq("round_name", THIRD_PLACE_ROUND)
+      .maybeSingle();
+    const third = tp as Match | null;
+    if (third && third.round_index === next.round_index + 1) await moveInto(third, next.next_slot, prevLoser, nextLoser);
   }
 
   const { data: saved, error: saveErr } = await supabase

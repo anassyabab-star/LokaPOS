@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MATCH_STATUS_LABEL, type Match, type MatchStatus, type Team } from "@/lib/tournament/types";
+import { MATCH_STATUS_LABEL, isThirdPlace, type Match, type MatchStatus, type Team } from "@/lib/tournament/types";
 import type { StandingRow } from "@/lib/tournament/standings";
 
 // ============================================================================
@@ -205,11 +205,20 @@ export function StandingsTable({ rows, myTeamId, advance = 0, title }: {
 export function Bracket({ matches, teams, myTeamId, onMatchClick }: {
   matches: Match[]; teams: TeamsById; myTeamId?: string | null; onMatchClick?: (m: Match) => void;
 }) {
-  const ko = matches.filter(m => m.stage === "knockout");
+  const third = matches.find(isThirdPlace);
+  const ko = matches.filter(m => m.stage === "knockout" && !isThirdPlace(m));
   if (!ko.length) return null;
   const rounds = [...new Set(ko.map(m => m.round_index))].sort((a, b) => a - b);
   const final = ko.find(m => m.round_index === rounds[rounds.length - 1]);
   const champion = final?.status === "completed" && final.winner_team_id ? teams.get(final.winner_team_id) : null;
+  const loser = (m?: Match) =>
+    m?.status === "completed" && m.winner_team_id ? teams.get((m.winner_team_id === m.team_a_id ? m.team_b_id : m.team_a_id) || "") : undefined;
+  const podium = [
+    { medal: "🥇", label: "Champion", team: champion },
+    { medal: "🥈", label: "2nd", team: loser(final) },
+    { medal: "🥉", label: "3rd", team: third?.status === "completed" && third.winner_team_id ? teams.get(third.winner_team_id) : undefined },
+    { medal: "4", label: "4th", team: loser(third) },
+  ].filter(p => p.team);
   const firstCount = ko.filter(m => m.round_index === rounds[0]).length;
   const colHeight = Math.max(1, firstCount) * 104;
 
@@ -244,6 +253,23 @@ export function Bracket({ matches, teams, myTeamId, onMatchClick }: {
           </div>
         )}
       </div>
+      {third && (
+        <div className="mt-4 w-[176px]">
+          <div className="mb-2 text-center text-[10px] font-bold uppercase tracking-wider text-white/40">3rd Place</div>
+          <BracketCell match={third} teams={teams} myTeamId={myTeamId} onClick={onMatchClick ? () => onMatchClick(third) : undefined} />
+        </div>
+      )}
+      {podium.length > 1 && (
+        <div className="mt-4 space-y-1.5 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+          {podium.map(p => (
+            <div key={p.label} className="flex items-center gap-2.5 text-[13px]">
+              <span className="w-6 text-center font-bold text-white/60">{p.medal}</span>
+              <span className="min-w-0 flex-1 truncate font-semibold">{p.team!.name}</span>
+              <span className="text-[11px] text-white/40">{p.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
